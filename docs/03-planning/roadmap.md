@@ -10,9 +10,7 @@ Every milestone after M1 is **additive** to a working spine, never a rewrite. M1
 
 Estimates are in **solo developer-weeks of focused effort**, not calendar time — they assume something close to full-time attention. Halve your available weekly hours against full-time and scale accordingly; a side-project pace roughly doubles every number here. Treat the numbers as relative sizing between milestones, not a delivery promise.
 
-**One dependency outside engineering entirely, flagged up front:** R-01 (escrow/CBN licensing) needs legal advice, and that has its own timeline nobody here controls. Now concrete, not theoretical — CBN's PSSP tier (₦100M capital) cannot hold funds at all; the tier that can ("build escrow platforms") is the full PSP license at **₦5 billion** paid-up capital, completely unreachable pre-launch. Whether routing through Monnify's Sub-Accounts (confirmed to exist, ADR-0001) keeps CloseBuy outside that requirement, or whether CBN would still view CloseBuy as the party holding the funds regardless, is a real open legal question — public guidance doesn't resolve it. **Start that conversation now**, not after M1 is built: a licensing answer that requires restructuring who's legally the merchant of record is far cheaper to absorb before Payments is built than after, and it must be settled before M5 (real customer money live), with enough lead time to act on the answer either way.
-
-**The bounded, fast pre-M1 checkpoint is closed:** Monnify does have a Sub-Accounts / split-payment mechanism equivalent to Paystack's — confirmed directly, not assumed. The legal question above is now the only thing standing between here and a settled Payments design, not a technical unknown.
+**R-01 (escrow/CBN licensing) is a knowingly accepted risk, not a resolved one** — decided 2026-09-15: build on Monnify's Sub-Accounts (confirmed to exist, ADR-0001) without separately confirming that structure keeps CloseBuy outside CBN's PSP-tier licensing (₦5B capital; the lower PSSP tier, ₦100M, explicitly cannot hold funds at all). Public guidance doesn't settle that question either way — this is a deliberate choice to proceed anyway, recorded here so it's a known trade-off rather than a forgotten one, not a finding that the underlying question went away. No legal spend is being tracked against this milestone plan.
 
 ## Milestones
 
@@ -87,6 +85,6 @@ Carried forward from [product-brief.md §8](../01-requirements/product-brief.md)
 
 | Risk | Mitigation |
 |---|---|
-| R-01 (escrow/CBN) — the PSSP-vs-PSP gap (₦100M vs ₦5B capital) makes this a real, not theoretical, threat to the Payments design | Legal input sought now, before Payments is built in M1, not after |
+| R-01 (escrow/CBN) — the PSSP-vs-PSP gap (₦100M vs ₦5B capital) is real, not theoretical | Accepted, not mitigated — decided 2026-09-15 to build on Monnify Sub-Accounts without legal confirmation |
 | R-06 (solo developer) makes M1's 6-week estimate the single biggest schedule risk in this whole roadmap | No feature work starts in M2+ until every M1 acceptance criterion passes — resist the pull to build the "nicer" milestones while M1 has known gaps |
 | Riverpark vendor recruitment lags the engineering timeline | M2 (Founding Vendor mechanics) is sequenced early specifically so recruitment can start before M3/M4 finish, not after |
