@@ -45,15 +45,13 @@ As a customer I want to search across products and vendors so that I can find an
 - An empty result set offers category suggestions rather than a dead end
 - Results return within 1 second at launch catalogue size
 
-### US-C-04 — Cart scoped to a vendor or a hub · **M**
-As a customer I want to combine items from co-located vendors in one cart, but not from vendors that have nothing to do with each other.
+### US-C-04 — Cart is scoped to one vendor · **M**
+As a customer I want a clear, simple cart so that ordering is fast and unambiguous.
 
 - Adding a first item starts a cart scoped to that vendor
 - A further item from the **same vendor** always adds cleanly
-- A further item from a **different vendor in the same hub** adds cleanly; the cart groups line items visually by vendor
-- A further item from a vendor in a **different hub, or a standalone vendor** is blocked with a prompt to clear the cart and start over, or keep the existing cart
-- Each vendor group shows its own subtotal; the cart shows one combined delivery fee reflecting every stop (brief §3.1)
-- Removing the last item of a vendor group removes that group entirely
+- Adding an item from a **different vendor** is blocked with a prompt to clear the cart and start over, or keep the existing cart (brief §3.1)
+- The cart shows a subtotal and the delivery fee for that one vendor
 - The cart survives the customer closing and reopening the app
 - The cart is re-validated for price and stock at checkout, and any change is shown before payment
 
@@ -68,28 +66,27 @@ As a customer I want to give my location as a map pin and a description so that 
 ### US-C-06 — Checkout and pay · **M**
 As a customer I want to pay by card, transfer or cash on delivery so that I can use whichever means I have.
 
-- Checkout shows an itemised total: goods, delivery fee per vendor group, and any discount
+- Checkout shows an itemised total: goods, delivery fee and any discount
 - Card and transfer are processed by the payment gateway; card details never reach OmniDash servers
-- Cash on delivery is offered only where every vendor in the cart permits it
-- A successful payment creates one sub-order per vendor, each in `PAID`
+- Cash on delivery is offered only where the vendor permits it
+- A successful payment creates the order in `PAID`
 - A failed payment leaves the cart intact and states why
 - Payment is idempotent — a retried or duplicated gateway callback never charges twice or creates duplicate orders
 
 ### US-C-07 — Track order status · **M**
 As a customer I want to see what stage my order has reached so that I know it is progressing.
 
-- Each sub-order shows its current state and the time it entered that state
+- The order shows its current state and the time it entered that state
 - A state change pushes a notification within 5 seconds (NFR-03)
 - The screen shows an expected-by window, not a live map (brief §3.5)
-- Where sub-orders progress at different rates, each is shown separately under one purchase
 
 ### US-C-08 — Cancel an order · **S**
 As a customer I want to cancel before the vendor starts work so that I am not charged for something I no longer want.
 
-- Cancellation is self-service while the sub-order is in `PAID`
+- Cancellation is self-service while the order is in `PAID`
 - Once in `PREPARING` cancellation requires a support request
-- A cancelled prepaid sub-order triggers an automatic refund to the original payment method
-- Cancelling one sub-order leaves its siblings untouched
+- A cancelled prepaid order triggers an automatic refund to the original payment method
+- Cancelling one order does not affect the customer's other, unrelated orders
 
 ### US-C-09 — Order history and reorder · **S**
 As a customer I want to see past orders so that I can reorder or check what I spent.
@@ -101,16 +98,16 @@ As a customer I want to see past orders so that I can reorder or check what I sp
 ### US-C-10 — Rate vendor and rider · **S**
 As a customer I want to rate what I received so that others benefit from my experience.
 
-- Rating is only possible on a `COMPLETED` sub-order
+- Rating is only possible on a `COMPLETED` order
 - Vendor and rider are rated separately, 1–5, with optional free text
-- One rating per sub-order per party, editable for 24 hours
+- One rating per order per party, editable for 24 hours
 - Vendor rating is displayed as an average with a count
 
 ### US-C-11 — Raise a dispute · **S**
 As a customer I want to report a problem with an order so that I can get a refund or replacement.
 
-- A dispute can be opened on any sub-order up to 48 hours after delivery
-- Opening a dispute holds any pending escrow release for that sub-order
+- A dispute can be opened on any order up to 48 hours after delivery
+- Opening a dispute holds any pending escrow release for that order
 - The customer can attach photographs
 - The customer is notified of the outcome and the reasoning
 
@@ -121,7 +118,7 @@ As a customer I want to report a problem with an order so that I can get a refun
 ### US-V-01 — Apply to sell · **M**
 As a vendor I want to apply to join so that I can start selling.
 
-- The application captures business name, category, contact details, payout bank details, and a pickup location — either an existing hub or a standalone pin
+- The application captures business name, category, contact details, payout bank details, and a pickup address as a pin
 - Identity and business registration documents can be uploaded
 - The vendor cannot list products or receive orders while the application is pending
 - The applicant is notified on approval or rejection, with a reason given on rejection
@@ -152,7 +149,7 @@ As a vendor I want stock to decrease as orders come in so that I do not oversell
 ### US-V-05 — Accept or reject an order · **M**
 As a vendor I want to accept or reject incoming orders so that I only commit to what I can fulfil.
 
-- A new `PAID` sub-order raises an audible, visible alert in the dashboard
+- A new `PAID` order raises an audible, visible alert in the dashboard
 - The vendor accepts, moving it to `PREPARING`, or rejects with a mandatory reason
 - No response within a configurable window auto-rejects and refunds the customer in full
 - A rejection is recorded against the vendor's reliability metric
@@ -168,7 +165,7 @@ As a vendor I want to signal that an order is ready so that a rider is dispatche
 As a vendor I want to see what I have earned and when I will be paid.
 
 - A running balance separates funds held in escrow from funds cleared for payout
-- Each sub-order shows gross value, commission deducted and net payable
+- Each order shows gross value, commission deducted and net payable
 - Past payouts are listed with date, amount and reference
 - Figures reconcile exactly against admin records — no rounding drift
 
@@ -194,21 +191,18 @@ As a rider I want to control when I receive jobs so that I am not offered work w
 ### US-R-03 — Receive and accept a job · **M**
 As a rider I want to see delivery requests and take the ones I want.
 
-- An offer shows pickup location(s), delivery area, distance and the total fee earned
-- A job spanning several vendors in one hub (brief §3.1) is offered and accepted as a **single job**, never as separate offers per vendor
+- An offer shows pickup location, delivery area, distance and the fee earned
 - The offer is accepted or declined within a countdown; no response passes it on
-- Accepting assigns every sub-order in the job exclusively — two riders can never hold the same job or the same stop within it
+- Accepting assigns the order exclusively — two riders can never hold the same job
 - Declining carries no penalty in v1
 
-### US-R-04 — Collect from the vendor(s) · **M**
-As a rider I want the pickup details so that I can collect the right order, including every stop if the job has more than one.
+### US-R-04 — Collect from the vendor · **M**
+As a rider I want the pickup details so that I can collect the right order.
 
-- A single-vendor job shows vendor name, pin, landmark description and phone number
-- A multi-stop job shows a checklist with one entry per vendor, each with its own pin, landmark description and phone number
-- A single tap on any stop hands off to an external maps app for navigation
-- Each stop is confirmed independently by entering a short code shown on that vendor's dashboard
-- Confirming a stop moves that sub-order to `IN_TRANSIT` and records the rider's location at that moment
-- The rider proceeds to delivery once every stop in the job is confirmed, or once the hub wait-timeout (brief §3.1) has elapsed for any stop still not ready
+- The screen shows vendor name, pin, landmark description and phone number
+- A single tap hands off to an external maps app for navigation
+- Collection is confirmed by entering a short code shown on the vendor dashboard
+- Confirmation moves the order to `IN_TRANSIT` and records the rider's location at that moment
 
 ### US-R-05 — Deliver to the customer · **M**
 As a rider I want to complete the delivery and prove it happened.
@@ -216,7 +210,7 @@ As a rider I want to complete the delivery and prove it happened.
 - The screen shows the customer pin, landmark description and phone number
 - Proof of delivery is a photograph, a recipient name, or a code given by the customer
 - For cash on delivery the exact amount to collect is shown, and collection must be confirmed before the order closes
-- Confirming delivery moves the sub-order to `DELIVERED` and records location and timestamp
+- Confirming delivery moves the order to `DELIVERED` and records location and timestamp
 
 ### US-R-06 — Report a failed delivery · **S**
 As a rider I want to report that I could not deliver so that I am not stuck holding goods.
@@ -229,7 +223,7 @@ As a rider I want to report that I could not deliver so that I am not stuck hold
 ### US-R-07 — See earnings · **M**
 As a rider I want to see what I have earned so that I can check I am paid correctly.
 
-- Earnings are listed per completed job with date and amount — a multi-stop job shows as one combined line, not one per vendor
+- Earnings are listed per completed delivery with date and amount
 - Cleared and pending amounts are separated
 - Cash collected on delivery is shown as a liability owed back to the platform
 
@@ -258,15 +252,14 @@ As an operator I want to control categories, commission and fees without a code 
 
 - Categories can be created, renamed and deactivated
 - Commission is configurable per category
-- Delivery fee rules, the multi-stop surcharge, the hub wait-timeout and the vendor accept-window are all configurable
-- Hubs can be created and vendors assigned to them
+- Delivery fee rules and the vendor accept-window are configurable
 - A configuration change is versioned and never alters orders already placed
 
 ### US-A-03 — Oversee and intervene in orders · **M**
 As an operator I want to see every order and step in when something stalls.
 
-- All sub-orders are listable and filterable by state, vendor, rider and date
-- Any sub-order exposes its full append-only transition history
+- All orders are listable and filterable by state, vendor, rider and date
+- Any order exposes its full append-only transition history
 - An operator can reassign a rider, force-cancel, or force-refund
 - Every intervention records operator identity and reason
 
@@ -282,7 +275,7 @@ As an operator I want to settle disputes so that customers and vendors are treat
 As an operator I want to release funds and confirm the books balance.
 
 - A payout run lists every vendor and rider with a cleared balance
-- Escrow is released only for sub-orders in `COMPLETED` with no open dispute
+- Escrow is released only for orders in `COMPLETED` with no open dispute
 - The ledger is double-entry and append-only; corrections are made by reversing entries, never by editing
 - A reconciliation report compares gateway settlement against internal ledger totals and flags any discrepancy
 
