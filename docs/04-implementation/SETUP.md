@@ -11,7 +11,7 @@ Covers what M0 actually built (roadmap.md) and how to run it. Update this file a
 - Node.js ≥ 20
 - pnpm — `corepack enable && corepack prepare pnpm@latest --activate`, or `npm install -g pnpm` if corepack can't write to a system path (that's what this environment needed)
 - Docker Desktop (or any local Postgres 16 + Redis 7 you already run)
-- A free [Termii](https://termii.com) account — needed for vendor/rider/admin OTP sign-in. Sandbox mode is enough for local dev.
+- Optional: a [Termii](https://termii.com) account — needed only for vendor/rider/admin OTP sign-in, which has no onboarding UI yet regardless (M1). The API boots and everything else works without it; a Sender ID needs CAC business verification, so this is genuinely fine to defer.
 - A free [Resend](https://resend.com) account — needed for customer email verification/password-reset emails. Customer register/login work without it; only the emails won't send.
 - Optional: a Google Cloud OAuth client, for "Continue with Google" — everything else works without it (brief §3.1b).
 
@@ -33,6 +33,9 @@ cp .env.example apps/api/.env   # apps/api reads its own .env; the Prisma
 
 pnpm db:generate
 pnpm db:migrate       # first migration — creates every table in data-model.md
+pnpm db:seed          # categories — admin-managed (US-A-02) but there's no
+                       # admin UI yet, so vendor applications/products need
+                       # somewhere to point their category_id at
 
 # One-off, after the first migration only — see the file for why this
 # can't be a Prisma migration itself:
@@ -66,7 +69,12 @@ Per roadmap.md M0 — verified working as of this commit (`pnpm typecheck && pnp
   - Customer: email/password (argon2id) + Google/Apple OAuth, browsing and checkout never gated behind sign-in at all. Register/login/forgot-password/reset-password/verify-email are all real and unit-tested (`apps/api/src/modules/auth/customer/service.test.ts`, 10 tests). Google sign-in is real (via `openid-client`) but needs a real OAuth client to actually complete; Apple is structurally in place but genuinely untestable without a paid Apple Developer account.
 - **`packages/ui`** — brand tokens pixel-matched to the brand guide, a shared Tailwind preset, and the first component set (Button, Input, Card, StatusBadge, Sidebar, Placeholder).
 
-**Not built yet, deliberately** — every other module (Catalog beyond a smoke-test `GET /categories`, Cart, Order, Payments, Dispatch, Notifications, most of Admin) exists only as an empty directory matching architecture.md's module boundaries, or as a `Placeholder` screen in the relevant app linking back to the story and milestone that will build it. That's M1+, not a gap in M0.
+## M1 progress
+
+- **Catalog, real** — public browse/search (`GET /vendors`, `/vendors/:id`, `/vendors/:id/products`), vendor application (US-V-01), self-service storefront and product CRUD (US-V-02/03), all real against Postgres, all unit-tested (`apps/api/src/modules/catalog/service.test.ts`, 6 tests, including a cross-tenant access-control check — vendor B genuinely cannot edit vendor A's product). Categories are seeded (`pnpm db:seed`), not yet admin-manageable — that's Admin, still unbuilt.
+- Known gap, not silently ignored: `lat`/`lng` search params are accepted but not yet used for distance filtering — needs PostGIS or an application-level distance calculation, neither built.
+
+**Not built yet, deliberately** — Cart-at-checkout, Order, Payments, Dispatch, Notifications, and most of Admin exist only as empty directories matching architecture.md's module boundaries, or as `Placeholder` screens in the relevant app linking back to the story and milestone that will build them.
 
 ## Known rough edges, not yet worth fixing
 

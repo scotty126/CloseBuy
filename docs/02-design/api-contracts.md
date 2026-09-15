@@ -53,7 +53,8 @@ Two separate paths, by role (brief §3.1b) — a customer never touches the OTP 
 | `GET /vendors/:id` | Storefront detail | Includes `supports_pickup`, `is_open`, opening hours |
 | `GET /vendors/:id/products` | A vendor's active product list | |
 | `POST /vendors` *(vendor)* | Submit vendor application | US-V-01; creates `VendorProfile` in `pending` |
-| `PATCH /vendors/me` *(vendor)* | Edit storefront | Name, hours, `is_open`, `supports_pickup` — US-V-02 |
+| `GET /vendors/me` *(vendor)* | Own storefront, any status | Unlike `GET /vendors/:id`, not gated on `approved` — a pending vendor needs to see their own application |
+| `PATCH /vendors/me` *(vendor)* | Edit storefront | Name, hours, `is_open`, `supports_pickup` — US-V-02. Editable regardless of application status; only customer-facing visibility gates on `approved` |
 | `POST /vendors/me/products` *(vendor)* | Create product | US-V-03 |
 | `PATCH /vendors/me/products/:id` *(vendor)* | Edit product | Price edits never touch past `OrderItem` snapshots |
 | `DELETE /vendors/me/products/:id` *(vendor)* | Deactivate (not delete) | Sets `is_active = false` |
