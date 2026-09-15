@@ -44,4 +44,12 @@ export const ConfigKeys = {
   async flatDeliveryFeeMinor(prisma: PrismaClient): Promise<number> {
     return getConfigValue<number>(prisma, "flat_delivery_fee_minor");
   },
+  /** Whether a newly-approved vendor currently starts their commission-free window (US-A-01, brief §3.2a). */
+  async foundingVendorProgramActive(prisma: PrismaClient): Promise<boolean> {
+    return getConfigValue<boolean>(prisma, "founding_vendor_program_active");
+  },
+  /** Length of that window in months — configurable (US-A-02), default 3 (brief §3.2a). */
+  async foundingVendorProgramWaiverMonths(prisma: PrismaClient): Promise<number> {
+    return getConfigValue<number>(prisma, "founding_vendor_program_waiver_months");
+  },
 };

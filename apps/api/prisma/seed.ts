@@ -28,6 +28,8 @@ const CONFIG: Array<{ key: string; value: unknown }> = [
   { key: "vendor_accept_window_minutes", value: 15 },
   { key: "escrow_release_window_hours", value: 48 }, // US-C-11's dispute window
   { key: "flat_delivery_fee_minor", value: 50000 }, // ₦500 — see lib/config.ts for why this is flat, not distance-based
+  { key: "founding_vendor_program_active", value: true }, // open at launch (brief §3.2a) — US-A-02's on/off switch
+  { key: "founding_vendor_program_waiver_months", value: 3 }, // brief §3.2a default — US-A-02's configurable duration
   {
     key: "service_area_polygon",
     // Riverpark's real traced boundary (brief §2a, US-C-05) — supplied as
@@ -67,6 +69,25 @@ async function main() {
       await prisma.config.create({
         data: { key: c.key, value: c.value as any, version: 1, effectiveAt: new Date() },
       });
+    }
+  }
+
+  // Admin accounts are never self-service (see the admin-only guard in
+  // auth/service.ts's verifyOtp) — vendor/rider get a real application
+  // flow instead (POST /vendors, /riders) precisely because anyone should
+  // be able to start one. Admin has no such flow by design, so local dev
+  // needs one seeded account to sign in as at all. Optional: without
+  // SEED_ADMIN_PHONE set, this is a no-op and Admin stays unreachable
+  // locally until you set it and re-run the seed.
+  const seedAdminPhone = process.env.SEED_ADMIN_PHONE;
+  if (seedAdminPhone) {
+    const existing = await prisma.user.findUnique({ where: { phone: seedAdminPhone } });
+    if (!existing) {
+      const user = await prisma.user.create({
+        data: { phone: seedAdminPhone, role: "admin", phoneVerifiedAt: new Date() },
+      });
+      await prisma.adminProfile.create({ data: { userId: user.id } });
+      console.log(`Seeded admin user for ${seedAdminPhone}.`);
     }
   }
 

@@ -54,7 +54,12 @@ function createFakeTermii(overrides?: Partial<TermiiClient>): TermiiClient {
   };
 }
 
-function createFakePrisma(): PrismaClient {
+function createFakePrisma(seedAdmin?: { phone: string }): PrismaClient {
+  const adminUsers = new Map<string, any>();
+  if (seedAdmin) {
+    adminUsers.set(seedAdmin.phone, { id: "admin_1", phone: seedAdmin.phone, role: "admin", phoneVerifiedAt: null });
+  }
+
   return {
     user: {
       upsert: vi.fn().mockResolvedValue({
@@ -62,6 +67,13 @@ function createFakePrisma(): PrismaClient {
         phone: "+2348012345678",
         role: "vendor",
         phoneVerifiedAt: new Date(),
+      }),
+      findUnique: vi.fn(async ({ where }: any) => adminUsers.get(where.phone) ?? null),
+      update: vi.fn(async ({ where, data }: any) => {
+        const existing = adminUsers.get(where.phone);
+        const updated = { ...existing, ...data };
+        adminUsers.set(where.phone, updated);
+        return updated;
       }),
     },
   } as unknown as PrismaClient;
@@ -147,5 +159,37 @@ describe("staff auth service (vendor/rider/admin) — US-V-01 / US-R-01", () => 
 
     const result = await svc.verifyOtp(PHONE, "333333", "vendor");
     expect(result.user.phone).toBe(PHONE);
+  });
+});
+
+describe("admin provisioning is never self-service", () => {
+  function service(prisma: PrismaClient, termiiOverride?: TermiiClient) {
+    return createAuthService({
+      prisma,
+      redis: createFakeRedis(),
+      termii: termiiOverride ?? createFakeTermii(),
+      jwtAccessSecret: "test-secret-at-least-32-characters-long",
+      jwtRefreshSecret: "test-secret-at-least-32-characters-long-2",
+    });
+  }
+
+  it("a fresh phone number cannot mint itself an admin session by just claiming role: admin", async () => {
+    const prisma = createFakePrisma(); // no admin row provisioned for this phone
+    const svc = service(prisma);
+    await svc.requestOtp(PHONE);
+
+    await expect(svc.verifyOtp(PHONE, "123456", "admin")).rejects.toThrow(OtpInvalidError);
+  });
+
+  it("an already-provisioned admin phone can still log in, and it's a login not a create", async () => {
+    const prisma = createFakePrisma({ phone: PHONE });
+    const svc = service(prisma);
+    await svc.requestOtp(PHONE);
+
+    const result = await svc.verifyOtp(PHONE, "123456", "admin");
+
+    expect(result.user.id).toBe("admin_1");
+    expect(result.user.role).toBe("admin");
+    expect((prisma.user as any).upsert).not.toHaveBeenCalled();
   });
 });

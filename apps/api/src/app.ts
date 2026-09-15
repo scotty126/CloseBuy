@@ -9,6 +9,7 @@ import { customerAuthRoutes } from "./modules/auth/customer/routes.js";
 import { catalogRoutes } from "./modules/catalog/routes.js";
 import { orderRoutes } from "./modules/order/routes.js";
 import { dispatchRoutes } from "./modules/dispatch/routes.js";
+import { adminRoutes } from "./modules/admin/routes.js";
 import { requireAuth } from "./lib/auth-guard.js";
 import { serializeUser } from "./lib/serialize-user.js";
 
@@ -19,9 +20,11 @@ import { serializeUser } from "./lib/serialize-user.js";
  *
  * Auth is two separate route sets, by role (brief §3.1b) — staff (phone/
  * OTP) and customer (email/password/OAuth). Catalog, Order/Checkout and
- * Dispatch are real, M1 (roadmap.md). Notifications and most of Admin are
- * real module boundaries in architecture.md §2 and in the Prisma schema
- * already, but their routes aren't built yet.
+ * Dispatch are real, M1 (roadmap.md). Admin is real for application
+ * vetting (US-A-01) only — the rest of api-contracts.md's Admin section
+ * (order oversight, disputes, config writes, payouts, metrics, audit-log
+ * search) is a real module boundary already but its routes aren't built
+ * yet. Notifications isn't built at all yet.
  */
 export async function buildApp() {
   const app = Fastify({
@@ -50,6 +53,7 @@ export async function buildApp() {
   await app.register(catalogRoutes);
   await app.register(orderRoutes);
   await app.register(dispatchRoutes);
+  await app.register(adminRoutes);
 
   return app;
 }

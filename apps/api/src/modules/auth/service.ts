@@ -76,11 +76,30 @@ export function createAuthService(deps: AuthDeps) {
       // Success — clear the attempt counter and the one-time pin reference.
       await deps.redis.del(attemptsKey(phone), pinIdKey(phone));
 
-      const user = await deps.prisma.user.upsert({
-        where: { phone },
-        update: { phoneVerifiedAt: new Date() },
-        create: { phone, role, phoneVerifiedAt: new Date() },
-      });
+      // Vendor/rider are genuinely self-service — proving control of a
+      // phone number is enough to start an application (US-V-01/US-R-01).
+      // Admin is not: nothing about owning a fresh phone number should be
+      // able to mint an admin session, or every check the Admin module is
+      // about to gate behind requireAuth(["admin"]) means nothing. Admin
+      // Users are provisioned out of band (prisma/seed.ts's SEED_ADMIN_PHONE
+      // locally; a one-off script in production) — this path only ever
+      // logs an already-provisioned admin in, never creates one. A phone
+      // with no admin User row fails exactly like a wrong code would, so
+      // this doesn't double as an oracle for which numbers are admins.
+      let user;
+      if (role === "admin") {
+        const existing = await deps.prisma.user.findUnique({ where: { phone } });
+        if (!existing || existing.role !== "admin") {
+          throw new OtpInvalidError();
+        }
+        user = await deps.prisma.user.update({ where: { phone }, data: { phoneVerifiedAt: new Date() } });
+      } else {
+        user = await deps.prisma.user.upsert({
+          where: { phone },
+          update: { phoneVerifiedAt: new Date() },
+          create: { phone, role, phoneVerifiedAt: new Date() },
+        });
+      }
 
       const accessToken = signAccessToken(user.id, user.role, deps.jwtAccessSecret);
       const refreshToken = signRefreshToken(user.id, deps.jwtRefreshSecret);

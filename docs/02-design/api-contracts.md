@@ -110,11 +110,18 @@ No endpoints — the cart is client-side state (device-local), per brief §3.1b.
 
 ## Admin
 
+**Built (M1) — application vetting only (US-A-01), the piece nothing else could substitute for:** without it, an applied vendor/rider sits in `pending` forever, since no other module ever writes `VendorProfile.status`/`RiderProfile.status`. Everything else below this line is the real, planned rest of Admin (architecture.md's module boundary, the Prisma models already exist) but isn't built yet — M2/M3, not forgotten.
+
+Admin sign-in reuses the vendor/rider/admin phone+OTP path (`POST /auth/otp/verify` with `role: "admin"`), but with one deliberate asymmetry: unlike vendor/rider, a fresh phone number can never create an admin account through that endpoint — it only logs an *already-provisioned* admin in. Admin accounts are provisioned out of band (`SEED_ADMIN_PHONE` in local dev, a one-off script in production). Otherwise anyone could mint themselves an admin session by hitting a public endpoint with a new number, which would make every `requireAuth(["admin"])` check below meaningless.
+
+An "application" isn't its own database row — it's a `pending` `VendorProfile` or `RiderProfile`. Since both use plain (non-namespaced) uuids, `:type` in the path disambiguates which table `:id` belongs to, rather than guessing by probing one table then the other.
+
 | Method & path | Purpose | Notes |
 |---|---|---|
-| `GET /admin/applications` | Pending vendor/rider applications | US-A-01 |
-| `POST /admin/applications/:id/approve` | Approve | Sets `founding_vendor_commission_waived_until` if the program is currently open (brief §3.2a) |
-| `POST /admin/applications/:id/reject` | Reject | `{ reason }` required |
+| `GET /admin/applications` | Pending vendor/rider applications, merged, oldest first | US-A-01 |
+| `POST /admin/applications/:type/:id/approve` | Approve | `:type` is `vendor` or `rider`. Sets `foundingVendorCommissionWaivedUntil` to now + the configured waiver duration (default 3 months) if `founding_vendor_program_active` is currently true (brief §3.2a) — vendor only, computed once at approval time |
+| `POST /admin/applications/:type/:id/reject` | Reject | `{ reason }` required (US-A-01's mandatory-reason acceptance criterion) |
+| Both actions write an `AuditLog` row (actor, action, target, reason) and 409 if the application was already decided. | | |
 | `GET /admin/orders` | Full order list | Filters: state, vendor, rider, date range, fulfilment type (US-A-03) |
 | `POST /admin/orders/:id/reassign-rider` | Force reassignment | |
 | `POST /admin/orders/:id/force-refund` | Force refund | Writes the same ledger-reversal pattern as a normal refund |
