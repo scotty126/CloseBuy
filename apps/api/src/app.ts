@@ -4,18 +4,23 @@ import rateLimit from "@fastify/rate-limit";
 import { envPlugin } from "./plugins/env.js";
 import { prismaPlugin } from "./plugins/prisma.js";
 import { redisPlugin } from "./plugins/redis.js";
-import { authRoutes } from "./modules/auth/routes.js";
+import { staffAuthRoutes } from "./modules/auth/routes.js";
+import { customerAuthRoutes } from "./modules/auth/customer/routes.js";
 import { catalogRoutes } from "./modules/catalog/routes.js";
+import { requireAuth } from "./lib/auth-guard.js";
+import { serializeUser } from "./lib/serialize-user.js";
 
 /**
  * Module registration order matters: env must load before anything that
  * reads app.env (prisma/redis connection strings, Termii keys), and
  * prisma/redis must be ready before any route that touches them.
  *
- * Only Auth and a smoke-test Catalog read are wired up — M0 scope
- * (roadmap.md). Cart, Order, Payments, Dispatch, Notifications and Admin
- * are real module boundaries in architecture.md §2 and in the Prisma
- * schema already, but their routes are M1+ and deliberately not built yet.
+ * Auth is two separate route sets, by role (brief §3.1b) — staff (phone/
+ * OTP) and customer (email/password/OAuth) — plus a smoke-test Catalog
+ * read. M0 scope (roadmap.md). Cart, Order, Payments, Dispatch,
+ * Notifications and Admin are real module boundaries in architecture.md §2
+ * and in the Prisma schema already, but their routes are M1+ and
+ * deliberately not built yet.
  */
 export async function buildApp() {
   const app = Fastify({
@@ -32,7 +37,15 @@ export async function buildApp() {
 
   app.get("/health", async () => ({ status: "ok" }));
 
-  await app.register(authRoutes);
+  // Shared by every role — mainly for the OAuth redirect landing page,
+  // which only gets tokens on the callback URL, not the full user object.
+  app.get("/auth/me", { preHandler: requireAuth() }, async (req, reply) => {
+    const user = await app.prisma.user.findUniqueOrThrow({ where: { id: req.authUser!.sub } });
+    return reply.send({ user: serializeUser(user) });
+  });
+
+  await app.register(staffAuthRoutes);
+  await app.register(customerAuthRoutes);
   await app.register(catalogRoutes);
 
   return app;

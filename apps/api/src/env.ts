@@ -17,10 +17,31 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(32, "JWT_ACCESS_SECRET must be at least 32 characters"),
   JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
 
-  // Termii — M0 (Auth). Get a free account at termii.com; sandbox mode
-  // works without a paid sender ID for local development.
+  // Termii — vendor/rider/admin OTP + guest order tracking SMS (brief
+  // §3.1b). Get a free account at termii.com; sandbox mode works without a
+  // paid sender ID for local development.
   TERMII_API_KEY: z.string().min(1),
   TERMII_SENDER_ID: z.string().min(1),
+
+  // Password hashing pepper — argon2's own salt is per-hash and stored
+  // alongside it, this is an additional server-side secret so a leaked DB
+  // alone still isn't enough to brute-force offline. Same bar as the JWT
+  // secrets.
+  PASSWORD_PEPPER: z.string().min(32),
+
+  // Customer auth — brief §3.1b. Kept optional so the app boots and
+  // email/password registration still works without them; each fails
+  // loudly and specifically only when its own path is actually used
+  // (verification/reset email, or that one OAuth provider's button).
+  RESEND_API_KEY: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  APPLE_OAUTH_CLIENT_ID: z.string().optional(),
+  APPLE_OAUTH_TEAM_ID: z.string().optional(),
+  APPLE_OAUTH_KEY_ID: z.string().optional(),
+  APPLE_OAUTH_PRIVATE_KEY: z.string().optional(),
+  API_PUBLIC_URL: z.string().default("http://localhost:4000"), // OAuth redirect base
+  CUSTOMER_APP_URL: z.string().default("http://localhost:3000"), // where verify/reset/OAuth-complete links point
 
   // M1+ — not needed to run M0's auth flow, kept optional so the app boots
   // without them and fails loudly and specifically only when a checkout,

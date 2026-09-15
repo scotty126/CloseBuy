@@ -41,9 +41,15 @@ One backend, one database, four thin clients. This document assumes the stack de
   ┌──────────┬──────────┬──────────┬──────────┬──────────┐
   │ Monnify  │  Termii  │  Google  │Cloudflare│ Web Push │
   │(payments,│  (SMS    │  Maps    │    R2    │ (VAPID,  │
-  │ payouts) │  OTP)    │(geocode) │ (images, │ notifs)  │
-  │          │          │          │KYC docs) │          │
+  │ payouts) │  OTP,    │(geocode) │ (images, │ notifs)  │
+  │          │  vendor/ │          │KYC docs) │          │
+  │          │  rider)  │          │          │          │
   └──────────┴──────────┴──────────┴──────────┴──────────┘
+  ┌──────────┬──────────────────────────────────────────┐
+  │  Resend  │      Google / Apple OAuth (customers)     │
+  │(customer │                                            │
+  │  email)  │                                            │
+  └──────────┴──────────────────────────────────────────┘
 ```
 
 Every client talks only to the API — there is no direct client-to-database or client-to-third-party access anywhere (card details, in particular, go straight from the client to Monnify's own hosted fields and never transit CloseBuy's servers at all, per NFR-05).
@@ -54,7 +60,7 @@ The API is a single deployable service, internally organised into modules with c
 
 | Module | Owns | Depends on |
 |---|---|---|
-| **Auth** | Phone OTP issuance/verification, sessions, role/permission checks | Termii, Redis (OTP + rate limiting) |
+| **Auth** | Two paths (brief §3.1b): phone OTP for vendor/rider/admin, email+password/OAuth for customers. Sessions and role/permission checks are shared | Termii (vendor/rider/admin OTP), Resend (customer verification/reset email), Google/Apple OAuth, Redis (rate limiting both paths) |
 | **Catalog** | Categories, vendors, products, stock | — |
 | **Cart** | The active single-vendor cart per customer (brief §3.1) | Catalog (price/stock validation) |
 | **Order** | The order state machine (brief §4), state transition log | Cart, Catalog, Dispatch |

@@ -11,7 +11,9 @@ Covers what M0 actually built (roadmap.md) and how to run it. Update this file a
 - Node.js ≥ 20
 - pnpm — `corepack enable && corepack prepare pnpm@latest --activate`, or `npm install -g pnpm` if corepack can't write to a system path (that's what this environment needed)
 - Docker Desktop (or any local Postgres 16 + Redis 7 you already run)
-- A free [Termii](https://termii.com) account — the one external account genuinely required to see OTP login work end to end. Sandbox mode is enough for local dev.
+- A free [Termii](https://termii.com) account — needed for vendor/rider/admin OTP sign-in. Sandbox mode is enough for local dev.
+- A free [Resend](https://resend.com) account — needed for customer email verification/password-reset emails. Customer register/login work without it; only the emails won't send.
+- Optional: a Google Cloud OAuth client, for "Continue with Google" — everything else works without it (brief §3.1b).
 
 ## First-time setup
 
@@ -59,7 +61,9 @@ Per roadmap.md M0 — verified working as of this commit (`pnpm typecheck && pnp
 
 - **Monorepo scaffold** — pnpm workspaces + Turborepo, `apps/{customer,vendor,rider,admin,api}`, `packages/{types,ui,api-client}`, per ADR-0001.
 - **Database schema** — the full Prisma schema from data-model.md, `prisma validate` clean, first migration ready to run.
-- **Phone OTP auth, end to end** — real UI (all four apps) → real API (`/auth/otp/request`, `/auth/otp/verify`, `/auth/refresh`) → real Termii integration → JWT session → localStorage, via a shared `useAuthSession` hook. Rate limiting and the 5-attempt/15-minute lockout (US-C-01) are implemented and unit-tested (`apps/api/src/modules/auth/service.test.ts`).
+- **Two auth paths, by role (brief §3.1b), both real end to end:**
+  - Vendor/rider/admin: phone + OTP, unchanged from the original M0 build — real Termii integration, 5-attempt/15-minute lockout, unit-tested (`apps/api/src/modules/auth/service.test.ts`).
+  - Customer: email/password (argon2id) + Google/Apple OAuth, browsing and checkout never gated behind sign-in at all. Register/login/forgot-password/reset-password/verify-email are all real and unit-tested (`apps/api/src/modules/auth/customer/service.test.ts`, 10 tests). Google sign-in is real (via `openid-client`) but needs a real OAuth client to actually complete; Apple is structurally in place but genuinely untestable without a paid Apple Developer account.
 - **`packages/ui`** — brand tokens pixel-matched to the brand guide, a shared Tailwind preset, and the first component set (Button, Input, Card, StatusBadge, Sidebar, Placeholder).
 
 **Not built yet, deliberately** — every other module (Catalog beyond a smoke-test `GET /categories`, Cart, Order, Payments, Dispatch, Notifications, most of Admin) exists only as an empty directory matching architecture.md's module boundaries, or as a `Placeholder` screen in the relevant app linking back to the story and milestone that will build it. That's M1+, not a gap in M0.

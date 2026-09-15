@@ -5,7 +5,23 @@ import { Button, Placeholder, useAuthSession } from "@closebuy/ui";
 
 export default function AccountPage() {
   const router = useRouter();
-  const { clear } = useAuthSession();
+  const { session, isLoaded, clear } = useAuthSession();
+
+  if (!isLoaded) return null;
+
+  // A guest reaches order status via their tracking link (US-C-06a), not
+  // through here — this screen is specifically for a signed-in account.
+  if (!session) {
+    return (
+      <div className="flex flex-col items-center gap-4 p-4 text-center">
+        <Placeholder
+          title="No account yet"
+          note="Sign in for order history, saved addresses and editable ratings — none of it required just to order."
+        />
+        <Button onClick={() => router.push("/login")}>Sign in</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -14,7 +30,7 @@ export default function AccountPage() {
         variant="secondary"
         onClick={() => {
           clear();
-          router.push("/login");
+          router.push("/");
         }}
       >
         Sign out

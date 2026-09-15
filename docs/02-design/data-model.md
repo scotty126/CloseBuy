@@ -9,20 +9,23 @@ Entities are grouped by the module that owns them (architecture.md §2). All mon
 ## 1. Entity relationship overview
 
 ```
-User ──┬── CustomerProfile ── Address (many)
-       ├── VendorProfile ──── Product (many) ──── Category
-       ├── RiderProfile
-       └── AdminProfile
+User (email-identified) ──┬── CustomerProfile ── Address (many)
+    │                     
+    └── OAuthAccount (0+, google/apple — brief §3.1b)
+
+User (phone-identified) ──┬── VendorProfile ──── Product (many) ──── Category
+                           ├── RiderProfile
+                           └── AdminProfile
 
 (client-side cart, device-local — brief §3.1b, no server table)
                      │
-                     ▼ (checkout: delivery number if guest, OTP sign-in optional, then submit cart)
-                   Order ──┬── OrderItem
+                     ▼ (checkout: guest — just a delivery number; or signed-in — presets one)
+                   Order (customer_id nullable — null = guest, brief §3.1b) ──┬── OrderItem
                             ├── OrderStateTransition (many, append-only)
                             ├── Payment
                             ├── LedgerEntry (many)
-                            ├── Dispute (0 or 1)
-                            └── Rating (0, 1 or 2 — vendor + rider)
+                            ├── Dispute (0 or 1, customer_id nullable)
+                            └── Rating (0, 1 or 2 — vendor + rider, customer_id nullable)
 
 VendorProfile ── Order (as seller)
 RiderProfile  ── Order (as courier, nullable until assigned)
@@ -33,21 +36,43 @@ AuditLog ── (standalone, references any entity by type + id)
 Notification ── User
 ```
 
+One `User` table, but a customer row and a vendor/rider/admin row are identified by different fields (email vs. phone) and never mix — see §2's `User` invariant.
+
 ## 2. Core entities
 
 ### User
-The identity every role attaches to. One row per phone number regardless of role — a phone number is never shared across roles.
+The identity every role attaches to — but **which field is the identity depends on the role** (brief §3.1b), a deliberate asymmetry, not an inconsistency:
 
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | |
-| phone | string, unique | E.164 format |
-| phone_verified_at | timestamp, nullable | Null blocks selling or riding — vendor/rider always require verification. For a customer, null is a normal, supported state: a guest order (brief §3.1b) creates or reuses a `User` row with this left null; it's set only when they actually complete OTP sign-in (US-C-01), whether at that moment or later against the same phone number |
 | role | enum: customer, vendor, rider, admin | One role per user in v1 — no dual-role accounts |
+| email | string, unique, nullable | **Customer identity.** Required for a customer account; null for vendor/rider/admin (they don't use it) |
+| password_hash | string, nullable | Set for an email/password customer account; null for an OAuth-only customer account (brief §3.1b — a customer can have both, linked to the same row, never two rows) |
+| email_verified_at | timestamp, nullable | Informational only — never blocks signing in or ordering (US-C-01) |
+| phone | string, unique, nullable | **Vendor/rider/admin identity.** Required and is what US-V-01/US-R-01's OTP verifies. Not used for customer identity at all — a customer's delivery contact phone lives on `CustomerProfile`/`Order` instead, see below |
+| phone_verified_at | timestamp, nullable | Vendor/rider: null blocks selling or riding — always required there. Meaningless for a customer row (customers don't populate `phone` on `User` at all) |
 | created_at | timestamp | |
+
+**Invariant:** a `customer` row always has `email` set; a `vendor`/`rider`/`admin` row always has `phone` set. Enforced at the application layer (and worth a DB check constraint once the schema is otherwise stable — noted, not yet built).
+
+### OAuthAccount
+Links a customer `User` to a Google or Apple identity — a separate table, not flat `google_id`/`apple_id` columns on `User`, specifically so a customer can have *both* a password and a linked provider (or more than one provider) against the same account without a schema change later.
+
+| Field | Type | Notes |
+|---|---|---|
+| id | uuid | |
+| user_id | fk → User | |
+| provider | enum: google, apple | |
+| provider_account_id | string | The provider's own stable subject/user id |
+| created_at | timestamp | |
+
+`unique(provider, provider_account_id)` — the same Google account can never link to two different `User` rows.
 
 ### CustomerProfile / VendorProfile / RiderProfile / AdminProfile
 One-to-one with `User`, role-specific fields.
+
+**CustomerProfile**: default_phone (string, nullable — the delivery number preset at checkout, brief §3.1b; editable in account settings, never verified), created_at.
 
 **VendorProfile**: business_name, category_id, description, logo_url, pickup_address (embedded: lat, lng, landmark, phone — per brief §3.4), bank_account_ref, status (enum: pending, approved, suspended, rejected), is_open (bool), supports_pickup (bool — brief §3.1a, independent of is_open), opening_hours, reliability_score (decimal), **founding_vendor_commission_waived_until (timestamp, nullable — brief §3.2a; set to approved_at + 3 months on approval during the launch promotion window, null once expired or if the vendor joined outside it)**, created_at.
 
@@ -107,9 +132,12 @@ The unit everything else hangs off. One vendor, one customer, one (eventual) rid
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | Customer-facing order number is a separate short display code |
-| tracking_token | string, unique, random | Long, unguessable (not the short display code) — how a guest reaches US-C-07 without a phone-number lookup (US-C-06a). Also valid for a signed-in customer's order, just unused since their session already gets them there |
-| customer_id, vendor_id | fk | |
+| tracking_token | string, unique, random | Long, unguessable (not the short display code) — how anyone reaches US-C-07, and for a guest order (no `customer_id`) the *only* way (brief §3.1b, US-C-06a) |
+| customer_id | fk, **nullable** | Null = guest order — no `CustomerProfile` exists behind it (brief §3.1b) |
+| vendor_id | fk | |
 | rider_id | fk, nullable | Set on `RIDER_ASSIGNED`; never set for a pickup order |
+| contact_phone | string | The delivery contact for *this* order — snapshotted at checkout from `CustomerProfile.default_phone` if signed in, or typed directly if guest. Never OTP-verified (brief §3.1b) |
+| alternate_contact_phone | string, nullable | Optional second contact for this order (US-C-06) |
 | fulfilment_type | enum: delivery, pickup | Brief §3.1a |
 | scheduled_for | timestamp, nullable | Null means "as soon as possible"; set means a reserved slot |
 | address_id | fk, nullable | Null for pickup orders — see note below |
@@ -196,9 +224,9 @@ At order completion, the ledger computation is: commission = 0 if the founding-v
 
 ## 5. Platform entities
 
-**Dispute** — order_id, customer_id, reason, evidence (string[] of R2 keys), status (open, resolved), resolution (enum: full_refund, partial_refund, rejected), resolved_by (admin id), resolved_at.
+**Dispute** — order_id, customer_id (**nullable — null for a guest's order**, matching `Order.customer_id`; access is proving possession of the order's `tracking_token`, not an account, US-C-11), reason, evidence (string[] of R2 keys), status (open, resolved), resolution (enum: full_refund, partial_refund, rejected), resolved_by (admin id), resolved_at.
 
-**Rating** — order_id, customer_id, target_type (vendor, rider), target_id, score (1–5), comment, created_at, edited_until (created_at + 24h, per US-C-10).
+**Rating** — order_id, customer_id (**nullable, same reasoning as Dispute — a guest rates via `tracking_token`**, US-C-10), target_type (vendor, rider), target_id, score (1–5), comment, created_at, edited_until (created_at + 24h, per US-C-10).
 
 **Notification** — user_id, type, payload (jsonb), sent_at, read_at.
 
@@ -212,9 +240,12 @@ These are the rules a migration or a future feature must never violate:
 
 1. **All money is an integer minor-unit column.** No `float`/`numeric` with implied decimals anywhere in the schema.
 2. **`OrderStateTransition` and `LedgerEntry` are insert-only** at the database grant level, not just by convention.
-3. **A `Cart` can reference exactly one vendor at a time** (brief §3.1) — enforced by rejecting the write, not by a database constraint alone, since the error needs to reach the customer with the "clear cart?" prompt from US-C-04.
+3. **A cart can reference exactly one vendor at a time** (brief §3.1) — client-side enforcement plus a server-side re-check at checkout (US-C-04), never trusted from the client alone.
 4. **Stock decrement is a single atomic transaction** with the order-status change on acceptance, guarding against the race condition named in US-V-04 ("stock cannot go negative under concurrent orders") — a `SELECT ... FOR UPDATE` or equivalent, not a read-then-write from the application.
 5. **Every `Config` change is versioned, never mutated in place**, so a historical order's totals can always be explained by the config active at the time.
+6. **A customer `User` row has `email` set; a vendor/rider/admin row has `phone` set** — never the other role's identity field (brief §3.1b). A customer's `phone`/`phone_verified_at` columns are simply unused, not repurposed.
+7. **`password_hash` is never plaintext or reversibly encrypted** — bcrypt or argon2id only, matching NFR-05's spirit for anything credential-shaped, not just card data.
+8. **`Order.customer_id`, `Dispute.customer_id` and `Rating.customer_id` are nullable together** — a guest order has none of the three set, and access to all three goes through `Order.tracking_token`, never a phone-number or email lookup (brief §3.1b).
 
 ## Open items for implementation stage
 

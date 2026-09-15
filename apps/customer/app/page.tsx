@@ -1,24 +1,30 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Card, Placeholder, useAuthSession } from "@closebuy/ui";
 
+// No auth gate here — browsing never requires an account (brief §3.1b).
+// The only place identity comes up at all is checkout, and even then it's
+// optional (brief §3.1b, US-C-06).
 export default function HomePage() {
-  const router = useRouter();
   const { session, isLoaded } = useAuthSession();
-
-  useEffect(() => {
-    if (isLoaded && !session) router.push("/login");
-  }, [isLoaded, session, router]);
-
-  if (!isLoaded || !session) return null;
 
   return (
     <div className="flex flex-col gap-4 p-4">
       <Card>
-        <p className="text-sm text-muted">Signed in as</p>
-        <p className="text-lg font-semibold text-ink">{session.user.phone}</p>
+        {isLoaded && session ? (
+          <>
+            <p className="text-sm text-muted">Signed in as</p>
+            <p className="text-lg font-semibold text-ink">{session.user.email}</p>
+          </>
+        ) : (
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted">Browsing as a guest</p>
+            <Link href="/login" className="text-sm font-medium text-primary underline">
+              Sign in
+            </Link>
+          </div>
+        )}
       </Card>
       <Placeholder
         title="Home feed"

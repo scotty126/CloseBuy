@@ -20,6 +20,12 @@ enum UserRole {
   admin
 }
 
+// brief §3.1b — customer sign-in only; vendor/rider/admin never use this
+enum OAuthProvider {
+  google
+  apple
+}
+
 enum VendorStatus {
   pending
   approved
@@ -126,27 +132,55 @@ enum ActorType {
 
 // ── Identity ─────────────────────────────────────────────────────────────
 
+// Which field is the identity depends on role (brief §3.1b) — enforced at
+// the application layer: a customer row has email set, phone unused; a
+// vendor/rider/admin row has phone set, email unused. Never mixed.
 model User {
-  id               String    @id @default(uuid())
-  phone            String    @unique
-  phoneVerifiedAt  DateTime?
-  role             UserRole
-  createdAt        DateTime  @default(now())
+  id    String   @id @default(uuid())
+  role  UserRole
+
+  // Customer identity
+  email           String?   @unique
+  passwordHash    String?   // null for an OAuth-only customer account
+  emailVerifiedAt DateTime? // informational only — never blocks sign-in or ordering
+
+  // Vendor/rider/admin identity
+  phone           String?   @unique
+  phoneVerifiedAt DateTime? // vendor/rider: null blocks selling/riding. Meaningless for a customer row.
+
+  createdAt DateTime @default(now())
 
   customerProfile CustomerProfile?
   vendorProfile   VendorProfile?
   riderProfile    RiderProfile?
   adminProfile    AdminProfile?
   notifications   Notification[]
+  oauthAccounts   OAuthAccount[]
 
   @@map("users")
 }
 
+// Links a customer User to a Google/Apple identity — separate table, not
+// flat columns on User, so an account can have both a password and a
+// linked provider (or more than one provider) without a schema change.
+model OAuthAccount {
+  id                String       @id @default(uuid())
+  userId            String
+  user              User         @relation(fields: [userId], references: [id])
+  provider          OAuthProvider
+  providerAccountId String       // the provider's own stable subject/user id
+  createdAt         DateTime     @default(now())
+
+  @@unique([provider, providerAccountId])
+  @@map("oauth_accounts")
+}
+
 model CustomerProfile {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
-  createdAt DateTime @default(now())
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  defaultPhone String? // preset at checkout (brief §3.1b) — never verified
+  createdAt   DateTime @default(now())
 
   addresses Address[]
   orders    Order[]
@@ -286,12 +320,18 @@ model Order {
   // phone-number lookup (brief §3.1b, US-C-06a). Never the same value as
   // the short customer-facing display code.
   trackingToken  String          @unique @default(cuid())
-  customerId String
-  customer   CustomerProfile @relation(fields: [customerId], references: [id])
+  // Null = guest order — no CustomerProfile exists behind it (brief §3.1b).
+  customerId String?
+  customer   CustomerProfile? @relation(fields: [customerId], references: [id])
   vendorId   String
   vendor     VendorProfile   @relation(fields: [vendorId], references: [id])
   riderId    String?         // set on RIDER_ASSIGNED; never set for a pickup order
   rider      RiderProfile?   @relation(fields: [riderId], references: [id])
+
+  // Snapshotted at checkout — from CustomerProfile.defaultPhone if signed
+  // in, or typed directly if guest. Never OTP-verified (brief §3.1b).
+  contactPhone          String
+  alternateContactPhone String?
 
   fulfilmentType FulfilmentType // brief §3.1a
   scheduledFor   DateTime?      // null = as soon as possible
@@ -408,8 +448,10 @@ model Dispute {
   id         String                @id @default(uuid())
   orderId    String                @unique
   order      Order                 @relation(fields: [orderId], references: [id])
-  customerId String
-  customer   CustomerProfile       @relation(fields: [customerId], references: [id])
+  // Null for a guest's order — access is proving possession of
+  // Order.trackingToken, not an account (brief §3.1b, US-C-11).
+  customerId String?
+  customer   CustomerProfile?      @relation(fields: [customerId], references: [id])
   reason     String
   evidence   String[]              // R2 object keys
   status     DisputeStatus         @default(open)
@@ -425,8 +467,9 @@ model Rating {
   id         String           @id @default(uuid())
   orderId    String
   order      Order            @relation(fields: [orderId], references: [id])
-  customerId String
-  customer   CustomerProfile  @relation(fields: [customerId], references: [id])
+  // Null for a guest's order — same reasoning as Dispute.customerId.
+  customerId String?
+  customer   CustomerProfile? @relation(fields: [customerId], references: [id])
   targetType RatingTargetType
   targetId   String
   score      Int              // 1-5

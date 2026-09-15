@@ -8,10 +8,7 @@ import { ApiClientError } from "@closebuy/api-client";
 import { customerAuthApi } from "@/lib/api";
 import { OAuthButtons } from "@/components/OAuthButtons";
 
-// US-C-01: email + password, or Google/Apple — never phone. This is an
-// opt-in destination someone navigates to, never a wall in front of
-// browsing/cart/checkout (brief §3.1b).
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
   const { save } = useAuthSession();
 
@@ -25,7 +22,7 @@ export default function LoginPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      const session = await customerAuthApi.login({ email, password });
+      const session = await customerAuthApi.register({ email, password });
       save(session);
       router.push("/");
     } catch (err) {
@@ -37,7 +34,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-6">
-      <h1 className="text-2xl font-bold text-primary">Sign in</h1>
+      <h1 className="text-2xl font-bold text-primary">Create an account</h1>
 
       <div className="flex w-full max-w-xs flex-col gap-4">
         <OAuthButtons />
@@ -61,23 +58,21 @@ export default function LoginPage() {
             label="Password"
             name="password"
             type="password"
+            minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             error={error ?? undefined}
             required
           />
-          <Link href="/forgot-password" className="-mt-2 text-xs text-muted underline">
-            Forgot password?
-          </Link>
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Signing in…" : "Sign in"}
+            {isSubmitting ? "Creating account…" : "Create account"}
           </Button>
         </form>
 
         <p className="text-center text-sm text-muted">
-          New here?{" "}
-          <Link href="/register" className="font-medium text-primary underline">
-            Create an account
+          Already have an account?{" "}
+          <Link href="/login" className="font-medium text-primary underline">
+            Sign in
           </Link>
         </p>
       </div>

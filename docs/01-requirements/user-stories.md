@@ -18,15 +18,17 @@ Every story carries acceptance criteria written to be **verifiable**. In stage 0
 
 ## Customer
 
-### US-C-01 — Verify phone and sign in (optional) · **M**
-As a customer I want the option to prove my number with a code so I get a real account — but never to be forced into it just to order.
+### US-C-01 — Register and sign in (optional) — email/password or Google/Apple · **M**
+As a customer I want a real account when I want one, without it ever being forced on me just to order.
 
-- Verification is phone number + one-time code — no password, no profile form; this *is* the entire signup process (brief §3.1b)
-- Signing in is offered, never required — browsing, cart, and checkout itself (US-C-02/03/04/06) all work without it (brief §3.1b)
-- What signing in actually buys: persistent order history reachable without a tracking link, saved addresses, editable ratings — not the ability to order, which guests already have
-- A returning customer verifies with the same number and receives a fresh code
-- A code expires after 10 minutes and after a single successful use
-- Five failed attempts within 15 minutes locks further attempts for that number — including further code requests, not just further guesses
+- Sign-up is email + password, or one tap via Google, or one tap via Apple (brief §3.1b) — never phone-based; phone is a delivery-contact field, handled separately at checkout (US-C-06)
+- Signing in is offered, never required — browsing, cart, and checkout itself (US-C-02/03/04/06) all work without it
+- What signing in actually buys: persistent order history reachable without a tracking link, saved addresses and a default delivery number, editable ratings — not the ability to order, which guests already have
+- A verification email is sent on signup but never blocks using the account or placing an order
+- "Forgot password" sends a reset link by email; the link expires and is single-use
+- Five failed password attempts within 15 minutes locks further attempts for that account — the same brute-force protection the platform has always had, now guarding a password instead of a code
+- Google and Apple accounts have no password to guess or reset; signing out and back in re-runs the provider's own flow
+- If someone signs up with Google/Apple and later also sets a password for the same email (or the reverse), it's recognised as the same account, not a duplicate
 
 *Phone-first, not email-first: it matches how the target market actually identifies itself, and it is the same identifier used to contact the customer at delivery.*
 
@@ -76,7 +78,8 @@ As a customer I want to decide whether I collect my order myself or have it deli
 ### US-C-06 — Checkout and pay · **M**
 As a customer I want to pay by card, transfer or cash on delivery so that I can use whichever means I have — as a guest if I want, with no code to enter.
 
-- If there's no active session, checkout asks for a delivery contact number as a plain field — no OTP, no code (brief §3.1b). "Sign in instead" is offered alongside it, not forced
+- A signed-in customer's delivery number is preset from their account, with an optional alternate-number field for this order specifically; a guest gets the same two fields, both blank, neither verified (brief §3.1b)
+- "Sign in instead" is offered alongside the guest path, never forced
 - Checkout shows an itemised total: goods, delivery fee (zero for Pickup) and any discount
 - Checkout shows the fulfilment summary — delivery to \[address\] or pickup from \[vendor\], and the time (now / scheduled slot)
 - Card and transfer are processed by the payment gateway; card details never reach CloseBuy servers
@@ -101,7 +104,7 @@ As a guest I want a way to check my order after I close the app, without creatin
 - Immediately after a successful guest checkout, the confirmation screen shows a tracking link tied to that one order
 - The same link is sent by SMS to the delivery contact number given at checkout
 - The link requires no login and exposes only that single order — not a phone-number-based lookup, and not a path to any other order
-- Signing in afterward (US-C-01) with the same phone number surfaces this order in real order history going forward
+- This link is the *only* way a guest order is ever reachable again — there is no account behind it to sign into, unlike the phone-based version of this story in an earlier draft. Rating (US-C-10) and disputing (US-C-11) a guest order both go through this same link, not through an account
 
 ### US-C-08 — Cancel an order · **S**
 As a customer I want to cancel before the vendor starts work so that I am not charged for something I no longer want.
@@ -125,6 +128,7 @@ As a customer I want to rate what I received so that others benefit from my expe
 - Vendor and rider are rated separately, 1–5, with optional free text
 - One rating per order per party, editable for 24 hours
 - Vendor rating is displayed as an average with a count
+- A guest rates through their order's tracking link (US-C-06a) — there's no account for this to hang off, so access is proving possession of that link, not signing in
 
 ### US-C-11 — Raise a dispute · **S**
 As a customer I want to report a problem with an order so that I can get a refund or replacement.
@@ -133,6 +137,7 @@ As a customer I want to report a problem with an order so that I can get a refun
 - Opening a dispute holds any pending escrow release for that order
 - The customer can attach photographs
 - The customer is notified of the outcome and the reasoning
+- A guest disputes through their order's tracking link (US-C-06a), same as rating — no account required or created by doing so
 
 ---
 

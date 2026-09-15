@@ -3,8 +3,10 @@ import { otpRequestSchema, otpVerifySchema, refreshRequestSchema } from "@closeb
 import { createAuthService, OtpInvalidError, OtpLockedError } from "./service.js";
 import { createTermiiClient } from "./termii.js";
 import { verifyRefreshToken, signAccessToken } from "../../lib/jwt.js";
+import { serializeUser } from "../../lib/serialize-user.js";
 
-export async function authRoutes(app: FastifyInstance) {
+/** Vendor / rider / admin — phone + OTP (brief §3.1b). Customer auth lives in ./customer/routes.js instead. */
+export async function staffAuthRoutes(app: FastifyInstance) {
   const termii = createTermiiClient(app.env.TERMII_API_KEY, app.env.TERMII_SENDER_ID);
   const authService = createAuthService({
     prisma: app.prisma,
@@ -15,9 +17,9 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // Registered separately (not globally) so this specific endpoint gets a
-  // tighter limit than the app default — this IS the resource US-C-01's
-  // 5-attempts/15-min rule protects, so the HTTP layer should throttle it
-  // too, not just the application-level counter in the service.
+  // tighter limit than the app default — this IS the resource US-V-01/
+  // US-R-01's 5-attempts/15-min rule protects, so the HTTP layer should
+  // throttle it too, not just the application-level counter in the service.
   app.register(async (scoped) => {
     await scoped.register(import("@fastify/rate-limit"), {
       max: 5,
@@ -40,16 +42,7 @@ export async function authRoutes(app: FastifyInstance) {
         body.code,
         body.role,
       );
-      return reply.send({
-        accessToken,
-        refreshToken,
-        user: {
-          id: user.id,
-          phone: user.phone,
-          role: user.role,
-          phoneVerifiedAt: user.phoneVerifiedAt?.toISOString(),
-        },
-      });
+      return reply.send({ accessToken, refreshToken, user: serializeUser(user) });
     } catch (err) {
       if (err instanceof OtpLockedError) {
         return reply.code(429).send({ error: { code: "OTP_LOCKED", message: err.message } });

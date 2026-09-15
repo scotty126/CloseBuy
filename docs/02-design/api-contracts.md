@@ -16,10 +16,31 @@ REST over HTTPS, JSON bodies, organised by the modules in [architecture.md](arch
 
 ## Auth
 
+Two separate paths, by role (brief §3.1b) — a customer never touches the OTP endpoints, a vendor/rider/admin never touches the password/OAuth ones.
+
+**Vendor / rider / admin — phone + OTP, unchanged from M0:**
+
 | Method & path | Purpose | Notes |
 |---|---|---|
-| `POST /auth/otp/request` | Send an OTP to a phone number | Rate-limited per US-C-01 (5 attempts / 15 min) |
+| `POST /auth/otp/request` | Send an OTP to a phone number | Rate-limited per US-V-01/US-R-01 (5 attempts / 15 min) |
 | `POST /auth/otp/verify` | Verify code, issue session | Returns JWT + refresh token; creates the `User` row on first success |
+
+**Customer — email/password or Google/Apple:**
+
+| Method & path | Purpose | Notes |
+|---|---|---|
+| `POST /auth/register` | Email + password sign-up | Sends a (non-blocking) verification email; issues a session immediately — US-C-01 |
+| `POST /auth/login` | Email + password sign-in | Rate-limited: 5 failed attempts / 15 min locks the account, mirroring the old OTP lockout (US-C-01) |
+| `POST /auth/forgot-password` | Request a reset link | Always 204, whether or not the email exists — never reveals account existence |
+| `POST /auth/reset-password` | Complete a reset | `{ token, newPassword }`; token is single-use and expires |
+| `GET /auth/oauth/google` | Start Google sign-in | Redirects to Google; standard OAuth2 authorization-code flow |
+| `GET /auth/oauth/google/callback` | Google redirects back here | Creates or links a `User` via `OAuthAccount` (matches by verified email if one already exists — see data-model.md §2), issues a session |
+| `GET /auth/oauth/apple` / `/auth/oauth/apple/callback` | Same shape, Apple | Apple's flow is a POST-back, not a redirect GET, on the callback specifically — implementation detail, same outcome |
+
+**Shared by both paths:**
+
+| Method & path | Purpose | Notes |
+|---|---|---|
 | `POST /auth/refresh` | Rotate an expiring session | |
 | `POST /auth/logout` | Invalidate the current session | |
 
@@ -45,8 +66,10 @@ No endpoints — the cart is client-side state (device-local), per brief §3.1b.
 
 | Method & path | Purpose | Notes |
 |---|---|---|
-| `POST /checkout` *(session optional)* | Convert a client-submitted cart → order, initiate payment | Body: `{ deliveryPhone, accessToken? , vendorId, items: [{productId, quantity}], fulfilmentType, scheduledFor?, addressId?, paymentMethod }`. No session → `deliveryPhone` alone is enough; a `User`/`CustomerProfile` is created or reused against that number with `phoneVerifiedAt` left null (brief §3.1b) — no OTP call in this path at all. A signed-in caller just sends their token; `deliveryPhone` still applies as this order's contact number, which may differ from the account phone. Requires `Idempotency-Key` header. Re-validates price, stock and the single-vendor rule (US-C-06) before charging — 409 with a diff if anything changed since the client last saw it. Returns a Monnify payment reference/redirect **and** the order's `tracking_token` (US-C-06a) |
-| `GET /orders/track/:trackingToken` *(no session required)* | Guest order status | The unguessable-token equivalent of `GET /orders/:id` below — deliberately not reachable by phone number, so one guest's order is never exposed by knowing another guest's number (US-C-06a) |
+| `POST /checkout` *(session optional)* | Convert a client-submitted cart → order, initiate payment | Body: `{ contactPhone, alternateContactPhone?, vendorId, items: [{productId, quantity}], fulfilmentType, scheduledFor?, addressId?, paymentMethod }`. No `Authorization` header → a guest order: `contactPhone` alone is enough, no `User`/`CustomerProfile` is created at all, `Order.customer_id` stays null (brief §3.1b). Signed-in → `customer_id` is set; `contactPhone` defaults to `CustomerProfile.default_phone` client-side but the field is still required in the body (the client presets it, the server doesn't infer it). Requires `Idempotency-Key` header. Re-validates price, stock and the single-vendor rule (US-C-06) before charging — 409 with a diff if anything changed since the client last saw it. Returns a Monnify payment reference/redirect **and** the order's `tracking_token` (US-C-06a) |
+| `GET /orders/track/:trackingToken` *(no session required)* | Order status by token | Works for both a guest order and a signed-in customer's order — deliberately never reachable by phone number or email, so knowing one person's contact info can't expose another's order (US-C-06a) |
+| `POST /orders/track/:trackingToken/rate` *(no session required)* | Guest rating | Same shape as `POST /orders/:id/rate` below; token-authenticated instead of session-authenticated (US-C-10) |
+| `POST /orders/track/:trackingToken/dispute` *(no session required)* | Guest dispute | Same shape as `POST /orders/:id/dispute` below; token-authenticated instead of session-authenticated (US-C-11) |
 | `POST /webhooks/monnify` | Payment gateway callback | Not customer-authenticated — verified by Monnify's signature instead. Idempotent on `gateway_reference`; drives `PENDING_PAYMENT → PAID` and the first `LedgerEntry` pair |
 | `GET /orders/:id` *(customer/vendor/rider — own orders only)* | Order detail | Includes current status, full state-transition history, fulfilment type, `scheduled_for` |
 | `GET /orders` *(customer)* | Order history | US-C-09 |

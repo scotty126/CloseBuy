@@ -60,7 +60,7 @@ function createFakePrisma(): PrismaClient {
       upsert: vi.fn().mockResolvedValue({
         id: "user_1",
         phone: "+2348012345678",
-        role: "customer",
+        role: "vendor",
         phoneVerifiedAt: new Date(),
       }),
     },
@@ -69,7 +69,7 @@ function createFakePrisma(): PrismaClient {
 
 const PHONE = "+2348012345678";
 
-describe("auth service — US-C-01", () => {
+describe("staff auth service (vendor/rider/admin) — US-V-01 / US-R-01", () => {
   let redis: Redis;
   let termii: TermiiClient;
   let prisma: PrismaClient;
@@ -94,7 +94,7 @@ describe("auth service — US-C-01", () => {
     const svc = service();
     await svc.requestOtp(PHONE);
 
-    const result = await svc.verifyOtp(PHONE, "123456");
+    const result = await svc.verifyOtp(PHONE, "123456", "vendor");
 
     expect(result.user.phone).toBe(PHONE);
     expect(result.accessToken).toEqual(expect.any(String));
@@ -106,27 +106,27 @@ describe("auth service — US-C-01", () => {
     const svc = service(badTermii);
     await svc.requestOtp(PHONE);
 
-    await expect(svc.verifyOtp(PHONE, "000000")).rejects.toThrow(OtpInvalidError);
+    await expect(svc.verifyOtp(PHONE, "000000", "vendor")).rejects.toThrow(OtpInvalidError);
   });
 
   it("rejects verification when no code was ever requested", async () => {
     const svc = service();
-    await expect(svc.verifyOtp(PHONE, "123456")).rejects.toThrow(OtpInvalidError);
+    await expect(svc.verifyOtp(PHONE, "123456", "vendor")).rejects.toThrow(OtpInvalidError);
   });
 
-  it("locks the number after 5 failed attempts within the window (US-C-01)", async () => {
+  it("locks the number after 5 failed attempts within the window", async () => {
     const badTermii = createFakeTermii({ verifyOtp: vi.fn().mockResolvedValue({ verified: false }) });
     const svc = service(badTermii);
     await svc.requestOtp(PHONE);
 
     for (let i = 0; i < 5; i++) {
-      await expect(svc.verifyOtp(PHONE, "000000")).rejects.toThrow(OtpInvalidError);
+      await expect(svc.verifyOtp(PHONE, "000000", "vendor")).rejects.toThrow(OtpInvalidError);
     }
 
     // Locked out now — the lockout blocks even requesting a fresh code,
     // not just verifying one, so there is no way to route around it.
     await expect(svc.requestOtp(PHONE)).rejects.toThrow(OtpLockedError);
-    await expect(svc.verifyOtp(PHONE, "123456")).rejects.toThrow(OtpLockedError);
+    await expect(svc.verifyOtp(PHONE, "123456", "vendor")).rejects.toThrow(OtpLockedError);
   });
 
   it("clears the attempt counter on a successful verification", async () => {
@@ -140,12 +140,12 @@ describe("auth service — US-C-01", () => {
     const svc = service(flakyTermii);
     await svc.requestOtp(PHONE);
 
-    await expect(svc.verifyOtp(PHONE, "111111")).rejects.toThrow(OtpInvalidError);
+    await expect(svc.verifyOtp(PHONE, "111111", "vendor")).rejects.toThrow(OtpInvalidError);
     await svc.requestOtp(PHONE);
-    await expect(svc.verifyOtp(PHONE, "222222")).rejects.toThrow(OtpInvalidError);
+    await expect(svc.verifyOtp(PHONE, "222222", "vendor")).rejects.toThrow(OtpInvalidError);
     await svc.requestOtp(PHONE);
 
-    const result = await svc.verifyOtp(PHONE, "333333");
+    const result = await svc.verifyOtp(PHONE, "333333", "vendor");
     expect(result.user.phone).toBe(PHONE);
   });
 });

@@ -1,9 +1,12 @@
 import type { PrismaClient } from "@prisma/client";
 import type { Redis } from "ioredis";
+import type { StaffRole } from "@closebuy/types";
 import type { TermiiClient } from "./termii.js";
 import { signAccessToken, signRefreshToken } from "../../lib/jwt.js";
 
-const MAX_ATTEMPTS = 5; // US-C-01
+// Vendor/rider/admin only — customers use email/password or OAuth instead
+// (brief §3.1b, apps/api/src/modules/auth/customer/).
+const MAX_ATTEMPTS = 5; // US-V-01 / US-R-01
 const LOCKOUT_WINDOW_SECONDS = 15 * 60;
 const PIN_TTL_SECONDS = 10 * 60; // matches Termii's pin_time_to_live
 
@@ -44,10 +47,12 @@ export function createAuthService(deps: AuthDeps) {
     },
 
     /**
-     * US-C-01: verify a code, issue a session. Creates the User row on
-     * first successful verification for a brand-new phone number.
+     * US-V-01 / US-R-01: verify a code, issue a session. Creates the User
+     * row on first successful verification for a brand-new phone number.
+     * `role` is required and restricted to staff roles at the type level —
+     * a customer never reaches this function (brief §3.1b).
      */
-    async verifyOtp(phone: string, code: string, role: "customer" | "vendor" | "rider" | "admin" = "customer") {
+    async verifyOtp(phone: string, code: string, role: StaffRole) {
       const attempts = Number((await deps.redis.get(attemptsKey(phone))) ?? 0);
       if (attempts >= MAX_ATTEMPTS) {
         throw new OtpLockedError();

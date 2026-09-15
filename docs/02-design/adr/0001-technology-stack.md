@@ -26,7 +26,8 @@ One developer builds and operates four client surfaces (customer, vendor, rider,
 | Database | PostgreSQL, accessed via Prisma (type-safe queries, first-class migrations) |
 | Background jobs | BullMQ + Redis — accept-window timeouts, **scheduled-order activation**, payout runs, OTP expiry, notification retries |
 | Real-time-ish updates | Web Push (VAPID) for the &lt;5s notification requirement (NFR-03) + short-interval polling on an *open* tracking screen. No WebSocket fleet in v1. |
-| Auth | Phone number + OTP via **Termii** (Nigeria-focused SMS deliverability and cost), short-lived JWT sessions |
+| Auth | **Split by role, brief §3.1b.** Vendor/rider/admin: phone + OTP via **Termii**, unchanged from M0. Customer: email + password (**argon2id** hashing) or **Google/Apple OAuth2**, via a small self-hosted flow rather than a hosted auth provider (Auth0/Clerk) — the two customer methods plus a JWT session are simple enough not to justify an external dependency and its cost. Short-lived JWT sessions either way |
+| Transactional email | **Resend** — customer verification and password-reset emails (brief §3.1b). Generous free tier, simple API; the one new integration this auth model needs that M0 didn't |
 | Payments | **Monnify** primary — multi-daily settlement (vs. Paystack's next-business-day, no-weekend default) directly strengthens vendor cash flow and the Founding Vendor pitch. Paystack documented as the fallback integration, not built day one |
 | File storage | Cloudflare R2 (S3-compatible, no egress fees) — product images, KYC documents |
 | Maps | Google Maps Platform — Geocoding, Places Autocomplete, Static/Dynamic Maps for pin-drop addressing |

@@ -14,5 +14,9 @@ export function createAuthApi(client: ApiClient) {
         method: "POST",
         body: JSON.stringify({ refreshToken }),
       }),
+
+    // Shared by every role — used to hydrate a session with the full user
+    // object after the OAuth redirect landing, which only carries tokens.
+    me: () => client.request<{ user: AuthSession["user"] }>("/auth/me"),
   };
 }
