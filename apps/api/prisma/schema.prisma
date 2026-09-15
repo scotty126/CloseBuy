@@ -149,7 +149,6 @@ model CustomerProfile {
   createdAt DateTime @default(now())
 
   addresses Address[]
-  carts     Cart[]
   orders    Order[]
   disputes  Dispute[]
   ratings   Rating[]
@@ -188,7 +187,6 @@ model VendorProfile {
 
   products Product[]
   orders   Order[]
-  carts    Cart[]
 
   @@map("vendor_profiles")
 }
@@ -265,45 +263,29 @@ model Product {
   stock       Int           @default(0)
   isActive    Boolean       @default(true) // deactivate, never hard-delete (US-V-03)
 
-  cartItems  CartItem[]
   orderItems OrderItem[]
 
   @@map("products")
 }
 
 // ── Cart ─────────────────────────────────────────────────────────────────
-
-// One active cart per customer, scoped to a single vendor — brief §3.1.
-// vendorId is nullable only while the cart is empty; enforcing "single
-// vendor" is an application-layer rule (409 CART_VENDOR_MISMATCH per
-// api-contracts.md), not something a DB constraint alone can express.
-model Cart {
-  id         String         @id @default(uuid())
-  customerId String
-  customer   CustomerProfile @relation(fields: [customerId], references: [id])
-  vendorId   String?
-  vendor     VendorProfile?  @relation(fields: [vendorId], references: [id])
-
-  items CartItem[]
-
-  @@map("carts")
-}
-
-model CartItem {
-  id        String  @id @default(uuid())
-  cartId    String
-  cart      Cart    @relation(fields: [cartId], references: [id])
-  productId String
-  product   Product @relation(fields: [productId], references: [id])
-  quantity  Int
-
-  @@map("cart_items")
-}
+//
+// No Cart/CartItem models here — the cart is client-side state, not a
+// database table, per brief §3.1b (guest checkout: a cart can exist before
+// any customer record does, so it can't be a server row tied to a
+// customer_id from "add to cart" onward). It's submitted whole, as part of
+// the checkout request, and re-validated there — see api-contracts.md
+// §Order & Checkout. Removed deliberately, not an oversight; see brief
+// §3.1b for what would bring server-side cart persistence back.
 
 // ── Order ────────────────────────────────────────────────────────────────
 
 model Order {
-  id         String          @id @default(uuid())
+  id             String          @id @default(uuid())
+  // Long, unguessable — how a guest reaches order status without a
+  // phone-number lookup (brief §3.1b, US-C-06a). Never the same value as
+  // the short customer-facing display code.
+  trackingToken  String          @unique @default(cuid())
   customerId String
   customer   CustomerProfile @relation(fields: [customerId], references: [id])
   vendorId   String

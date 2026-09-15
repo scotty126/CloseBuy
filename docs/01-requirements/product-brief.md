@@ -59,6 +59,19 @@ All four combinations fit the same state machine in §4, with two changes:
 
 Pickup is available for either timing; a customer can collect immediately or reserve a future slot for pickup too.
 
+### 3.1b Guest checkout — a delivery number, not a verified account
+
+Browsing, searching and building a cart never require an account, and **neither does checkout itself.** A guest completes an order by simply typing a delivery contact number when they reach that step — no code, no verification, no account created. OTP sign-in (US-C-01) stays available for anyone who wants a persistent, recognized account (saved addresses, a real order history they can return to), but it is offered, not required.
+
+- A first-time buyer browses, adds to cart, and checks out with no prompt to sign in at any point.
+- At the delivery-details step of checkout, they enter a contact phone number for this order — plain input, validated only for format, not OTP-verified.
+- Separately, "Sign in" is always available (on Home, or offered at checkout) for someone who wants one — same phone + OTP flow as before, same 10-minute expiry, same 5-attempt lockout (US-C-01), entirely optional.
+- A guest order is still associated with a `User` row keyed on that phone number (so a later sign-in with the same number surfaces past guest orders), but `phoneVerifiedAt` stays null until they actually verify. **"Unverified" is a normal, supported state, not a blocked one** — US-C-01's old "an unverified number cannot place an order" rule is retired.
+
+**A real constraint this creates, flagged rather than quietly built around:** if a guest order's identity is just an unverified phone number, "log in with your phone number" cannot be how anyone views that order later — a phone number is not a secret, and unverified phone-based lookup would let anyone see anyone else's order, address and delivery status. The fix is standard and cheap: a guest's order confirmation is a unique, unguessable tracking link (shown immediately after checkout and sent by SMS), and *that* is how a guest checks status — never a phone-number lookup. A signed-in, OTP-verified customer keeps full order history through their real session as before. This needs building alongside guest checkout in M1, not bolted on after.
+
+**Consequence for the cart itself, unaffected by this correction:** since a cart can exist before any customer record does at all, it still cannot be a server-side row tied to a `CustomerProfile` — it lives client-side (the device) until checkout, at which point its contents are submitted and re-validated against live price and stock (already required by US-C-06) before anything is charged. This removes the server-side `Cart`/`CartItem` persistence originally in the data model (data-model.md §3). Cross-device cart continuity is the capability given up; it was never a requirement (US-C-04 only ever asked that a cart survive the same device closing and reopening), and it can return later if it's ever actually needed.
+
 ### 3.2 Money is held in escrow, not forwarded
 
 Customer payment is captured by the platform and held. Funds are released to the vendor only after delivery is confirmed, minus platform commission and, where applicable, rider earnings. This is the mechanism that makes the marketplace trustworthy to a buyer who has never heard of the seller.

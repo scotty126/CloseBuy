@@ -14,9 +14,9 @@ User ──┬── CustomerProfile ── Address (many)
        ├── RiderProfile
        └── AdminProfile
 
-CustomerProfile ── Cart ── CartItem ── Product
+(client-side cart, device-local — brief §3.1b, no server table)
                      │
-                     ▼ (checkout)
+                     ▼ (checkout: delivery number if guest, OTP sign-in optional, then submit cart)
                    Order ──┬── OrderItem
                             ├── OrderStateTransition (many, append-only)
                             ├── Payment
@@ -42,7 +42,7 @@ The identity every role attaches to. One row per phone number regardless of role
 |---|---|---|
 | id | uuid | |
 | phone | string, unique | E.164 format |
-| phone_verified_at | timestamp, nullable | Null blocks any ordering/selling/riding action |
+| phone_verified_at | timestamp, nullable | Null blocks selling or riding — vendor/rider always require verification. For a customer, null is a normal, supported state: a guest order (brief §3.1b) creates or reuses a `User` row with this left null; it's set only when they actually complete OTP sign-in (US-C-01), whether at that moment or later against the same phone number |
 | role | enum: customer, vendor, rider, admin | One role per user in v1 — no dual-role accounts |
 | created_at | timestamp | |
 
@@ -93,16 +93,13 @@ Commission is **not** a category field — see §4a. It varies by fulfilment typ
 
 ## 3. Cart and Order
 
-### Cart / CartItem
-One active cart per customer, scoped to a single vendor (brief §3.1 — this is enforced at the application layer: adding a product from a different vendor than the cart's current `vendor_id` is rejected, not merged).
+### Cart — client-side, not a database table (brief §3.1b)
 
-| Field | Type | Notes |
-|---|---|---|
-| Cart.id | uuid | |
-| Cart.customer_id | fk | |
-| Cart.vendor_id | fk, nullable | Null only when the cart is empty |
-| CartItem.product_id | fk | |
-| CartItem.quantity | int | |
+A cart can exist before any customer record does (guest browsing), so it can't be a server row tied to a `customer_id` from the moment of "add to cart." It lives on the device — `{ vendorId, items: [{ productId, quantity }] }` — and is only ever sent to the server once, as part of the checkout request (§3's Order section, below).
+
+The single-vendor rule (brief §3.1) is enforced twice, deliberately: client-side for the immediate "clear cart?" UX (US-C-04), and again server-side at checkout, because checkout must never trust client-submitted state blindly — the same principle that already governs price/stock re-validation there.
+
+This replaces an earlier version of this document that modelled `Cart`/`CartItem` as Prisma tables — removed, not deferred quietly; see brief §3.1b for why, and what would bring it back (cross-device cart sync, if that's ever actually requested).
 
 ### Order
 The unit everything else hangs off. One vendor, one customer, one (eventual) rider.
@@ -110,6 +107,7 @@ The unit everything else hangs off. One vendor, one customer, one (eventual) rid
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | Customer-facing order number is a separate short display code |
+| tracking_token | string, unique, random | Long, unguessable (not the short display code) — how a guest reaches US-C-07 without a phone-number lookup (US-C-06a). Also valid for a signed-in customer's order, just unused since their session already gets them there |
 | customer_id, vendor_id | fk | |
 | rider_id | fk, nullable | Set on `RIDER_ASSIGNED`; never set for a pickup order |
 | fulfilment_type | enum: delivery, pickup | Brief §3.1a |

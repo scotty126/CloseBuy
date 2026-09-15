@@ -18,14 +18,15 @@ Every story carries acceptance criteria written to be **verifiable**. In stage 0
 
 ## Customer
 
-### US-C-01 — Register and sign in · **M**
-As a customer I want to create an account with my phone number so that I can order without a lengthy signup.
+### US-C-01 — Verify phone and sign in (optional) · **M**
+As a customer I want the option to prove my number with a code so I get a real account — but never to be forced into it just to order.
 
-- Signup requires phone number and is verified by a one-time code
-- An unverified number cannot place an order
-- A returning customer signs in with the same number and receives a fresh code
+- Verification is phone number + one-time code — no password, no profile form; this *is* the entire signup process (brief §3.1b)
+- Signing in is offered, never required — browsing, cart, and checkout itself (US-C-02/03/04/06) all work without it (brief §3.1b)
+- What signing in actually buys: persistent order history reachable without a tracking link, saved addresses, editable ratings — not the ability to order, which guests already have
+- A returning customer verifies with the same number and receives a fresh code
 - A code expires after 10 minutes and after a single successful use
-- Five failed attempts within 15 minutes locks further attempts for that number
+- Five failed attempts within 15 minutes locks further attempts for that number — including further code requests, not just further guesses
 
 *Phone-first, not email-first: it matches how the target market actually identifies itself, and it is the same identifier used to contact the customer at delivery.*
 
@@ -46,13 +47,13 @@ As a customer I want to search across products and vendors so that I can find an
 - Results return within 1 second at launch catalogue size
 
 ### US-C-04 — Cart is scoped to one vendor · **M**
-As a customer I want a clear, simple cart so that ordering is fast and unambiguous.
+As a customer I want a clear, simple cart so that ordering is fast and unambiguous — and I want to start one without signing in first.
 
-- Adding a first item starts a cart scoped to that vendor
+- Adding a first item starts a cart scoped to that vendor — no account or sign-in required (brief §3.1b)
 - A further item from the **same vendor** always adds cleanly
 - Adding an item from a **different vendor** is blocked with a prompt to clear the cart and start over, or keep the existing cart (brief §3.1)
 - The cart shows a subtotal and the delivery fee for that one vendor
-- The cart survives the customer closing and reopening the app
+- The cart lives on the device and survives the customer closing and reopening the app; it does not survive a device switch (brief §3.1b — no server-side cart for v1)
 - The cart is re-validated for price and stock at checkout, and any change is shown before payment
 
 ### US-C-05 — Set a delivery address · **M**
@@ -73,8 +74,9 @@ As a customer I want to decide whether I collect my order myself or have it deli
 - Changing this choice after adding items re-validates the cart (a scheduled slot that has since filled, a vendor that has gone offline)
 
 ### US-C-06 — Checkout and pay · **M**
-As a customer I want to pay by card, transfer or cash on delivery so that I can use whichever means I have.
+As a customer I want to pay by card, transfer or cash on delivery so that I can use whichever means I have — as a guest if I want, with no code to enter.
 
+- If there's no active session, checkout asks for a delivery contact number as a plain field — no OTP, no code (brief §3.1b). "Sign in instead" is offered alongside it, not forced
 - Checkout shows an itemised total: goods, delivery fee (zero for Pickup) and any discount
 - Checkout shows the fulfilment summary — delivery to \[address\] or pickup from \[vendor\], and the time (now / scheduled slot)
 - Card and transfer are processed by the payment gateway; card details never reach CloseBuy servers
@@ -91,6 +93,15 @@ As a customer I want to see what stage my order has reached so that I know it is
 - The screen shows an expected-by window, not a live map (brief §3.5)
 - A pickup order's screen shows the collection code and the vendor's pin, landmark description and phone number instead of rider or delivery information
 - A scheduled order's screen shows the scheduled slot clearly until it enters active preparation
+- A signed-in customer reaches this screen through their order history (US-C-09); a guest reaches it only through the unique tracking link shown at checkout and sent by SMS (US-C-06a) — never by re-entering a phone number, which would expose one guest's order to anyone who knows their number
+
+### US-C-06a — Guest order tracking link · **M**
+As a guest I want a way to check my order after I close the app, without creating an account.
+
+- Immediately after a successful guest checkout, the confirmation screen shows a tracking link tied to that one order
+- The same link is sent by SMS to the delivery contact number given at checkout
+- The link requires no login and exposes only that single order — not a phone-number-based lookup, and not a path to any other order
+- Signing in afterward (US-C-01) with the same phone number surfaces this order in real order history going forward
 
 ### US-C-08 — Cancel an order · **S**
 As a customer I want to cancel before the vendor starts work so that I am not charged for something I no longer want.
@@ -327,10 +338,10 @@ As an operator I want an immutable record of consequential actions so that fraud
 
 | Actor | M | S | L | Total |
 |---|---|---|---|---|
-| Customer | 6 | 6 | 0 | 12 |
+| Customer | 7 | 6 | 0 | 13 |
 | Vendor | 6 | 1 | 0 | 7 |
 | Rider | 6 | 2 | 0 | 8 |
 | Superadmin | 5 | 3 | 0 | 8 |
-| **Total** | **23** | **12** | **0** | **35** |
+| **Total** | **24** | **12** | **0** | **36** |
 
 The **M** stories are the walking skeleton: the smallest set that lets one real customer buy one real item from one real vendor, have a real rider deliver it, and have real money reach the vendor. That set — not any individual app, and not pickup or scheduling — is the first delivery milestone; pickup and scheduling are real v1 requirements but are sequenced immediately after the skeleton proves the delivery path end to end, not inside it. Sequencing is decided in stage 03.

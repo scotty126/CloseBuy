@@ -39,20 +39,14 @@ REST over HTTPS, JSON bodies, organised by the modules in [architecture.md](arch
 
 ## Cart
 
-| Method & path | Purpose | Notes |
-|---|---|---|
-| `GET /cart` *(customer)* | Current cart | |
-| `POST /cart/items` *(customer)* | Add an item | 409 `CART_VENDOR_MISMATCH` if the cart already holds a different vendor's items (brief §3.1) — response includes enough info for the client to render the "clear cart?" prompt |
-| `PATCH /cart/items/:id` *(customer)* | Change quantity | |
-| `DELETE /cart/items/:id` *(customer)* | Remove item | |
-| `DELETE /cart` *(customer)* | Clear cart | Used by the "start over" path of the vendor-mismatch prompt |
-| `PATCH /cart/fulfilment` *(customer)* | Set fulfilment type + timing | `{ type: "delivery"|"pickup", scheduled_for: iso8601|null, address_id? }` — US-C-05a. 422 if pickup requested but `vendor.supports_pickup = false`, or a slot falls outside opening hours |
+No endpoints — the cart is client-side state (device-local), per brief §3.1b. There is nothing to sync until checkout, since a cart can exist before any customer record does (guest browsing). The single-vendor rule (brief §3.1) and the fulfilment/timing choice (US-C-05a) are both enforced client-side for immediate feedback, and re-enforced server-side at `POST /checkout` below — checkout is the one place the server has to stop trusting client state.
 
 ## Order & Checkout
 
 | Method & path | Purpose | Notes |
 |---|---|---|
-| `POST /checkout` *(customer)* | Convert cart → order, initiate payment | Requires `Idempotency-Key` header. Re-validates price/stock (US-C-06) before charging; 409 with a diff if the cart changed since last viewed. Returns a Monnify payment reference/redirect for the client to complete |
+| `POST /checkout` *(session optional)* | Convert a client-submitted cart → order, initiate payment | Body: `{ deliveryPhone, accessToken? , vendorId, items: [{productId, quantity}], fulfilmentType, scheduledFor?, addressId?, paymentMethod }`. No session → `deliveryPhone` alone is enough; a `User`/`CustomerProfile` is created or reused against that number with `phoneVerifiedAt` left null (brief §3.1b) — no OTP call in this path at all. A signed-in caller just sends their token; `deliveryPhone` still applies as this order's contact number, which may differ from the account phone. Requires `Idempotency-Key` header. Re-validates price, stock and the single-vendor rule (US-C-06) before charging — 409 with a diff if anything changed since the client last saw it. Returns a Monnify payment reference/redirect **and** the order's `tracking_token` (US-C-06a) |
+| `GET /orders/track/:trackingToken` *(no session required)* | Guest order status | The unguessable-token equivalent of `GET /orders/:id` below — deliberately not reachable by phone number, so one guest's order is never exposed by knowing another guest's number (US-C-06a) |
 | `POST /webhooks/monnify` | Payment gateway callback | Not customer-authenticated — verified by Monnify's signature instead. Idempotent on `gateway_reference`; drives `PENDING_PAYMENT → PAID` and the first `LedgerEntry` pair |
 | `GET /orders/:id` *(customer/vendor/rider — own orders only)* | Order detail | Includes current status, full state-transition history, fulfilment type, `scheduled_for` |
 | `GET /orders` *(customer)* | Order history | US-C-09 |
