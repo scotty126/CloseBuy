@@ -1,4 +1,4 @@
-# NearBuy — User Stories & Acceptance Criteria
+# CloseBuy — User Stories & Acceptance Criteria
 
 - **Status:** Draft
 - **Date:** 2026-09-15
@@ -63,12 +63,22 @@ As a customer I want to give my location as a map pin and a description so that 
 - An address outside the serviced area is rejected at entry, with an explanation
 - Saved addresses can be reused, renamed and deleted
 
+### US-C-05a — Choose delivery or pickup, now or later · **M**
+As a customer I want to decide whether I collect my order myself or have it delivered, and whether I need it now or at a specific time (brief §3.1a).
+
+- Delivery is the default; Pickup is offered only for vendors that have enabled it
+- Choosing Pickup removes the delivery fee and skips the delivery address step entirely
+- Timing defaults to "As soon as possible"; "Schedule for later" offers a date and a time slot within the vendor's stated hours
+- The chosen fulfilment type and timing are shown clearly at every later step, including checkout and order tracking
+- Changing this choice after adding items re-validates the cart (a scheduled slot that has since filled, a vendor that has gone offline)
+
 ### US-C-06 — Checkout and pay · **M**
 As a customer I want to pay by card, transfer or cash on delivery so that I can use whichever means I have.
 
-- Checkout shows an itemised total: goods, delivery fee and any discount
-- Card and transfer are processed by the payment gateway; card details never reach NearBuy servers
-- Cash on delivery is offered only where the vendor permits it
+- Checkout shows an itemised total: goods, delivery fee (zero for Pickup) and any discount
+- Checkout shows the fulfilment summary — delivery to \[address\] or pickup from \[vendor\], and the time (now / scheduled slot)
+- Card and transfer are processed by the payment gateway; card details never reach CloseBuy servers
+- Cash on delivery is offered only where the vendor permits it, and only for delivery orders — pickup is paid online or in person at collection, not "cash on delivery" (there is no delivery)
 - A successful payment creates the order in `PAID`
 - A failed payment leaves the cart intact and states why
 - Payment is idempotent — a retried or duplicated gateway callback never charges twice or creates duplicate orders
@@ -79,6 +89,8 @@ As a customer I want to see what stage my order has reached so that I know it is
 - The order shows its current state and the time it entered that state
 - A state change pushes a notification within 5 seconds (NFR-03)
 - The screen shows an expected-by window, not a live map (brief §3.5)
+- A pickup order's screen shows the collection code and the vendor's pin, landmark description and phone number instead of rider or delivery information
+- A scheduled order's screen shows the scheduled slot clearly until it enters active preparation
 
 ### US-C-08 — Cancel an order · **S**
 As a customer I want to cancel before the vendor starts work so that I am not charged for something I no longer want.
@@ -129,6 +141,8 @@ As a vendor I want to control how my store appears and when it is open.
 - Store name, description, logo and opening hours are editable
 - An open/closed toggle immediately stops new orders without hiding the store
 - Closing does not affect orders already in flight
+- A separate toggle enables or disables customer pickup for this store (brief §3.1a); delivery is always available while the store is open
+- Scheduled order slots are offered only within opening hours
 
 ### US-V-03 — Manage products · **M**
 As a vendor I want to list and edit products so that customers can buy them.
@@ -151,15 +165,16 @@ As a vendor I want to accept or reject incoming orders so that I only commit to 
 
 - A new `PAID` order raises an audible, visible alert in the dashboard
 - The vendor accepts, moving it to `PREPARING`, or rejects with a mandatory reason
-- No response within a configurable window auto-rejects and refunds the customer in full
+- A scheduled order clearly shows its slot and is listed separately from orders needing action now
+- No response within a configurable window auto-rejects and refunds the customer in full — for a scheduled order this window is relative to the slot, not to the moment it was placed
 - A rejection is recorded against the vendor's reliability metric
 
 ### US-V-06 — Mark an order ready · **M**
-As a vendor I want to signal that an order is ready so that a rider is dispatched.
+As a vendor I want to signal that an order is ready so that a rider is dispatched, or the customer is told to come collect it.
 
-- Moving to `READY_FOR_PICKUP` makes the job visible to riders
-- The vendor sees which rider has accepted, with their name and phone number
-- Handover is confirmed by the rider, not the vendor, and that confirmation moves the order to `IN_TRANSIT`
+- Moving to `READY_FOR_PICKUP` makes a delivery order's job visible to riders
+- For a delivery order, the vendor sees which rider has accepted, with their name and phone number, and handover is confirmed by the rider — that confirmation moves the order to `IN_TRANSIT`
+- For a pickup order, moving to `READY_FOR_PICKUP` instead notifies the customer to come collect; the vendor confirms collection by entering the code the customer shows, which moves the order directly to `DELIVERED`
 
 ### US-V-07 — See earnings and payouts · **M**
 As a vendor I want to see what I have earned and when I will be paid.
@@ -309,10 +324,10 @@ As an operator I want an immutable record of consequential actions so that fraud
 
 | Actor | M | S | L | Total |
 |---|---|---|---|---|
-| Customer | 5 | 6 | 0 | 11 |
+| Customer | 6 | 6 | 0 | 12 |
 | Vendor | 6 | 1 | 0 | 7 |
 | Rider | 6 | 2 | 0 | 8 |
 | Superadmin | 5 | 3 | 0 | 8 |
-| **Total** | **22** | **12** | **0** | **34** |
+| **Total** | **23** | **12** | **0** | **35** |
 
-The 22 **M** stories are the walking skeleton: the smallest set that lets one real customer buy one real item from one real vendor, have a real rider deliver it, and have real money reach the vendor. That set — not any individual app — is the first delivery milestone, and it is sequenced in stage 03.
+The **M** stories are the walking skeleton: the smallest set that lets one real customer buy one real item from one real vendor, have a real rider deliver it, and have real money reach the vendor. That set — not any individual app, and not pickup or scheduling — is the first delivery milestone; pickup and scheduling are real v1 requirements but are sequenced immediately after the skeleton proves the delivery path end to end, not inside it. Sequencing is decided in stage 03.

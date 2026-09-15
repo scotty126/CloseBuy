@@ -1,17 +1,12 @@
-# NearBuy — Brand Guide
+# CloseBuy — Brand Guide
 
 - **Status:** Draft
 - **Date:** 2026-09-15
 - **Stage:** 02 — Design
 
-## ⚠ Naming mismatch — needs a decision
+## Naming — resolved
 
-The supplied logo assets read **"CloseBuy"** in the wordmark and tagline, but the product has been named **NearBuy**. This doc treats **NearBuy as the product name**, per explicit instruction, and the palette and icon below as final. The wordmark graphics themselves still say CloseBuy and need regenerating before they're usable as-is — either:
-
-- Regenerate the wordmark with "NearBuy" set in the same type, weight and color split (recommended, if NearBuy is correct), or
-- Revert the product name to CloseBuy and keep the assets unchanged.
-
-Nothing downstream is blocked by this — the icon and palette work under either name — but pick one before anything ships with a logo on it.
+An earlier draft of this project used the working name "NearBuy" for a short stretch, which didn't match the supplied wordmark artwork. That's settled now: **CloseBuy is the confirmed product name**, matching the logo files exactly as supplied. No wordmark regeneration needed — the assets below are final as-is.
 
 ## Assets on file
 

@@ -1,4 +1,4 @@
-# NearBuy — Product Brief
+# CloseBuy — Product Brief
 
 - **Status:** Draft
 - **Date:** 2026-09-15
@@ -8,7 +8,7 @@
 
 In West African markets, small and mid-sized sellers have inventory and customers have demand, but the connection between them is fragmented. Sellers transact over Instagram and WhatsApp with no order management, no payment guarantee and no delivery network. Buyers have no protection against paying for goods that never arrive. Independent riders have no steady source of jobs.
 
-NearBuy connects all three sides on one platform: vendors list and sell, customers order and pay under escrow protection, and riders deliver — with the platform operator retaining oversight of the whole flow.
+CloseBuy connects all three sides on one platform: vendors list and sell, customers order and pay under escrow protection, and riders deliver — with the platform operator retaining oversight of the whole flow.
 
 ## 2. Actors
 
@@ -32,6 +32,20 @@ For v1, a cart may hold items from **one vendor only**. Adding an item from a di
 **This was a deliberate simplification, not the starting assumption.** Most launch vendors are expected to trade out of a small number of shared physical hubs (a market, a mall, a food court — the way Computer Village or Balogun Market hosts hundreds of traders under one roof), which would make a *hub-scoped* multi-vendor cart viable: several vendors, split into separate sub-orders at checkout, collected by one rider on a single multi-stop trip. That model is sound and may be worth revisiting once the platform has real trading volume — but it adds real complexity (order splitting, multi-stop rider dispatch, pickup checklists, readiness-timeout handling between vendors on different prep schedules) that isn't justified before the single-vendor path is proven end to end. It is parked, not discarded: see the retired items under §5 and R-08.
 
 If it does return, the mechanism to reintroduce is: a `hub` entity vendors can optionally belong to; a cart rule allowing multiple vendors only when every vendor in it shares a hub; checkout splitting into one sub-order per vendor; and dispatch grouping same-hub sub-orders into one rider job. None of that is being built now.
+
+### 3.1a Fulfilment is delivery or pickup; either can be immediate or scheduled
+
+Two independent choices sit on top of the order, each vendor-configurable and each customer-selected before checkout:
+
+- **Fulfilment type** — *delivery* (a rider carries the order, as described everywhere else in this brief) or *pickup* (the customer collects in person from the vendor). A vendor opts into offering pickup; not every vendor has to.
+- **Timing** — *immediate* ("as soon as possible") or *scheduled* (a future date and time slot the customer picks).
+
+All four combinations fit the same state machine in §4, with two changes:
+
+- **A pickup order never enters `RIDER_ASSIGNED` or `IN_TRANSIT`.** `READY_FOR_PICKUP` means exactly what it says: the vendor holds the order until the customer physically arrives. The customer shows a short code on their order screen; the vendor enters it to confirm collection, which moves the order straight to `DELIVERED`. No rider, no delivery fee, no proof-of-delivery photo — pickup removes most of the platform's operational complexity for that one order.
+- **A scheduled order is paid and accepted the same way an immediate order is**, but the vendor isn't expected to start `PREPARING` until close to the scheduled slot. A background job (already part of the architecture's job queue) advances the order into active preparation at the right time, and — for delivery — dispatch only offers the job to riders close to the slot, not the moment the vendor accepted. Scheduling adds one field (`scheduled_for`) and one job type; it does not change the shape of the state machine, only its timing.
+
+Pickup is available for either timing; a customer can collect immediately or reserve a future slot for pickup too.
 
 ### 3.2 Money is held in escrow, not forwarded
 
@@ -72,7 +86,7 @@ If live tracking is wanted later it is an additive feature, not a rewrite: the o
 
 ## 4. Order lifecycle
 
-Applies to an order — which is, for v1, one purchase from one vendor (§3.1).
+Applies to an order — which is, for v1, one purchase from one vendor (§3.1). A pickup order (§3.1a) follows this same diagram but never visits `RIDER_ASSIGNED` or `IN_TRANSIT`, moving directly from `READY_FOR_PICKUP` to `DELIVERED` on customer collection. A scheduled order enters the diagram normally but its `PREPARING` step is timed to the slot, not triggered the instant the vendor accepts.
 
 ```
                  ┌──────────────────┐
@@ -114,8 +128,8 @@ Every transition is recorded with actor, timestamp and reason. Order history is 
 
 ### In scope for v1
 
-- **Customer** — registration, browse, search, cart, checkout, order status tracking, order history, ratings
-- **Vendor** — onboarding with KYC, product and inventory management, order queue, payout view
+- **Customer** — registration, browse, search, cart, checkout with delivery-or-pickup and immediate-or-scheduled selection, order status tracking, order history, ratings
+- **Vendor** — onboarding with KYC, product and inventory management, pickup availability toggle, order queue including scheduled orders, payout view
 - **Rider** — onboarding with KYC, availability toggle, accept or decline job offers, pickup confirmation, navigation handoff to an external maps app, proof of delivery, earnings
 - **Admin** — actor vetting and approval, category and commission configuration, dispute resolution, financial reconciliation, platform metrics
 - **Payments** — card and bank transfer via gateway, cash on delivery, escrow ledger, automated vendor payouts
@@ -180,6 +194,7 @@ Recorded so that, if any turns out to be false, we know exactly what to revisit.
 | R-05 | Fraudulent vendors or fake listings | Trust collapse | Mandatory KYC, staged trust levels, payout delay for new vendors |
 | R-06 | Solo developer, four surfaces | Schedule overrun | Staged roadmap in stage 03; shared component library; each surface reaches usable state before the next begins |
 | R-08 | Hub multi-vendor dispatch was scoped out (§3.1) specifically to avoid this: order-splitting, multi-stop pickup and cross-vendor readiness timeouts are real complexity a solo build shouldn't carry before the single-vendor path is proven | N/A — parked, not active | If revisited, re-open with the surcharge amount, hub wait-timeout and late-vendor penalty policy decided up front, and treat it as its own milestone rather than folding it into the walking skeleton |
+| R-09 | A vendor accepts more scheduled orders for one time slot than they can actually prepare in it | Missed slots, customer complaints, vendor overwhelmed | v1 does not build slot-capacity limits (a config number of orders per vendor per slot); vendors self-manage by rejecting what they can't meet. Revisit if this proves to be a real problem once vendors are using scheduling |
 
 ## 9. Open questions
 
