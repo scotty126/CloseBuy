@@ -1,0 +1,503 @@
+// CloseBuy — Prisma schema
+// Source of truth: docs/02-design/data-model.md — every model, field and
+// comment below traces back to a section there. Keep them in sync by hand.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  customer
+  vendor
+  rider
+  admin
+}
+
+enum VendorStatus {
+  pending
+  approved
+  suspended
+  rejected
+}
+
+enum RiderStatus {
+  pending
+  approved
+  suspended
+  rejected
+}
+
+// Exactly the states in product-brief.md §4.
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PREPARING
+  READY_FOR_PICKUP
+  RIDER_ASSIGNED
+  IN_TRANSIT
+  DELIVERED
+  DELIVERY_FAILED
+  CANCELLED
+  REFUNDED
+  COMPLETED
+}
+
+// brief §3.1a
+enum FulfilmentType {
+  delivery
+  pickup
+}
+
+enum PaymentMethod {
+  card
+  transfer
+  cash_on_delivery
+}
+
+// ADR-0001: Monnify primary, Paystack documented fallback
+enum PaymentGateway {
+  monnify
+  paystack
+}
+
+enum PaymentStatus {
+  pending
+  succeeded
+  failed
+  refunded
+}
+
+// data-model.md §4a
+enum LedgerAccount {
+  customer_escrow
+  vendor_payable
+  platform_commission
+  rider_payable
+  rider_cash_float
+}
+
+enum LedgerDirection {
+  debit
+  credit
+}
+
+enum PayeeType {
+  vendor
+  rider
+}
+
+enum PayoutStatus {
+  scheduled
+  paid
+  failed
+}
+
+enum DisputeStatus {
+  open
+  resolved
+}
+
+enum DisputeResolutionType {
+  full_refund
+  partial_refund
+  rejected
+}
+
+enum RatingTargetType {
+  vendor
+  rider
+}
+
+// Who made a given order-state transition (US-A-08, audit trail)
+enum ActorType {
+  customer
+  vendor
+  rider
+  admin
+  system
+}
+
+// ── Identity ─────────────────────────────────────────────────────────────
+
+model User {
+  id               String    @id @default(uuid())
+  phone            String    @unique
+  phoneVerifiedAt  DateTime?
+  role             UserRole
+  createdAt        DateTime  @default(now())
+
+  customerProfile CustomerProfile?
+  vendorProfile   VendorProfile?
+  riderProfile    RiderProfile?
+  adminProfile    AdminProfile?
+  notifications   Notification[]
+
+  @@map("users")
+}
+
+model CustomerProfile {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  addresses Address[]
+  carts     Cart[]
+  orders    Order[]
+  disputes  Dispute[]
+  ratings   Rating[]
+
+  @@map("customer_profiles")
+}
+
+model VendorProfile {
+  id          String       @id @default(uuid())
+  userId      String       @unique
+  user        User         @relation(fields: [userId], references: [id])
+  businessName String
+  categoryId  String
+  category    Category     @relation(fields: [categoryId], references: [id])
+  description String?
+  logoUrl     String?
+
+  // Pickup address, embedded — brief §3.4: a pin, not a postal string
+  pickupLat         Float
+  pickupLng         Float
+  pickupLandmark    String
+  pickupPhone       String
+
+  bankAccountRef String?
+  status         VendorStatus @default(pending)
+  isOpen         Boolean      @default(false)
+  supportsPickup Boolean      @default(false) // brief §3.1a, independent of isOpen
+  openingHours   Json         // e.g. { mon: ["09:00","21:00"], ... }
+  reliabilityScore Decimal    @default(0) @db.Decimal(3, 2)
+
+  // brief §3.2a — set to approvedAt + program duration on approval during
+  // the launch window; null once expired or if joined outside it.
+  foundingVendorCommissionWaivedUntil DateTime?
+
+  createdAt DateTime @default(now())
+
+  products Product[]
+  orders   Order[]
+  carts    Cart[]
+
+  @@map("vendor_profiles")
+}
+
+model RiderProfile {
+  id             String      @id @default(uuid())
+  userId         String      @unique
+  user           User        @relation(fields: [userId], references: [id])
+  fullName       String
+  vehicleType    String
+  idDocumentUrl  String?
+  bankAccountRef String?
+  status         RiderStatus @default(pending)
+  onDuty         Boolean     @default(false)
+  cashBalanceMinor Int       @default(0) // brief R-03 / US-R-08 — owed back to the platform
+  createdAt      DateTime    @default(now())
+
+  orders Order[]
+
+  @@map("rider_profiles")
+}
+
+model AdminProfile {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@map("admin_profiles")
+}
+
+// brief §3.4 — a coordinate + landmark + phone, never a postal string
+model Address {
+  id                   String          @id @default(uuid())
+  customerId           String
+  customer             CustomerProfile @relation(fields: [customerId], references: [id])
+  label                String
+  lat                  Float
+  lng                  Float
+  landmarkDescription  String
+  contactPhone         String
+  isWithinServiceArea  Boolean
+
+  orders Order[]
+
+  @@map("addresses")
+}
+
+// ── Catalog ──────────────────────────────────────────────────────────────
+
+// Admin-configurable (US-A-02), not a hardcoded enum — brief §3.3
+model Category {
+  id                 String   @id @default(uuid())
+  name               String
+  defaultPrepMinutes Int      @default(15)
+  isActive           Boolean  @default(true)
+
+  vendors  VendorProfile[]
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id          String        @id @default(uuid())
+  vendorId    String
+  vendor      VendorProfile @relation(fields: [vendorId], references: [id])
+  categoryId  String
+  category    Category      @relation(fields: [categoryId], references: [id])
+  name        String
+  description String?
+  priceMinor  Int           // integer minor units — never float (US-V-03)
+  images      String[]
+  stock       Int           @default(0)
+  isActive    Boolean       @default(true) // deactivate, never hard-delete (US-V-03)
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@map("products")
+}
+
+// ── Cart ─────────────────────────────────────────────────────────────────
+
+// One active cart per customer, scoped to a single vendor — brief §3.1.
+// vendorId is nullable only while the cart is empty; enforcing "single
+// vendor" is an application-layer rule (409 CART_VENDOR_MISMATCH per
+// api-contracts.md), not something a DB constraint alone can express.
+model Cart {
+  id         String         @id @default(uuid())
+  customerId String
+  customer   CustomerProfile @relation(fields: [customerId], references: [id])
+  vendorId   String?
+  vendor     VendorProfile?  @relation(fields: [vendorId], references: [id])
+
+  items CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String  @id @default(uuid())
+  cartId    String
+  cart      Cart    @relation(fields: [cartId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+
+  @@map("cart_items")
+}
+
+// ── Order ────────────────────────────────────────────────────────────────
+
+model Order {
+  id         String          @id @default(uuid())
+  customerId String
+  customer   CustomerProfile @relation(fields: [customerId], references: [id])
+  vendorId   String
+  vendor     VendorProfile   @relation(fields: [vendorId], references: [id])
+  riderId    String?         // set on RIDER_ASSIGNED; never set for a pickup order
+  rider      RiderProfile?   @relation(fields: [riderId], references: [id])
+
+  fulfilmentType FulfilmentType // brief §3.1a
+  scheduledFor   DateTime?      // null = as soon as possible
+
+  addressId String?  // null for pickup orders
+  address   Address? @relation(fields: [addressId], references: [id])
+
+  status        OrderStatus   @default(PENDING_PAYMENT)
+  paymentMethod PaymentMethod
+
+  subtotalMinor    Int
+  deliveryFeeMinor Int @default(0) // always 0 for pickup
+  discountMinor    Int @default(0)
+  commissionMinor  Int @default(0) // computed at completion, data-model.md §4a
+  totalMinor       Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items       OrderItem[]
+  transitions OrderStateTransition[]
+  payment     Payment?
+  ledgerEntries LedgerEntry[]
+  dispute     Dispute?
+  ratings     Rating[]
+
+  @@index([customerId])
+  @@index([vendorId])
+  @@index([riderId])
+  @@index([status])
+  @@map("orders")
+}
+
+// Snapshots name/price at purchase time — editing a product later must
+// never alter a historical order's figures (US-V-03).
+model OrderItem {
+  id                String  @id @default(uuid())
+  orderId           String
+  order             Order   @relation(fields: [orderId], references: [id])
+  productId         String
+  product           Product @relation(fields: [productId], references: [id])
+  nameSnapshot       String
+  priceMinorSnapshot Int
+  quantity          Int
+
+  @@map("order_items")
+}
+
+// Append-only — the evidence base for disputes (US-A-04) and reconciliation
+// (US-A-05). No UPDATE or DELETE is ever issued against this table by the
+// application; see prisma/APPEND_ONLY.sql for the DB-level enforcement to
+// apply after the first migration (data-model.md §6, invariant 2).
+model OrderStateTransition {
+  id         String       @id @default(uuid())
+  orderId    String
+  order      Order        @relation(fields: [orderId], references: [id])
+  fromStatus OrderStatus?
+  toStatus   OrderStatus
+  actorType  ActorType
+  actorId    String?      // null when actorType = system (e.g. auto-reject timeout)
+  reason     String?
+  createdAt  DateTime     @default(now())
+
+  @@index([orderId])
+  @@map("order_state_transitions")
+}
+
+// ── Money ────────────────────────────────────────────────────────────────
+
+model Payment {
+  id               String        @id @default(uuid())
+  orderId          String        @unique
+  order            Order         @relation(fields: [orderId], references: [id])
+  gateway          PaymentGateway
+  gatewayReference String        @unique // idempotency key (US-C-06)
+  amountMinor      Int
+  status           PaymentStatus @default(pending)
+
+  @@map("payments")
+}
+
+// Double-entry, append-only. Every money movement is (at least) two rows
+// that net to zero. No UPDATE or DELETE — see prisma/APPEND_ONLY.sql.
+model LedgerEntry {
+  id          String          @id @default(uuid())
+  orderId     String
+  order       Order           @relation(fields: [orderId], references: [id])
+  account     LedgerAccount
+  direction   LedgerDirection
+  amountMinor Int
+  createdAt   DateTime        @default(now())
+
+  @@index([orderId])
+  @@index([account])
+  @@map("ledger_entries")
+}
+
+model Payout {
+  id          String       @id @default(uuid())
+  payeeType   PayeeType
+  payeeId     String
+  amountMinor Int
+  status      PayoutStatus @default(scheduled)
+  reference   String?      // Monnify transfer reference
+  createdAt   DateTime     @default(now())
+
+  @@index([payeeType, payeeId])
+  @@map("payouts")
+}
+
+// ── Platform ─────────────────────────────────────────────────────────────
+
+model Dispute {
+  id         String                @id @default(uuid())
+  orderId    String                @unique
+  order      Order                 @relation(fields: [orderId], references: [id])
+  customerId String
+  customer   CustomerProfile       @relation(fields: [customerId], references: [id])
+  reason     String
+  evidence   String[]              // R2 object keys
+  status     DisputeStatus         @default(open)
+  resolution DisputeResolutionType?
+  resolvedBy String?               // admin user id
+  resolvedAt DateTime?
+  createdAt  DateTime              @default(now())
+
+  @@map("disputes")
+}
+
+model Rating {
+  id         String           @id @default(uuid())
+  orderId    String
+  order      Order            @relation(fields: [orderId], references: [id])
+  customerId String
+  customer   CustomerProfile  @relation(fields: [customerId], references: [id])
+  targetType RatingTargetType
+  targetId   String
+  score      Int              // 1-5
+  comment    String?
+  createdAt  DateTime         @default(now())
+  editedUntil DateTime        // createdAt + 24h, US-C-10
+
+  @@index([targetType, targetId])
+  @@map("ratings")
+}
+
+model Notification {
+  id      String    @id @default(uuid())
+  userId  String
+  user    User      @relation(fields: [userId], references: [id])
+  type    String
+  payload Json
+  sentAt  DateTime  @default(now())
+  readAt  DateTime?
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+// Versioned, never overwritten — a new row with an incremented version is
+// how a value changes, so a historical order can be checked against the
+// config live when it was placed (US-A-02). E.g. commission_rate.pickup,
+// commission_rate.delivery (data-model.md §4a).
+model Config {
+  id          String   @id @default(uuid())
+  key         String
+  value       Json
+  version     Int
+  effectiveAt DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([key, version])
+  @@map("config")
+}
+
+// Broader than OrderStateTransition — config changes, vetting decisions,
+// suspensions, forced interventions (US-A-08). Append-only, never edited or
+// deleted through any interface — see prisma/APPEND_ONLY.sql.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  action     String
+  targetType String
+  targetId   String
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@map("audit_log")
+}

@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: closebuy_app
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: closebuy
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+
+    env:
+      DATABASE_URL: "postgresql://closebuy_app:ci@localhost:5432/closebuy"
+      REDIS_URL: "redis://localhost:6379"
+      JWT_ACCESS_SECRET: "ci-only-secret-not-used-in-real-environments-000000"
+      JWT_REFRESH_SECRET: "ci-only-secret-not-used-in-real-environments-000001"
+      TERMII_API_KEY: "ci-placeholder"
+      TERMII_SENDER_ID: "ci-placeholder"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Validate Prisma schema
+        run: pnpm --filter @closebuy/api prisma validate
+
+      - name: Run migrations against the CI database
+        run: pnpm --filter @closebuy/api prisma migrate deploy
+
+      - run: pnpm typecheck
+
+      - run: pnpm lint
+
+      - run: pnpm build
+
+      - run: pnpm test

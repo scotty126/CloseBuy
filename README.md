@@ -29,4 +29,8 @@ Development follows a staged lifecycle; each stage leaves a durable artifact in 
 
 ## Status
 
-Pre-implementation. Stages 01 (requirements), 02 (design) and 03 (planning) drafted in full — brand, architecture, data model, screens/navigation, API contracts, and a milestone roadmap all in place. Implementation not yet started.
+Stages 01–03 (requirements, design, planning) complete. **M0 (foundation) is built and verified** — monorepo scaffold, database schema, phone OTP auth end to end, and the shared UI package. See [docs/04-implementation/SETUP.md](docs/04-implementation/SETUP.md) to run it locally, and [docs/03-planning/roadmap.md](docs/03-planning/roadmap.md) for what's next (M1).
+
+## Running locally
+
+See [docs/04-implementation/SETUP.md](docs/04-implementation/SETUP.md).

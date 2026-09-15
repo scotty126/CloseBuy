@@ -1,0 +1,23 @@
+# Local dev only — Postgres + Redis. Not used in production; Railway/Render
+# host the real instances there (ADR-0001).
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: closebuy_app
+      POSTGRES_PASSWORD: localdev
+      POSTGRES_DB: closebuy
+    ports:
+      - "5432:5432"
+    volumes:
+      - closebuy_postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+volumes:
+  closebuy_postgres_data:

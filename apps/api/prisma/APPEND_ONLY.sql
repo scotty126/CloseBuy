@@ -1,0 +1,22 @@
+-- data-model.md §6, invariant 2: OrderStateTransition and LedgerEntry (and
+-- AuditLog, same reasoning) are insert-only at the database grant level,
+-- not just by application convention.
+--
+-- Prisma's schema language has no way to express a REVOKE, so this runs as
+-- a one-off manual step after the first `prisma migrate dev` — NOT as a
+-- Prisma migration file, since `prisma migrate reset` would otherwise
+-- happily regrant these permissions back via the shadow-database diffing
+-- process. Re-run this any time the app's DB role changes or the database
+-- is rebuilt from scratch.
+--
+-- Replace closebuy_app with the actual role your DATABASE_URL connects as.
+
+REVOKE UPDATE, DELETE ON order_state_transitions FROM closebuy_app;
+REVOKE UPDATE, DELETE ON ledger_entries FROM closebuy_app;
+REVOKE UPDATE, DELETE ON audit_log FROM closebuy_app;
+
+-- Config rows are also never overwritten (US-A-02) — new version, not an
+-- edit of an old one. UPDATE is revoked; DELETE is allowed only for the
+-- narrow admin case of removing a config entry created in error, so it is
+-- deliberately left grantable rather than revoked here.
+REVOKE UPDATE ON config FROM closebuy_app;

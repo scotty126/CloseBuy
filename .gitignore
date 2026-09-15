@@ -12,6 +12,10 @@ build/
 .next/
 out/
 *.tsbuildinfo
+.turbo/
+
+# Prisma
+apps/api/src/generated/
 
 # Environment & secrets
 .env
