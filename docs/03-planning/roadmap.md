@@ -10,9 +10,9 @@ Every milestone after M1 is **additive** to a working spine, never a rewrite. M1
 
 Estimates are in **solo developer-weeks of focused effort**, not calendar time — they assume something close to full-time attention. Halve your available weekly hours against full-time and scale accordingly; a side-project pace roughly doubles every number here. Treat the numbers as relative sizing between milestones, not a delivery promise.
 
-**One dependency outside engineering entirely, flagged up front:** R-01 (escrow/CBN licensing) needs legal advice, and that has its own timeline nobody here controls. Start that conversation now, in parallel with M0 — a licensing answer that changes the payment architecture is far cheaper to absorb before M1 is built than after.
+**One dependency outside engineering entirely, flagged up front:** R-01 (escrow/CBN licensing) needs legal advice, and that has its own timeline nobody here controls. Now concrete, not theoretical — CBN's PSSP tier (₦100M capital) cannot hold funds at all; the tier that can ("build escrow platforms") is the full PSP license at **₦5 billion** paid-up capital, completely unreachable pre-launch. Whether routing through Monnify's Sub-Accounts (confirmed to exist, ADR-0001) keeps CloseBuy outside that requirement, or whether CBN would still view CloseBuy as the party holding the funds regardless, is a real open legal question — public guidance doesn't resolve it. **Start that conversation now**, not after M1 is built: a licensing answer that requires restructuring who's legally the merchant of record is far cheaper to absorb before Payments is built than after, and it must be settled before M5 (real customer money live), with enough lead time to act on the answer either way.
 
-**A second pre-M1 checkpoint, this one bounded and fast:** confirm Monnify's exact settlement cadence and whether it offers a split-payment/sub-account mechanism equivalent to Paystack's Subaccounts (ADR-0001) *before* checkout/escrow integration begins in M1 — this is a documentation-reading task, not a legal one, and should take a day, not weeks. If no equivalent exists, the escrow implementation routes the vendor's share through Monnify's Disbursement API after the fact instead of splitting at charge time — a real but contained design change, much cheaper to make now than mid-M1.
+**The bounded, fast pre-M1 checkpoint is closed:** Monnify does have a Sub-Accounts / split-payment mechanism equivalent to Paystack's — confirmed directly, not assumed. The legal question above is now the only thing standing between here and a settled Payments design, not a technical unknown.
 
 ## Milestones
 
@@ -87,6 +87,6 @@ Carried forward from [product-brief.md §8](../01-requirements/product-brief.md)
 
 | Risk | Mitigation |
 |---|---|
-| R-01 (escrow/CBN) could force an architecture change | Legal input sought in parallel with M0, not after M1 is built |
+| R-01 (escrow/CBN) — the PSSP-vs-PSP gap (₦100M vs ₦5B capital) makes this a real, not theoretical, threat to the Payments design | Legal input sought now, before Payments is built in M1, not after |
 | R-06 (solo developer) makes M1's 6-week estimate the single biggest schedule risk in this whole roadmap | No feature work starts in M2+ until every M1 acceptance criterion passes — resist the pull to build the "nicer" milestones while M1 has known gaps |
 | Riverpark vendor recruitment lags the engineering timeline | M2 (Founding Vendor mechanics) is sequenced early specifically so recruitment can start before M3/M4 finish, not after |
