@@ -12,6 +12,8 @@ Estimates are in **solo developer-weeks of focused effort**, not calendar time �
 
 **One dependency outside engineering entirely, flagged up front:** R-01 (escrow/CBN licensing) needs legal advice, and that has its own timeline nobody here controls. Start that conversation now, in parallel with M0 — a licensing answer that changes the payment architecture is far cheaper to absorb before M1 is built than after.
 
+**A second pre-M1 checkpoint, this one bounded and fast:** confirm Monnify's exact settlement cadence and whether it offers a split-payment/sub-account mechanism equivalent to Paystack's Subaccounts (ADR-0001) *before* checkout/escrow integration begins in M1 — this is a documentation-reading task, not a legal one, and should take a day, not weeks. If no equivalent exists, the escrow implementation routes the vendor's share through Monnify's Disbursement API after the fact instead of splitting at charge time — a real but contained design change, much cheaper to make now than mid-M1.
+
 ## Milestones
 
 ### M0 — Foundation
@@ -30,7 +32,7 @@ Estimates are in **solo developer-weeks of focused effort**, not calendar time �
 Covers the 23 **M**-priority stories from [user-stories.md](../01-requirements/user-stories.md), minus pickup and scheduling (see M2/M4):
 
 - Vendor: product/stock management, accept-or-reject with auto-reject timeout
-- Customer: browse, cart, address (pin-based), checkout via Paystack, order status tracking
+- Customer: browse, cart, address (pin-based), checkout via Monnify, order status tracking
 - Rider: on-duty toggle, job offer/accept, pickup code, delivery proof, cash-on-delivery handling
 - Platform: escrow ledger (double-entry, append-only), append-only order state transitions, audit log, a payout run admin can trigger manually
 - Admin: vendor/rider vetting, minimal order oversight

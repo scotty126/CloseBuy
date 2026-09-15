@@ -39,14 +39,14 @@ One backend, one database, four thin clients. This document assumes the stack de
               │  outbound integrations
               ▼
   ┌──────────┬──────────┬──────────┬──────────┬──────────┐
-  │ Paystack │  Termii  │  Google  │Cloudflare│ Web Push │
+  │ Monnify  │  Termii  │  Google  │Cloudflare│ Web Push │
   │(payments,│  (SMS    │  Maps    │    R2    │ (VAPID,  │
   │ payouts) │  OTP)    │(geocode) │ (images, │ notifs)  │
   │          │          │          │KYC docs) │          │
   └──────────┴──────────┴──────────┴──────────┴──────────┘
 ```
 
-Every client talks only to the API — there is no direct client-to-database or client-to-third-party access anywhere (card details, in particular, go straight from the client to Paystack's own hosted fields and never transit CloseBuy's servers at all, per NFR-05).
+Every client talks only to the API — there is no direct client-to-database or client-to-third-party access anywhere (card details, in particular, go straight from the client to Monnify's own hosted fields and never transit CloseBuy's servers at all, per NFR-05).
 
 ## 2. Backend modules
 
@@ -58,7 +58,7 @@ The API is a single deployable service, internally organised into modules with c
 | **Catalog** | Categories, vendors, products, stock | — |
 | **Cart** | The active single-vendor cart per customer (brief §3.1) | Catalog (price/stock validation) |
 | **Order** | The order state machine (brief §4), state transition log | Cart, Catalog, Dispatch |
-| **Payments** | Checkout, Paystack webhooks, refunds | Order, Ledger |
+| **Payments** | Checkout, Monnify webhooks, refunds | Order, Ledger |
 | **Ledger** | Double-entry escrow ledger, payout calculation | Payments, Order |
 | **Dispatch** | Job offers to riders, acceptance, pickup/delivery confirmation — **delivery-fulfilment orders only**; a pickup order never enters this module (brief §3.1a) | Order |
 | **Notifications** | Push delivery, in-app notification feed | Order, Dispatch (event sources) |
@@ -77,7 +77,7 @@ Customer                API                          External
    │  add to cart ──────►│ Cart validates against Catalog
    │                     │
    │  checkout ─────────►│ Payments creates PENDING_PAYMENT order
-   │                     │──── charge ─────────────────────► Paystack
+   │                     │──── charge ─────────────────────► Monnify
    │                     │◄─── webhook: success ─────────────┘
    │                     │ Ledger: debit customer, credit escrow
    │                     │ Order → PAID
@@ -116,7 +116,7 @@ Every arrow that changes order state also writes one row to the append-only stat
 | NFR-01/02 (load & response time on 3G) | Next.js SSR for first paint; Catalog reads are the hottest path and are cached; no client ever waits on a third-party call synchronously except at the payment step |
 | NFR-03 (&lt;5s state visibility) | Push notification fires from the module that made the transition, same request; polling is the fallback for a client with push disabled |
 | NFR-04 (99.5% uptime) | Managed hosting (Vercel/Railway) with independent client deploys — a broken vendor-app deploy cannot take down the customer app or the API |
-| NFR-05 (never store card data) | Card capture happens on Paystack's own hosted UI; CloseBuy's server only ever sees a reference and a webhook |
+| NFR-05 (never store card data) | Card capture happens on Monnify's own hosted UI; CloseBuy's server only ever sees a reference and a webhook |
 | NFR-06 (encryption) | TLS everywhere in transit; Postgres and R2 encrypted at rest by the hosting provider |
 | NFR-07 (append-only financial records) | Ledger and state-transition tables are insert-only at the application layer — corrections are reversing entries, never updates or deletes |
 | NFR-09 (1,000 orders/day) | A single Postgres instance and a single Fastify instance comfortably clear this; no architectural change needed before this number is an order of magnitude higher |

@@ -146,7 +146,7 @@ This is the part that cannot be sloppy (NFR-07, R-01).
 |---|---|---|
 | id | uuid | |
 | order_id | fk | |
-| gateway | enum: paystack, flutterwave | |
+| gateway | enum: monnify, paystack | |
 | gateway_reference | string, unique | Idempotency key — a repeated webhook with the same reference is a no-op (US-C-06) |
 | amount_minor | int | |
 | status | enum: pending, succeeded, failed, refunded | |
@@ -163,7 +163,7 @@ Double-entry, append-only. Every money movement is (at least) two rows that net 
 | amount_minor | int | |
 | created_at | timestamp | |
 
-A correction is a new pair of entries reversing the original — never an edit (brief §3.2, NFR-07). US-A-05's reconciliation report is, mechanically, "sum every account and confirm the whole ledger nets to zero, then compare the escrow account's balance against Paystack's own settlement report for the same period."
+A correction is a new pair of entries reversing the original — never an edit (brief §3.2, NFR-07). US-A-05's reconciliation report is, mechanically, "sum every account and confirm the whole ledger nets to zero, then compare the escrow account's balance against Monnify's own settlement report for the same period." With multi-daily settlement, this reconciliation plausibly needs to run more than once a day too, not just at end of day — worth confirming once Monnify's actual settlement/reporting cadence is verified (ADR-0001).
 
 ### Payout
 | Field | Type | Notes |
@@ -173,7 +173,7 @@ A correction is a new pair of entries reversing the original — never an edit (
 | payee_id | uuid | |
 | amount_minor | int | |
 | status | enum: scheduled, paid, failed | |
-| reference | string | Paystack transfer reference |
+| reference | string | Monnify transfer reference |
 | created_at | timestamp | |
 
 ## 4a. Commission — resolves Q-01
@@ -191,7 +191,7 @@ Stored as two `Config` rows (`commission_rate.pickup`, `commission_rate.delivery
 
 **Commission is strictly separate from two other deductions that also touch the same order**, per the explicit business rule this resolves from:
 
-- **Payment gateway processing fees** (Paystack's own cut of the transaction) — a cost of accepting payment at all, not part of CloseBuy's take.
+- **Payment gateway processing fees** (Monnify's own cut of the transaction) — a cost of accepting payment at all, not part of CloseBuy's take.
 - **Delivery fee** — passes to the rider (`rider_payable`), not to CloseBuy; CloseBuy's revenue on a delivery order is the commission alone, not the delivery fee.
 
 At order completion, the ledger computation is: commission = 0 if the founding-vendor waiver is active, else `total_minor × commission_rate[fulfilment_type]` from the live `Config`; this posts as a `platform_commission` credit and a matching `vendor_payable` debit, entirely separate from the `rider_payable` entry a delivery order also generates.
