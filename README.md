@@ -29,4 +29,4 @@ Development follows a staged lifecycle; each stage leaves a durable artifact in 
 
 ## Status
 
-Pre-implementation. Stages 01 (requirements) and 02 (design) drafted; stage 03 (planning) roadmap in place. Implementation not yet started.
+Pre-implementation. Stages 01 (requirements), 02 (design) and 03 (planning) drafted in full — brand, architecture, data model, screens/navigation, API contracts, and a milestone roadmap all in place. Implementation not yet started.
