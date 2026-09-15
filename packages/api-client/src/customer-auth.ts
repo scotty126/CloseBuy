@@ -5,6 +5,8 @@ import type {
   LoginInput,
   ForgotPasswordInput,
   ResetPasswordInput,
+  CustomerProfileDto,
+  CustomerProfileUpdateInput,
 } from "@closebuy/types";
 
 /** Customer — email/password or Google/Apple (brief §3.1b). Vendor/rider/admin still use the plain `createAuthApi` (phone OTP). */
@@ -26,6 +28,14 @@ export function createCustomerAuthApi(client: ApiClient) {
       client.request<{ verified: boolean }>("/auth/verify-email", {
         method: "POST",
         body: JSON.stringify({ token }),
+      }),
+
+    getProfile: () => client.request<{ profile: CustomerProfileDto }>("/customer/profile"),
+
+    updateProfile: (input: CustomerProfileUpdateInput) =>
+      client.request<{ profile: CustomerProfileDto }>("/customer/profile", {
+        method: "PATCH",
+        body: JSON.stringify(input),
       }),
   };
 }

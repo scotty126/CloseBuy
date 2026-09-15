@@ -66,3 +66,42 @@ export const categoryCreateSchema = z.object({
   defaultPrepMinutes: z.number().int().positive().default(15),
 });
 export type CategoryCreateInput = z.infer<typeof categoryCreateSchema>;
+
+// ── Response shapes ─────────────────────────────────────────────────────
+// Hand-written wire contracts, not re-exported from Prisma — see admin.ts
+// for why (a Date becomes a string once it round-trips through JSON, and
+// Prisma's own types aren't meant for a browser bundle).
+
+export interface CategoryDto {
+  id: string;
+  name: string;
+  defaultPrepMinutes: number;
+  isActive: boolean;
+}
+
+export interface ProductDto {
+  id: string;
+  vendorId: string;
+  categoryId: string;
+  name: string;
+  description: string | null;
+  priceMinor: number;
+  images: string[];
+  stock: number;
+  isActive: boolean;
+}
+
+// GET /vendors and /vendors/:id share this shape — the search list just
+// happens to omit nothing today, so there's no separate "summary" type.
+export interface VendorDto {
+  id: string;
+  businessName: string;
+  description: string | null;
+  logoUrl: string | null;
+  category: { id: string; name: string };
+  isOpen: boolean;
+  supportsPickup: boolean;
+  reliabilityScore: string; // Prisma Decimal serializes as a string over JSON
+  pickupLandmark: string;
+  foundingVendorCommissionWaivedUntil: string | null;
+}

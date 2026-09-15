@@ -1,11 +1,39 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Placeholder, useAuthSession } from "@closebuy/ui";
+import Link from "next/link";
+import { Button, Card, Input, Placeholder, useAuthSession } from "@closebuy/ui";
+import { ApiClientError } from "@closebuy/api-client";
+import { customerAuthApi } from "@/lib/api";
 
+/**
+ * screens-navigation.md §1.9. Real for what has backend support:
+ * profile (email, default contact phone) and the orders shortcut. Saved
+ * addresses, payment methods and ratings-given aren't built yet — there's
+ * no Address CRUD or ratings-read endpoint to show real data against, so
+ * they stay a Placeholder rather than a fake list.
+ */
 export default function AccountPage() {
   const router = useRouter();
   const { session, isLoaded, clear } = useAuthSession();
+
+  const [defaultPhone, setDefaultPhone] = useState("");
+  const [savedPhone, setSavedPhone] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!session) return;
+    customerAuthApi
+      .getProfile()
+      .then((res) => {
+        setDefaultPhone(res.profile.defaultPhone ?? "");
+        setSavedPhone(res.profile.defaultPhone);
+      })
+      .catch(() => {});
+  }, [session]);
 
   if (!isLoaded) return null;
 
@@ -23,9 +51,57 @@ export default function AccountPage() {
     );
   }
 
+  async function handleSavePhone() {
+    setSaveError(null);
+    setSaved(false);
+    setIsSaving(true);
+    try {
+      const res = await customerAuthApi.updateProfile({ defaultPhone: defaultPhone.trim() || null });
+      setSavedPhone(res.profile.defaultPhone);
+      setSaved(true);
+    } catch (err) {
+      setSaveError(err instanceof ApiClientError ? err.message : "Couldn't save.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4 p-4">
-      <Placeholder title="Account" note="screens-navigation.md §1.9 — addresses, payment methods, ratings given. Built in M1/M3." />
+      <Card>
+        <p className="text-sm text-muted">Signed in as</p>
+        <p className="text-lg font-semibold text-ink">{session.user.email}</p>
+      </Card>
+
+      <Link href="/orders" className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4">
+        <span className="text-sm font-medium text-ink">Order history</span>
+        <span className="text-muted">›</span>
+      </Link>
+
+      <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4">
+        <p className="text-sm font-medium text-ink">Default contact number</p>
+        <p className="text-xs text-muted">Presets the phone field at checkout — never verified, never used to sign in (brief §3.1b).</p>
+        <Input
+          type="tel"
+          value={defaultPhone}
+          onChange={(e) => {
+            setDefaultPhone(e.target.value);
+            setSaved(false);
+          }}
+          placeholder="+2348012345678"
+        />
+        {saveError && <p className="text-xs text-danger">{saveError}</p>}
+        <Button
+          variant="secondary"
+          onClick={handleSavePhone}
+          disabled={isSaving || defaultPhone === (savedPhone ?? "")}
+        >
+          {isSaving ? "Saving…" : saved ? "Saved" : "Save"}
+        </Button>
+      </div>
+
+      <Placeholder title="Addresses & ratings" note="Saved addresses (US-C-05) and ratings given (US-C-10) — no backend endpoint yet for either. Real future scope, not a silent gap." />
+
       <Button
         variant="secondary"
         onClick={() => {

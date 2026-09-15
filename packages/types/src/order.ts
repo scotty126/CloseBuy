@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { phoneSchema } from "./auth.js";
 import { FULFILMENT_TYPES, PAYMENT_METHODS } from "./enums.js";
+import type { OrderStatus, FulfilmentType, PaymentMethod } from "./enums.js";
 
 const cartItemSchema = z.object({
   productId: z.string().uuid(),
@@ -70,3 +71,67 @@ export const disputeOrderSchema = z.object({
   evidence: z.array(z.string().url()).max(5).optional(),
 });
 export type DisputeOrderInput = z.infer<typeof disputeOrderSchema>;
+
+// ── Response shapes ─────────────────────────────────────────────────────
+// Hand-written wire contracts, not re-exported from Prisma — see admin.ts
+// for why.
+
+export interface OrderItemDto {
+  id: string;
+  productId: string;
+  nameSnapshot: string;
+  priceMinorSnapshot: number;
+  quantity: number;
+}
+
+export interface OrderTransitionDto {
+  id: string;
+  fromStatus: OrderStatus | null;
+  toStatus: OrderStatus;
+  actorType: "customer" | "vendor" | "rider" | "admin" | "system";
+  reason: string | null;
+  createdAt: string;
+}
+
+// GET /orders/track/:token and /orders/:id share this shape — vendor/rider
+// are only ever present because order/service.ts's trackingInclude joins
+// them in specifically for the tracking screen (screens-navigation.md
+// §1.7); GET /orders (list) omits them, see OrderSummaryDto below.
+export interface OrderDto {
+  id: string;
+  trackingToken: string;
+  customerId: string | null;
+  vendorId: string;
+  riderId: string | null;
+  contactPhone: string;
+  alternateContactPhone: string | null;
+  fulfilmentType: FulfilmentType;
+  scheduledFor: string | null;
+  collectionCode: string | null;
+  deliveryLat: number | null;
+  deliveryLng: number | null;
+  deliveryLandmark: string | null;
+  status: OrderStatus;
+  paymentMethod: PaymentMethod;
+  subtotalMinor: number;
+  deliveryFeeMinor: number;
+  discountMinor: number;
+  commissionMinor: number;
+  totalMinor: number;
+  createdAt: string;
+  updatedAt: string;
+  items: OrderItemDto[];
+  transitions: OrderTransitionDto[];
+  vendor?: { businessName: string; pickupLandmark: string; pickupPhone: string; logoUrl: string | null };
+  rider?: { fullName: string; user: { phone: string } } | null;
+}
+
+// GET /orders (US-C-09 history) — the raw Order row, no relations joined.
+export type OrderSummaryDto = Omit<OrderDto, "items" | "transitions" | "vendor" | "rider">;
+
+export interface CheckoutResponse {
+  order: OrderDto;
+  trackingToken: string;
+  checkoutUrl?: string; // present only for card/transfer — Monnify's hosted payment page
+  replay: boolean;
+}

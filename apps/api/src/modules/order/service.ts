@@ -61,6 +61,17 @@ function generateCollectionCode(): string {
   return String(randomInt(100000, 999999)); // 6 digits, matches US-R-04/US-C-07's "short code"
 }
 
+// Shared by getOrder/getOrderByTrackingToken — exactly what the tracking
+// screen needs (screens-navigation.md §1.7) and nothing more: no pickup
+// coordinates, no rider's own userId, just enough to render "delivered by
+// [name], [phone]" or "collect from [vendor]".
+const trackingInclude = {
+  items: true,
+  transitions: { orderBy: { createdAt: "asc" as const } },
+  vendor: { select: { businessName: true, pickupLandmark: true, pickupPhone: true, logoUrl: true } },
+  rider: { select: { fullName: true, user: { select: { phone: true } } } },
+};
+
 export function createOrderService(deps: OrderServiceDeps) {
   const { prisma, monnify, queue, notifications } = deps;
 
@@ -242,10 +253,7 @@ export function createOrderService(deps: OrderServiceDeps) {
     },
 
     async getOrder(orderId: string, auth: AuthContext) {
-      const order = await prisma.order.findUnique({
-        where: { id: orderId },
-        include: { items: true, transitions: { orderBy: { createdAt: "asc" } } },
-      });
+      const order = await prisma.order.findUnique({ where: { id: orderId }, include: trackingInclude });
       if (!order) throw new OrderNotFoundError();
 
       const owns =
@@ -257,12 +265,16 @@ export function createOrderService(deps: OrderServiceDeps) {
       return order;
     },
 
-    /** US-C-06a — the only way a guest ever reaches their order again; also works for a signed-in customer sharing the link. Never a phone/email lookup. */
+    /**
+     * US-C-06a — the only way a guest ever reaches their order again; also
+     * works for a signed-in customer sharing the link. Never a phone/email
+     * lookup. Includes vendor/rider contact details (screens-navigation.md
+     * §1.7 — "a delivery order shows the assigned rider's name and phone
+     * once assigned") since anyone holding the tracking token is already
+     * meant to see this order's full status, same as a guest with the link.
+     */
     async getOrderByTrackingToken(trackingToken: string) {
-      const order = await prisma.order.findUnique({
-        where: { trackingToken },
-        include: { items: true, transitions: { orderBy: { createdAt: "asc" } } },
-      });
+      const order = await prisma.order.findUnique({ where: { trackingToken }, include: trackingInclude });
       if (!order) throw new OrderNotFoundError();
       return order;
     },

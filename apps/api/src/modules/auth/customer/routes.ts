@@ -5,6 +5,7 @@ import {
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  customerProfileUpdateSchema,
 } from "@closebuy/types";
 import {
   createCustomerAuthService,
@@ -16,6 +17,7 @@ import {
 import { createEmailClient } from "./email.js";
 import { getGoogleConfig, getAppleConfig } from "./oauth.js";
 import { serializeUser } from "../../../lib/serialize-user.js";
+import { requireAuth } from "../../../lib/auth-guard.js";
 
 const OAUTH_STATE_TTL_SECONDS = 10 * 60;
 
@@ -86,6 +88,26 @@ export async function customerAuthRoutes(app: FastifyInstance) {
     const { token } = req.body as { token: string };
     const verified = await authService.verifyEmail(token);
     return reply.send({ verified });
+  });
+
+  // ── Profile ──────────────────────────────────────────────────────────
+  // Just `defaultPhone` so far — the one field checkout presets from
+  // (brief §3.1b). CustomerProfile is created empty at register/OAuth
+  // signup (service.ts), so findUniqueOrThrow is safe for any signed-in
+  // customer.
+
+  app.get("/customer/profile", { preHandler: requireAuth(["customer"]) }, async (req, reply) => {
+    const profile = await app.prisma.customerProfile.findUniqueOrThrow({ where: { userId: req.authUser!.sub } });
+    return reply.send({ profile: { defaultPhone: profile.defaultPhone } });
+  });
+
+  app.patch("/customer/profile", { preHandler: requireAuth(["customer"]) }, async (req, reply) => {
+    const body = customerProfileUpdateSchema.parse(req.body);
+    const profile = await app.prisma.customerProfile.update({
+      where: { userId: req.authUser!.sub },
+      data: { defaultPhone: body.defaultPhone },
+    });
+    return reply.send({ profile: { defaultPhone: profile.defaultPhone } });
   });
 
   // ── Google ────────────────────────────────────────────────────────────

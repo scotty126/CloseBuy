@@ -7,6 +7,7 @@ import {
   productUpdateSchema,
 } from "@closebuy/types";
 import { requireAuth } from "../../lib/auth-guard.js";
+import { ConfigKeys } from "../../lib/config.js";
 import {
   createCatalogService,
   VendorAlreadyExistsError,
@@ -26,6 +27,14 @@ export async function catalogRoutes(app: FastifyInstance) {
 
   app.get("/categories", async (_req, reply) => {
     return reply.send({ categories: await catalog.listCategories() });
+  });
+
+  // Public — checkout (customer app) needs a real number to show before
+  // placing an order, not a guess. The only other reader of this Config
+  // key is Order/service.ts, server-side, for the actual charge; this is
+  // just the same value made readable so the UI isn't lying by omission.
+  app.get("/delivery-fee", async (_req, reply) => {
+    return reply.send({ feeMinor: await ConfigKeys.flatDeliveryFeeMinor(app.prisma) });
   });
 
   app.get("/vendors", async (req, reply) => {
