@@ -11,6 +11,7 @@ import {
 } from "./service.js";
 import type { MonnifyClient } from "../payments/monnify.js";
 import type { OrderQueue } from "./jobs.js";
+import type { NotificationService } from "../notifications/service.js";
 
 /**
  * In-memory fake Prisma — covers exactly the operations the order service
@@ -63,7 +64,8 @@ function createFakePrisma() {
       },
     },
     customerProfile: {
-      findUnique: async ({ where }: any) => customers.get(where.userId) ?? null,
+      findUnique: async ({ where }: any) =>
+        where.id ? (customers.get(where.id) ?? null) : [...customers.values()].find((c) => c.userId === where.userId) ?? null,
     },
     product: {
       findMany: async ({ where }: any) => [...products.values()].filter((p) => where.id.in.includes(p.id)),
@@ -182,9 +184,15 @@ function createFakeQueue(): OrderQueue {
   };
 }
 
+function createFakeNotifications(): NotificationService {
+  return { notify: vi.fn().mockResolvedValue(undefined) } as unknown as NotificationService;
+}
+
 const VENDOR_ID = "vendor_1";
 const VENDOR_USER_ID = "vendor_user_1";
 const PRODUCT_ID = "product_1";
+const CUSTOMER_ID = "customer_1";
+const CUSTOMER_USER_ID = "customer_user_1";
 
 function seed(prisma: ReturnType<typeof createFakePrisma>, overrides?: { vendor?: any; product?: any }) {
   prisma.__state.vendors.set(VENDOR_ID, {
@@ -211,16 +219,18 @@ describe("order service — checkout (US-C-06)", () => {
   let prisma: ReturnType<typeof createFakePrisma>;
   let monnify: MonnifyClient;
   let queue: OrderQueue;
+  let notifications: NotificationService;
 
   beforeEach(() => {
     prisma = createFakePrisma();
     monnify = createFakeMonnify();
     queue = createFakeQueue();
+    notifications = createFakeNotifications();
     seed(prisma);
   });
 
   function service() {
-    return createOrderService({ prisma, monnify, queue, customerAppUrl: "http://localhost:3000" });
+    return createOrderService({ prisma, monnify, queue, notifications, customerAppUrl: "http://localhost:3000" });
   }
 
   const baseInput = () => ({
@@ -296,29 +306,37 @@ describe("order service — checkout (US-C-06)", () => {
     // an invalid combination never reaches checkout() at all.
     expect(() => checkoutSchema.parse({ ...baseInput(), fulfilmentType: "pickup", paymentMethod: "cash_on_delivery" })).toThrow();
   });
+
+  it("notifies the vendor once an order is paid (architecture.md: push fires from the module that made the transition)", async () => {
+    await service().checkout(baseInput(), null, "idem-notify-1"); // COD — PAID happens synchronously inside checkout
+    expect(notifications.notify).toHaveBeenCalledWith(VENDOR_USER_ID, "order_paid", expect.objectContaining({ totalMinor: 500000 }));
+  });
 });
 
 describe("order service — vendor actions (US-V-05/06)", () => {
   let prisma: ReturnType<typeof createFakePrisma>;
   let monnify: MonnifyClient;
   let queue: OrderQueue;
+  let notifications: NotificationService;
 
   beforeEach(() => {
     prisma = createFakePrisma();
     monnify = createFakeMonnify();
     queue = createFakeQueue();
+    notifications = createFakeNotifications();
     seed(prisma);
+    prisma.__state.customers.set(CUSTOMER_ID, { id: CUSTOMER_ID, userId: CUSTOMER_USER_ID });
   });
 
   function service() {
-    return createOrderService({ prisma, monnify, queue, customerAppUrl: "http://localhost:3000" });
+    return createOrderService({ prisma, monnify, queue, notifications, customerAppUrl: "http://localhost:3000" });
   }
 
-  async function checkedOutOrder() {
+  async function checkedOutOrder(auth: { sub: string; role: string } | null = null) {
     const svc = service();
     const { order } = await svc.checkout(
       { vendorId: VENDOR_ID, items: [{ productId: PRODUCT_ID, quantity: 2 }], fulfilmentType: "pickup", paymentMethod: "cash_on_delivery", contactPhone: "+2348012345678" },
-      null,
+      auth,
       `idem-${Math.random()}`,
     );
     return { svc, order };
@@ -387,22 +405,48 @@ describe("order service — vendor actions (US-V-05/06)", () => {
     expect(prisma.__state.orders.get(order.id).status).toBe("DELIVERED");
     expect(queue.scheduleEscrowRelease).toHaveBeenCalledWith(order.id, expect.any(Number));
   });
+
+  it("notifies a signed-in customer on accept, reject and ready — never a guest order, which has no account to notify", async () => {
+    const { svc, order } = await checkedOutOrder({ sub: CUSTOMER_USER_ID, role: "customer" });
+    await svc.acceptOrder(VENDOR_USER_ID, order.id);
+    expect(notifications.notify).toHaveBeenCalledWith(CUSTOMER_USER_ID, "order_accepted", { orderId: order.id });
+
+    await svc.markReady(VENDOR_USER_ID, order.id);
+    const { collectionCode } = prisma.__state.orders.get(order.id);
+    expect(notifications.notify).toHaveBeenCalledWith(CUSTOMER_USER_ID, "order_ready_for_pickup", { orderId: order.id, collectionCode });
+
+    (notifications.notify as any).mockClear();
+    const { order: guestOrder } = await checkedOutOrder(null);
+    await svc.acceptOrder(VENDOR_USER_ID, guestOrder.id);
+    // The vendor still gets "order_paid" from checkout itself — only the
+    // customer-facing "order_accepted" is skipped, since a guest order has
+    // no User row behind it to notify (brief §3.1b).
+    expect(notifications.notify).not.toHaveBeenCalledWith(expect.anything(), "order_accepted", expect.anything());
+  });
+
+  it("notifies the customer on reject, with the vendor's reason", async () => {
+    const { svc, order } = await checkedOutOrder({ sub: CUSTOMER_USER_ID, role: "customer" });
+    await svc.rejectOrder(VENDOR_USER_ID, order.id, { reason: "Out of ingredients" });
+    expect(notifications.notify).toHaveBeenCalledWith(CUSTOMER_USER_ID, "order_rejected", { orderId: order.id, reason: "Out of ingredients" });
+  });
 });
 
 describe("order service — timers (US-V-05 auto-reject, brief §4 escrow release)", () => {
   let prisma: ReturnType<typeof createFakePrisma>;
   let monnify: MonnifyClient;
   let queue: OrderQueue;
+  let notifications: NotificationService;
 
   beforeEach(() => {
     prisma = createFakePrisma();
     monnify = createFakeMonnify();
     queue = createFakeQueue();
+    notifications = createFakeNotifications();
     seed(prisma);
   });
 
   function service() {
-    return createOrderService({ prisma, monnify, queue, customerAppUrl: "http://localhost:3000" });
+    return createOrderService({ prisma, monnify, queue, notifications, customerAppUrl: "http://localhost:3000" });
   }
 
   it("autoRejectOrder: no-ops if a human already acted (order no longer PAID) — never double-processes", async () => {

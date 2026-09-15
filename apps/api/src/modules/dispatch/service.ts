@@ -1,5 +1,6 @@
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient, Order } from "@prisma/client";
 import type { OrderQueue } from "../order/jobs.js";
+import type { NotificationService } from "../notifications/service.js";
 import { ConfigKeys } from "../../lib/config.js";
 import { codCollectionEntries, postLedgerEntries } from "../order/ledger.js";
 import type {
@@ -8,6 +9,7 @@ import type {
   ConfirmCollectionInput,
   ConfirmDeliveryInput,
   DeliveryFailedInput,
+  NotificationType,
 } from "@closebuy/types";
 
 export class RiderAlreadyExistsError extends Error {
@@ -57,13 +59,22 @@ async function writeTransition(
 export interface DispatchServiceDeps {
   prisma: PrismaClient;
   queue: OrderQueue;
+  notifications: NotificationService;
 }
 
-export function createDispatchService({ prisma, queue }: DispatchServiceDeps) {
+export function createDispatchService({ prisma, queue, notifications }: DispatchServiceDeps) {
   async function getOwnRider(userId: string) {
     const rider = await prisma.riderProfile.findUnique({ where: { userId } });
     if (!rider) throw new RiderNotFoundError();
     return rider;
+  }
+
+  /** No-op for a guest order (brief §3.1b) — there's no User row behind it to notify at all, not a gap. Same helper as order/service.ts. */
+  async function notifyCustomer(order: Pick<Order, "customerId">, type: NotificationType, payload: Record<string, unknown>) {
+    if (!order.customerId) return;
+    const customer = await prisma.customerProfile.findUnique({ where: { id: order.customerId } });
+    if (!customer) return;
+    await notifications.notify(customer.userId, type, payload);
   }
 
   return {
@@ -122,7 +133,9 @@ export function createDispatchService({ prisma, queue }: DispatchServiceDeps) {
       if (count === 0) throw new JobUnavailableError();
 
       await writeTransition(prisma, orderId, "READY_FOR_PICKUP", "RIDER_ASSIGNED", userId);
-      return prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+      const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+      await notifyCustomer(order, "order_rider_assigned", { orderId });
+      return order;
     },
 
     /** No penalty (US-R-03) — see the class comment on listOpenJobs for why this doesn't persist anything. */
@@ -140,7 +153,9 @@ export function createDispatchService({ prisma, queue }: DispatchServiceDeps) {
 
       await prisma.order.update({ where: { id: orderId }, data: { status: "IN_TRANSIT" } });
       await writeTransition(prisma, orderId, "RIDER_ASSIGNED", "IN_TRANSIT", userId);
-      return prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+      const updated = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+      await notifyCustomer(updated, "order_in_transit", { orderId });
+      return updated;
     },
 
     /** US-R-05 — the moment cash-on-delivery money actually enters the books (order/ledger.ts's codCollectionEntries), since nothing moved at checkout for COD. */
@@ -166,7 +181,9 @@ export function createDispatchService({ prisma, queue }: DispatchServiceDeps) {
       const escrowReleaseWindowHours = await ConfigKeys.escrowReleaseWindowHours(prisma);
       await queue.scheduleEscrowRelease(orderId, escrowReleaseWindowHours);
 
-      return prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+      const updated = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+      await notifyCustomer(updated, "order_delivered", { orderId });
+      return updated;
     },
 
     /** US-R-06 — admin follow-up (whether to return goods, refund) isn't built yet; this just records the failure honestly rather than pretending to resolve it. */
@@ -176,7 +193,9 @@ export function createDispatchService({ prisma, queue }: DispatchServiceDeps) {
 
       await prisma.order.update({ where: { id: orderId }, data: { status: "DELIVERY_FAILED" } });
       await writeTransition(prisma, orderId, "IN_TRANSIT", "DELIVERY_FAILED", userId, `${input.reason}${input.notes ? `: ${input.notes}` : ""}`);
-      return prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+      const updated = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+      await notifyCustomer(updated, "order_delivery_failed", { orderId, reason: input.reason });
+      return updated;
     },
 
     /** US-R-07 */

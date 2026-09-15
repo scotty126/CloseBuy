@@ -14,7 +14,7 @@ import {
  * there is real future scope, not forgotten.
  */
 export async function adminRoutes(app: FastifyInstance) {
-  const admin = createAdminService({ prisma: app.prisma });
+  const admin = createAdminService({ prisma: app.prisma, notifications: app.notifications });
 
   app.get("/admin/applications", { preHandler: requireAuth(["admin"]) }, async (_req, reply) => {
     return reply.send({ applications: await admin.listPendingApplications() });

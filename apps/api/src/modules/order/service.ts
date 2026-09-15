@@ -1,11 +1,12 @@
 import { randomInt } from "node:crypto";
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient, Order } from "@prisma/client";
 import type { MonnifyClient, WebhookEvent } from "../payments/monnify.js";
 import type { OrderQueue } from "./jobs.js";
+import type { NotificationService } from "../notifications/service.js";
 import { ConfigKeys } from "../../lib/config.js";
 import { isWithinServiceArea } from "../../lib/geo.js";
 import { escrowHoldEntries, computeEscrowSplit, escrowReleaseEntries, refundEntries, postLedgerEntries } from "./ledger.js";
-import type { CheckoutInput, RejectOrderInput, ConfirmPickupInput, RateOrderInput, DisputeOrderInput } from "@closebuy/types";
+import type { CheckoutInput, RejectOrderInput, ConfirmPickupInput, RateOrderInput, DisputeOrderInput, NotificationType } from "@closebuy/types";
 
 export class VendorUnavailableError extends Error {
   constructor(message = "This vendor isn't accepting orders right now.") {
@@ -52,6 +53,7 @@ export interface OrderServiceDeps {
   prisma: PrismaClient;
   monnify: MonnifyClient;
   queue: OrderQueue;
+  notifications: NotificationService;
   customerAppUrl: string; // Monnify's redirectUrl lands here, on the tracking page
 }
 
@@ -60,7 +62,7 @@ function generateCollectionCode(): string {
 }
 
 export function createOrderService(deps: OrderServiceDeps) {
-  const { prisma, monnify, queue } = deps;
+  const { prisma, monnify, queue, notifications } = deps;
 
   async function transition(
     orderId: string,
@@ -75,6 +77,14 @@ export function createOrderService(deps: OrderServiceDeps) {
     });
   }
 
+  /** No-op for a guest order (brief §3.1b) — there's no User row behind it to notify at all, not a gap. */
+  async function notifyCustomer(order: Pick<Order, "customerId">, type: NotificationType, payload: Record<string, unknown>) {
+    if (!order.customerId) return;
+    const customer = await prisma.customerProfile.findUnique({ where: { id: order.customerId } });
+    if (!customer) return;
+    await notifications.notify(customer.userId, type, payload);
+  }
+
   /** Shared by the cash-on-delivery checkout path and the Monnify webhook — both converge on "order is now PAID". */
   async function markOrderPaid(orderId: string, actorType: "system") {
     const order = await prisma.order.update({ where: { id: orderId }, data: { status: "PAID" } });
@@ -82,6 +92,12 @@ export function createOrderService(deps: OrderServiceDeps) {
 
     const acceptWindowMinutes = await ConfigKeys.vendorAcceptWindowMinutes(prisma);
     await queue.scheduleAutoReject(orderId, acceptWindowMinutes);
+
+    const vendor = await prisma.vendorProfile.findUnique({ where: { id: order.vendorId } });
+    if (vendor) {
+      await notifications.notify(vendor.userId, "order_paid", { orderId: order.id, totalMinor: order.totalMinor });
+    }
+
     return order;
   }
 
@@ -299,6 +315,7 @@ export function createOrderService(deps: OrderServiceDeps) {
 
       await queue.cancelAutoReject(orderId);
       await transition(orderId, "PAID", "PREPARING", "vendor", vendorUserId);
+      await notifyCustomer(order, "order_accepted", { orderId });
     },
 
     /** US-V-05 — full refund, mandatory reason. */
@@ -317,6 +334,7 @@ export function createOrderService(deps: OrderServiceDeps) {
         where: { id: order.vendorId },
         data: { reliabilityScore: { decrement: 0.1 } }, // crude for now — a real scoring model is a later refinement, not guessed at further here
       });
+      await notifyCustomer(order, "order_rejected", { orderId, reason: input.reason });
     },
 
     /** US-V-06 — issues the collection code either party (customer or rider) will need to present. */
@@ -328,10 +346,15 @@ export function createOrderService(deps: OrderServiceDeps) {
       await prisma.order.update({ where: { id: orderId }, data: { status: "READY_FOR_PICKUP", collectionCode } });
       await transition(orderId, "PREPARING", "READY_FOR_PICKUP", "vendor", vendorUserId);
 
-      // Delivery orders now need a rider — Dispatch module, not built yet
-      // (roadmap.md: Order/Checkout this pass, Dispatch next). The order
-      // sits in READY_FOR_PICKUP correctly either way; it just doesn't
-      // progress further for a delivery order until that exists.
+      // Pickup: the code IS the notification payload — it's what the
+      // customer shows at the counter (US-C-07). Delivery: no code here
+      // (that copy goes to whichever rider claims it, Dispatch), just
+      // "ready, dispatching a rider" — Dispatch picks up from here.
+      await notifyCustomer(
+        order,
+        "order_ready_for_pickup",
+        order.fulfilmentType === "pickup" ? { orderId, collectionCode } : { orderId },
+      );
     },
 
     /** US-V-06/US-C-07 — pickup orders only; the vendor confirms the code the customer shows. */
@@ -395,6 +418,7 @@ export function createOrderService(deps: OrderServiceDeps) {
       await transition(orderId, "CANCELLED", "REFUNDED", "system", null);
 
       await prisma.vendorProfile.update({ where: { id: order.vendorId }, data: { reliabilityScore: { decrement: 0.2 } } });
+      await notifyCustomer(order, "order_auto_rejected", { orderId });
     },
 
     /** brief §4 / US-C-11 — no dispute was opened within the window; escrow releases to vendor + rider + platform. */

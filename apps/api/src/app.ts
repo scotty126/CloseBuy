@@ -4,12 +4,14 @@ import rateLimit from "@fastify/rate-limit";
 import { envPlugin } from "./plugins/env.js";
 import { prismaPlugin } from "./plugins/prisma.js";
 import { redisPlugin } from "./plugins/redis.js";
+import { notificationsPlugin } from "./plugins/notifications.js";
 import { staffAuthRoutes } from "./modules/auth/routes.js";
 import { customerAuthRoutes } from "./modules/auth/customer/routes.js";
 import { catalogRoutes } from "./modules/catalog/routes.js";
 import { orderRoutes } from "./modules/order/routes.js";
 import { dispatchRoutes } from "./modules/dispatch/routes.js";
 import { adminRoutes } from "./modules/admin/routes.js";
+import { notificationRoutes } from "./modules/notifications/routes.js";
 import { requireAuth } from "./lib/auth-guard.js";
 import { serializeUser } from "./lib/serialize-user.js";
 
@@ -24,7 +26,12 @@ import { serializeUser } from "./lib/serialize-user.js";
  * vetting (US-A-01) only — the rest of api-contracts.md's Admin section
  * (order oversight, disputes, config writes, payouts, metrics, audit-log
  * search) is a real module boundary already but its routes aren't built
- * yet. Notifications isn't built at all yet.
+ * yet.
+ *
+ * notificationsPlugin registers before order/dispatch/admin routes
+ * specifically so their service factories can take `app.notifications` as
+ * a dependency (architecture.md: "push notification fires from the module
+ * that made the transition, same request").
  */
 export async function buildApp() {
   const app = Fastify({
@@ -38,6 +45,7 @@ export async function buildApp() {
   await app.register(rateLimit, { max: 100, timeWindow: "1 minute", global: true });
   await app.register(prismaPlugin);
   await app.register(redisPlugin);
+  await app.register(notificationsPlugin);
 
   app.get("/health", async () => ({ status: "ok" }));
 
@@ -54,6 +62,7 @@ export async function buildApp() {
   await app.register(orderRoutes);
   await app.register(dispatchRoutes);
   await app.register(adminRoutes);
+  await app.register(notificationRoutes);
 
   return app;
 }

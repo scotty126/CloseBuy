@@ -34,6 +34,7 @@ Payout ── VendorProfile or RiderProfile
 Config ── (standalone, versioned)
 AuditLog ── (standalone, references any entity by type + id)
 Notification ── User
+PushSubscription ── User
 ```
 
 One `User` table, but a customer row and a vendor/rider/admin row are identified by different fields (email vs. phone) and never mix — see §2's `User` invariant.
@@ -230,7 +231,9 @@ At order completion, the ledger computation is: commission = 0 if the founding-v
 
 **Rating** — order_id, customer_id (**nullable, same reasoning as Dispute — a guest rates via `tracking_token`**, US-C-10), target_type (vendor, rider), target_id, score (1–5), comment, created_at, edited_until (created_at + 24h, per US-C-10).
 
-**Notification** — user_id, type, payload (jsonb), sent_at, read_at.
+**Notification** — user_id, type, payload (jsonb), sent_at, read_at. `type` is a plain string (NOTIFICATION_TYPES in packages/types), not a DB enum, so a new event type never needs a migration.
+
+**PushSubscription** — user_id, endpoint (unique — the push service's own id for that device/browser), p256dh, auth, created_at. One row per subscribed device (`POST /notifications/subscribe`); a user can have several. Self-pruning: the Notifications module deletes a row the first time the push service reports it gone (404/410) rather than retrying it forever.
 
 **Config** — key, value (jsonb), version (int), effective_at. Never overwritten — a new row with an incremented version is how a value changes, so a historical order can be checked against the config that was live when it was placed (US-A-02). Examples: `commission_rate.pickup`, `commission_rate.delivery` (§4a); `vendor_accept_window_minutes`, `escrow_release_window_hours`, `flat_delivery_fee_minor` (M1); `service_area_polygon` — a `[{lat, lng}]` ring, checked by point-in-polygon (US-C-05, brief §2a) against both a delivery order's address and a vendor application's pickup location. Launch is Riverpark only, so this is currently one polygon for the whole platform; the moment a second area opens, "which service area" stops being a single global answer and this needs revisiting — not built ahead of that need.
 

@@ -9,16 +9,21 @@ import {
   CashAmountMismatchError,
 } from "./service.js";
 import type { OrderQueue } from "../order/jobs.js";
+import type { NotificationService } from "../notifications/service.js";
 
 function createFakePrisma() {
   const riders = new Map<string, any>();
   const orders = new Map<string, any>();
+  const customers = new Map<string, any>();
   const transitions: any[] = [];
   const ledgerEntries: any[] = [];
   let nextId = 1;
   const id = () => `id_${nextId++}`;
 
   const db = {
+    customerProfile: {
+      findUnique: async ({ where }: any) => customers.get(where.id) ?? null,
+    },
     riderProfile: {
       findUnique: async ({ where }: any) =>
         where.id ? (riders.get(where.id) ?? null) : [...riders.values()].find((r) => r.userId === where.userId) ?? null,
@@ -81,7 +86,7 @@ function createFakePrisma() {
       // Same default as prisma/seed.ts — the only Config key this module reads.
       findFirst: async ({ where }: any) => (where.key === "escrow_release_window_hours" ? { key: where.key, value: 48 } : null),
     },
-    __state: { riders, orders, transitions, ledgerEntries },
+    __state: { riders, orders, customers, transitions, ledgerEntries },
   };
 
   function applyOps(existing: any, data: any) {
@@ -106,9 +111,15 @@ function createFakeQueue(): OrderQueue {
   };
 }
 
+function createFakeNotifications(): NotificationService {
+  return { notify: vi.fn().mockResolvedValue(undefined) } as unknown as NotificationService;
+}
+
 const RIDER_USER_ID = "rider_user_1";
 const RIDER_ID = "rider_1";
 const ORDER_ID = "order_1";
+const CUSTOMER_ID = "customer_1";
+const CUSTOMER_USER_ID = "customer_user_1";
 
 function seedApprovedOnDutyRider(prisma: ReturnType<typeof createFakePrisma>) {
   prisma.__state.riders.set(RIDER_ID, { id: RIDER_ID, userId: RIDER_USER_ID, status: "approved", onDuty: true, cashBalanceMinor: 0, fullName: "Musa" });
@@ -132,14 +143,17 @@ function seedOpenOrder(prisma: ReturnType<typeof createFakePrisma>, overrides?: 
 describe("dispatch service", () => {
   let prisma: ReturnType<typeof createFakePrisma>;
   let queue: OrderQueue;
+  let notifications: NotificationService;
 
   beforeEach(() => {
     prisma = createFakePrisma();
     queue = createFakeQueue();
+    notifications = createFakeNotifications();
+    prisma.__state.customers.set(CUSTOMER_ID, { id: CUSTOMER_ID, userId: CUSTOMER_USER_ID });
   });
 
   function service() {
-    return createDispatchService({ prisma, queue });
+    return createDispatchService({ prisma, queue, notifications });
   }
 
   it("submits a rider application in pending status", async () => {
@@ -186,8 +200,8 @@ describe("dispatch service", () => {
     prisma.__state.riders.set("rider_2", { id: "rider_2", userId: "rider_user_2", status: "approved", onDuty: true, cashBalanceMinor: 0 });
     seedOpenOrder(prisma);
 
-    const svcA = createDispatchService({ prisma, queue });
-    const svcB = createDispatchService({ prisma, queue });
+    const svcA = createDispatchService({ prisma, queue, notifications });
+    const svcB = createDispatchService({ prisma, queue, notifications });
 
     const results = await Promise.allSettled([svcA.claimJob(RIDER_USER_ID, ORDER_ID), svcB.claimJob("rider_user_2", ORDER_ID)]);
     const fulfilled = results.filter((r) => r.status === "fulfilled");
@@ -206,6 +220,25 @@ describe("dispatch service", () => {
 
     const order = await service().confirmCollection(RIDER_USER_ID, ORDER_ID, { code: "123456" });
     expect(order.status).toBe("IN_TRANSIT");
+  });
+
+  it("notifies the customer at each stage — assigned, in transit, delivered — never for a guest order", async () => {
+    seedApprovedOnDutyRider(prisma);
+    seedOpenOrder(prisma, { customerId: CUSTOMER_ID });
+
+    await service().claimJob(RIDER_USER_ID, ORDER_ID);
+    expect(notifications.notify).toHaveBeenCalledWith(CUSTOMER_USER_ID, "order_rider_assigned", { orderId: ORDER_ID });
+
+    await service().confirmCollection(RIDER_USER_ID, ORDER_ID, { code: "123456" });
+    expect(notifications.notify).toHaveBeenCalledWith(CUSTOMER_USER_ID, "order_in_transit", { orderId: ORDER_ID });
+
+    await service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John" });
+    expect(notifications.notify).toHaveBeenCalledWith(CUSTOMER_USER_ID, "order_delivered", { orderId: ORDER_ID });
+
+    (notifications.notify as any).mockClear();
+    seedOpenOrder(prisma, { customerId: null }); // guest order — reset back to READY_FOR_PICKUP, unclaimed
+    await service().claimJob(RIDER_USER_ID, ORDER_ID);
+    expect(notifications.notify).not.toHaveBeenCalledWith(expect.anything(), "order_rider_assigned", expect.anything());
   });
 
   it("confirmDelivery: card/transfer order needs no cash amount, completes cleanly, schedules escrow release", async () => {

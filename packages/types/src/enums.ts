@@ -54,3 +54,25 @@ export type DisputeResolution = (typeof DISPUTE_RESOLUTIONS)[number];
 
 export const RATING_TARGET_TYPES = ["vendor", "rider"] as const;
 export type RatingTargetType = (typeof RATING_TARGET_TYPES)[number];
+
+// Notifications (architecture.md's Notifications module) — the fixed set
+// of event types Order, Dispatch and Admin actually fire today. A plain
+// string on the Notification row itself (schema.prisma), not a DB enum,
+// so a new type never needs a migration; this list is the real contract
+// clients render against, kept here rather than duplicated per module.
+export const NOTIFICATION_TYPES = [
+  "vendor_application_approved",
+  "vendor_application_rejected",
+  "rider_application_approved",
+  "rider_application_rejected",
+  "order_paid", // → vendor: a new order needs accepting
+  "order_accepted", // → customer
+  "order_rejected", // → customer, always paired with a refund
+  "order_ready_for_pickup", // → customer, both fulfilment types (brief §3.1a)
+  "order_rider_assigned", // → customer, delivery only
+  "order_in_transit", // → customer, delivery only
+  "order_delivered", // → customer
+  "order_delivery_failed", // → customer, delivery only
+  "order_auto_rejected", // → customer — vendor never responded in the accept window
+] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

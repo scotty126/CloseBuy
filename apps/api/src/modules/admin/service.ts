@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { ApplicationType } from "@closebuy/types";
+import type { NotificationService } from "../notifications/service.js";
 import { ConfigKeys } from "../../lib/config.js";
 
 export class ApplicationNotFoundError extends Error {
@@ -16,6 +17,7 @@ export class InvalidApplicationStateError extends Error {
 
 export interface AdminServiceDeps {
   prisma: PrismaClient;
+  notifications: NotificationService;
 }
 
 function addMonths(date: Date, months: number): Date {
@@ -32,7 +34,7 @@ function addMonths(date: Date, months: number): Date {
  * unblocks the pipeline: nothing else could move a VendorProfile or
  * RiderProfile out of `pending` at all.
  */
-export function createAdminService({ prisma }: AdminServiceDeps) {
+export function createAdminService({ prisma, notifications }: AdminServiceDeps) {
   async function writeAuditLog(actorId: string, action: string, targetType: string, targetId: string, reason?: string) {
     await prisma.auditLog.create({ data: { actorId, action, targetType, targetId, reason } });
   }
@@ -77,6 +79,10 @@ export function createAdminService({ prisma }: AdminServiceDeps) {
           data: { status: "approved", foundingVendorCommissionWaivedUntil },
         });
         await writeAuditLog(adminUserId, "vendor_application_approved", "vendor_profile", id);
+        await notifications.notify(updated.userId, "vendor_application_approved", {
+          vendorId: id,
+          foundingVendorCommissionWaivedUntil: foundingVendorCommissionWaivedUntil?.toISOString() ?? null,
+        });
         return { type: "vendor" as const, ...updated };
       }
 
@@ -86,6 +92,7 @@ export function createAdminService({ prisma }: AdminServiceDeps) {
 
       const updated = await prisma.riderProfile.update({ where: { id }, data: { status: "approved" } });
       await writeAuditLog(adminUserId, "rider_application_approved", "rider_profile", id);
+      await notifications.notify(updated.userId, "rider_application_approved", { riderId: id });
       return { type: "rider" as const, ...updated };
     },
 
@@ -98,6 +105,7 @@ export function createAdminService({ prisma }: AdminServiceDeps) {
 
         const updated = await prisma.vendorProfile.update({ where: { id }, data: { status: "rejected" } });
         await writeAuditLog(adminUserId, "vendor_application_rejected", "vendor_profile", id, reason);
+        await notifications.notify(updated.userId, "vendor_application_rejected", { vendorId: id, reason });
         return { type: "vendor" as const, ...updated };
       }
 
@@ -107,6 +115,7 @@ export function createAdminService({ prisma }: AdminServiceDeps) {
 
       const updated = await prisma.riderProfile.update({ where: { id }, data: { status: "rejected" } });
       await writeAuditLog(adminUserId, "rider_application_rejected", "rider_profile", id, reason);
+      await notifications.notify(updated.userId, "rider_application_rejected", { riderId: id, reason });
       return { type: "rider" as const, ...updated };
     },
   };

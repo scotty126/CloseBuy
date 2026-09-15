@@ -31,7 +31,13 @@ import {
 export async function orderRoutes(app: FastifyInstance) {
   const monnify = createMonnifyClient(app.env.MONNIFY_API_KEY, app.env.MONNIFY_SECRET_KEY, app.env.MONNIFY_CONTRACT_CODE, app.env.NODE_ENV);
   const queue = createOrderQueue(app.env.REDIS_URL);
-  const order = createOrderService({ prisma: app.prisma, monnify, queue, customerAppUrl: app.env.CUSTOMER_APP_URL });
+  const order = createOrderService({
+    prisma: app.prisma,
+    monnify,
+    queue,
+    notifications: app.notifications,
+    customerAppUrl: app.env.CUSTOMER_APP_URL,
+  });
 
   // Started once, alongside route registration — the worker processes
   // timer-fired jobs by calling back into the same service instance

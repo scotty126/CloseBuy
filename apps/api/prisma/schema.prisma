@@ -165,6 +165,7 @@ model User {
   riderProfile    RiderProfile?
   adminProfile    AdminProfile?
   notifications   Notification[]
+  pushSubscriptions PushSubscription[]
   oauthAccounts   OAuthAccount[]
 
   @@map("users")
@@ -522,6 +523,26 @@ model Notification {
 
   @@index([userId])
   @@map("notifications")
+}
+
+// One row per subscribed device/browser (POST /notifications/subscribe) —
+// a user can have several (phone + desktop). `endpoint` is unique because
+// it's the push service's own identifier for that specific subscription;
+// re-subscribing the same device updates keys in place rather than
+// duplicating the row. Rows are self-pruning: the Notifications module
+// deletes one the first time the push service reports it gone (404/410),
+// rather than accumulating dead subscriptions forever.
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 // Versioned, never overwritten — a new row with an incremented version is

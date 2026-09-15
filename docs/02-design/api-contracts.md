@@ -102,11 +102,15 @@ No endpoints — the cart is client-side state (device-local), per brief §3.1b.
 
 ## Notifications
 
+**Built (M1), backend-complete.** Order, Dispatch and Admin each call `app.notifications.notify(userId, type, payload)` at the point of a state change, same request (architecture.md: "push notification fires from the module that made the transition") — every entry in NOTIFICATION_TYPES (packages/types) is wired to a real call site, not just declared. `notify` always writes the in-app row first; a push send is then attempted per subscribed device and never allowed to fail the caller's action. A guest order has no account behind it (brief §3.1b), so it's silently skipped — not a gap, there's no `User` row to notify.
+
+Push delivery itself needs `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` (optional, `.env.example`) and, on the client side, a service worker that actually calls `pushManager.subscribe()` and forwards the result to `POST /notifications/subscribe` — that service-worker/subscribe UI isn't built in any of the four apps yet. Until it exists, `GET /notifications` (the in-app feed, real end to end) is the only way a signed-in user sees these — which is also architecture.md's own documented fallback ("polling is the fallback for a client with push disabled"), not a missing piece.
+
 | Method & path | Purpose | Notes |
 |---|---|---|
-| `POST /notifications/subscribe` | Register a Web Push subscription | Called once per device |
-| `GET /notifications` *(any authenticated user)* | In-app notification feed | |
-| `POST /notifications/:id/read` | Mark read | |
+| `POST /notifications/subscribe` | Register a Web Push subscription | `{ endpoint, keys: { p256dh, auth } }` — a browser's `PushSubscription.toJSON()` shape, forwarded as-is. Upserted on `endpoint`, so re-subscribing the same device updates keys rather than duplicating |
+| `GET /notifications` *(any authenticated user)* | In-app notification feed | Most recent 50, newest first |
+| `POST /notifications/:id/read` | Mark read | 404 if the notification isn't the caller's own |
 
 ## Admin
 

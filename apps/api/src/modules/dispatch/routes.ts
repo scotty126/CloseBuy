@@ -30,7 +30,7 @@ import {
  */
 export async function dispatchRoutes(app: FastifyInstance) {
   const queue = createOrderQueue(app.env.REDIS_URL);
-  const dispatch = createDispatchService({ prisma: app.prisma, queue });
+  const dispatch = createDispatchService({ prisma: app.prisma, queue, notifications: app.notifications });
   app.addHook("onClose", async () => {
     await queue.close();
   });

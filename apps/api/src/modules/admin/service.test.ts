@@ -1,10 +1,15 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import {
   createAdminService,
   ApplicationNotFoundError,
   InvalidApplicationStateError,
 } from "./service.js";
+import type { NotificationService } from "../notifications/service.js";
+
+function createFakeNotifications(): NotificationService {
+  return { notify: vi.fn().mockResolvedValue(undefined) } as unknown as NotificationService;
+}
 
 function createFakePrisma() {
   const vendors = new Map<string, any>();
@@ -47,12 +52,15 @@ function createFakePrisma() {
 }
 
 const VENDOR_ID = "vendor_1";
+const VENDOR_USER_ID = "vendor_user_1";
 const RIDER_ID = "rider_1";
+const RIDER_USER_ID = "rider_user_1";
 const ADMIN_USER_ID = "admin_user_1";
 
 function seedPendingVendor(prisma: ReturnType<typeof createFakePrisma>, overrides?: any) {
   prisma.__state.vendors.set(VENDOR_ID, {
     id: VENDOR_ID,
+    userId: VENDOR_USER_ID,
     businessName: "Musa's Store",
     status: "pending",
     createdAt: new Date("2026-01-01"),
@@ -63,6 +71,7 @@ function seedPendingVendor(prisma: ReturnType<typeof createFakePrisma>, override
 function seedPendingRider(prisma: ReturnType<typeof createFakePrisma>, overrides?: any) {
   prisma.__state.riders.set(RIDER_ID, {
     id: RIDER_ID,
+    userId: RIDER_USER_ID,
     fullName: "Musa",
     status: "pending",
     createdAt: new Date("2026-01-02"),
@@ -76,15 +85,17 @@ function setConfig(prisma: ReturnType<typeof createFakePrisma>, key: string, val
 
 describe("admin service — application vetting (US-A-01)", () => {
   let prisma: ReturnType<typeof createFakePrisma>;
+  let notifications: NotificationService;
 
   beforeEach(() => {
     prisma = createFakePrisma();
+    notifications = createFakeNotifications();
     setConfig(prisma, "founding_vendor_program_active", true);
     setConfig(prisma, "founding_vendor_program_waiver_months", 3);
   });
 
   function service() {
-    return createAdminService({ prisma });
+    return createAdminService({ prisma, notifications });
   }
 
   it("lists pending vendor and rider applications together, oldest first", async () => {
@@ -116,6 +127,11 @@ describe("admin service — application vetting (US-A-01)", () => {
       targetType: "vendor_profile",
       targetId: VENDOR_ID,
     });
+    expect(notifications.notify).toHaveBeenCalledWith(
+      VENDOR_USER_ID,
+      "vendor_application_approved",
+      expect.objectContaining({ vendorId: VENDOR_ID }),
+    );
   });
 
   it("approving a vendor while the program is closed grants access without a waiver", async () => {
@@ -136,6 +152,7 @@ describe("admin service — application vetting (US-A-01)", () => {
 
     expect(result.status).toBe("approved");
     expect(prisma.__state.auditLog[0]).toMatchObject({ action: "rider_application_approved", targetId: RIDER_ID });
+    expect(notifications.notify).toHaveBeenCalledWith(RIDER_USER_ID, "rider_application_approved", { riderId: RIDER_ID });
   });
 
   it("rejecting requires a reason and records it on the audit log (US-A-01)", async () => {
@@ -146,6 +163,10 @@ describe("admin service — application vetting (US-A-01)", () => {
     expect(result.status).toBe("rejected");
     expect(prisma.__state.auditLog[0]).toMatchObject({
       action: "vendor_application_rejected",
+      reason: "Couldn't verify the business address.",
+    });
+    expect(notifications.notify).toHaveBeenCalledWith(VENDOR_USER_ID, "vendor_application_rejected", {
+      vendorId: VENDOR_ID,
       reason: "Couldn't verify the business address.",
     });
   });

@@ -19,3 +19,4 @@ export * from "./catalog.js";
 export * from "./order.js";
 export * from "./rider.js";
 export * from "./admin.js";
+export * from "./notifications.js";

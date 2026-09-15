@@ -58,6 +58,10 @@ const envSchema = z.object({
   R2_BUCKET: z.string().optional(),
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
+  // web-push requires a contact URI on every request (RFC 8292) — a
+  // mailto: is fine, it's never actually emailed. Defaulted rather than
+  // required since it's meaningless without the two keys above anyway.
+  VAPID_SUBJECT: z.string().default("mailto:support@closebuy.app"),
 });
 
 export type Env = z.infer<typeof envSchema>;
