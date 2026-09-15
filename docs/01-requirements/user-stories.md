@@ -45,11 +45,14 @@ As a customer I want to search across products and vendors so that I can find an
 - An empty result set offers category suggestions rather than a dead end
 - Results return within 1 second at launch catalogue size
 
-### US-C-04 — Cart spanning vendors · **M**
-As a customer I want to hold items from several vendors in one cart so that I can pay once.
+### US-C-04 — Cart scoped to a vendor or a hub · **M**
+As a customer I want to combine items from co-located vendors in one cart, but not from vendors that have nothing to do with each other.
 
-- The cart groups line items visually by vendor
-- Each vendor group shows its own subtotal and its own delivery fee
+- Adding a first item starts a cart scoped to that vendor
+- A further item from the **same vendor** always adds cleanly
+- A further item from a **different vendor in the same hub** adds cleanly; the cart groups line items visually by vendor
+- A further item from a vendor in a **different hub, or a standalone vendor** is blocked with a prompt to clear the cart and start over, or keep the existing cart
+- Each vendor group shows its own subtotal; the cart shows one combined delivery fee reflecting every stop (brief §3.1)
 - Removing the last item of a vendor group removes that group entirely
 - The cart survives the customer closing and reopening the app
 - The cart is re-validated for price and stock at checkout, and any change is shown before payment
@@ -118,7 +121,7 @@ As a customer I want to report a problem with an order so that I can get a refun
 ### US-V-01 — Apply to sell · **M**
 As a vendor I want to apply to join so that I can start selling.
 
-- The application captures business name, category, contact details, pickup address as a pin, and payout bank details
+- The application captures business name, category, contact details, payout bank details, and a pickup location — either an existing hub or a standalone pin
 - Identity and business registration documents can be uploaded
 - The vendor cannot list products or receive orders while the application is pending
 - The applicant is notified on approval or rejection, with a reason given on rejection
@@ -191,18 +194,21 @@ As a rider I want to control when I receive jobs so that I am not offered work w
 ### US-R-03 — Receive and accept a job · **M**
 As a rider I want to see delivery requests and take the ones I want.
 
-- An offer shows pickup location, delivery area, distance and the fee earned
+- An offer shows pickup location(s), delivery area, distance and the total fee earned
+- A job spanning several vendors in one hub (brief §3.1) is offered and accepted as a **single job**, never as separate offers per vendor
 - The offer is accepted or declined within a countdown; no response passes it on
-- Accepting assigns the sub-order exclusively — two riders can never hold the same job
+- Accepting assigns every sub-order in the job exclusively — two riders can never hold the same job or the same stop within it
 - Declining carries no penalty in v1
 
-### US-R-04 — Collect from the vendor · **M**
-As a rider I want the pickup details so that I can collect the right order.
+### US-R-04 — Collect from the vendor(s) · **M**
+As a rider I want the pickup details so that I can collect the right order, including every stop if the job has more than one.
 
-- The screen shows vendor name, pin, landmark description and phone number
-- A single tap hands off to an external maps app for navigation
-- Collection is confirmed by entering a short code shown on the vendor dashboard
-- Confirmation moves the sub-order to `IN_TRANSIT` and records the rider's location at that moment
+- A single-vendor job shows vendor name, pin, landmark description and phone number
+- A multi-stop job shows a checklist with one entry per vendor, each with its own pin, landmark description and phone number
+- A single tap on any stop hands off to an external maps app for navigation
+- Each stop is confirmed independently by entering a short code shown on that vendor's dashboard
+- Confirming a stop moves that sub-order to `IN_TRANSIT` and records the rider's location at that moment
+- The rider proceeds to delivery once every stop in the job is confirmed, or once the hub wait-timeout (brief §3.1) has elapsed for any stop still not ready
 
 ### US-R-05 — Deliver to the customer · **M**
 As a rider I want to complete the delivery and prove it happened.
@@ -223,7 +229,7 @@ As a rider I want to report that I could not deliver so that I am not stuck hold
 ### US-R-07 — See earnings · **M**
 As a rider I want to see what I have earned so that I can check I am paid correctly.
 
-- Earnings are listed per completed delivery with date and amount
+- Earnings are listed per completed job with date and amount — a multi-stop job shows as one combined line, not one per vendor
 - Cleared and pending amounts are separated
 - Cash collected on delivery is shown as a liability owed back to the platform
 
@@ -252,7 +258,8 @@ As an operator I want to control categories, commission and fees without a code 
 
 - Categories can be created, renamed and deactivated
 - Commission is configurable per category
-- Delivery fee rules and the vendor accept-window are configurable
+- Delivery fee rules, the multi-stop surcharge, the hub wait-timeout and the vendor accept-window are all configurable
+- Hubs can be created and vendors assigned to them
 - A configuration change is versioned and never alters orders already placed
 
 ### US-A-03 — Oversee and intervene in orders · **M**

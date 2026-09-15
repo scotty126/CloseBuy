@@ -25,11 +25,25 @@ A fifth implicit actor is the **system itself**, which runs dispatch, payouts, n
 
 These are not implementation details. They change the data model, so they are settled at requirements stage.
 
-### 3.1 A cart spans vendors; an order does not
+### 3.1 A cart is single-vendor, unless the vendors share a hub
 
-A customer may add items from several vendors to one cart and pay once. On checkout the system splits that payment into **one sub-order per vendor**. Each sub-order is accepted, prepared, dispatched and delivered independently, and may be cancelled or refunded without affecting its siblings.
+Most launch vendors trade out of a small number of physical **hubs** — a market, a mall, a food court — the same way Computer Village, Balogun Market or a shopping complex hosts hundreds of independent traders under one roof. That physical fact is the basis of the cart rule:
 
-The customer sees one purchase. The vendors, riders and accounting system each see separate orders. Every downstream rule follows from this.
+- A cart may hold items from **one vendor only**, unless
+- every vendor in the cart shares the **same hub**, in which case the cart may span them.
+
+A vendor not attached to a hub is **standalone** and is always restricted to a single-vendor cart. Adding an item that would break either rule prompts the customer to clear the cart or keep the existing one — the same pattern DoorDash uses.
+
+On checkout the system still splits payment into **one sub-order per vendor**, and each sub-order is still accepted, prepared and settled independently, and may be cancelled or refunded without affecting its siblings. What changes is dispatch, not the sub-order model:
+
+- **Single-vendor cart** → one sub-order → one rider job, one pickup, one dropoff. This is the common case and stays exactly as simple as DoorDash's.
+- **Same-hub multi-vendor cart** → several sub-orders, but **one rider job** covering every stop: the rider is assigned once, sees a checklist of stalls to collect from within that hub, confirms each pickup separately (§US-R-04), then makes one dropoff. Riders are never sent to the same hub twice for one purchase.
+
+**Readiness misalignment is the operational risk this introduces.** If one stall preps in 3 minutes and another takes 20, the rider should not wait indefinitely. Default policy, to be confirmed against real hub behaviour once trading starts: the rider waits up to a configurable timeout after the first sub-order reaches `READY_FOR_PICKUP`; on timeout, the ready sub-orders dispatch immediately as a partial delivery and the late sub-order follows as its own job. The customer is not charged a second delivery fee, and the slow vendor's reliability metric (US-V-05) absorbs the cost, not the customer.
+
+**Delivery fee for a multi-stop job is base fee plus a per-additional-stop surcharge**, reflecting the rider's added queuing time rather than distance, since distance barely changes when pickups are co-located. The surcharge is admin-configurable (US-A-02), not hardcoded — see Q-06.
+
+The customer still sees one purchase. Vendors, riders and accounting each see separate sub-orders; the rider additionally sees whichever of those sub-orders were grouped into their one job.
 
 ### 3.2 Money is held in escrow, not forwarded
 
@@ -70,7 +84,7 @@ If live tracking is wanted later it is an additive feature, not a rewrite: the o
 
 ## 4. Order lifecycle
 
-Applies per sub-order — one vendor's portion of a purchase.
+Applies per sub-order — one vendor's portion of a purchase. Rider *dispatch* is a layer above this diagram: a single rider job may cover one sub-order or several (§3.1), but each sub-order still moves through these states independently and is the unit that vendors, payouts and disputes operate on.
 
 ```
                  ┌──────────────────┐
@@ -163,6 +177,7 @@ Recorded so that, if any turns out to be false, we know exactly what to revisit.
 | A-04 | Delivery is intra-city; no inter-state logistics in v1 |
 | A-05 | Customers have smartphones with a data connection, albeit often slow |
 | A-06 | Cash on delivery will be a significant share of transactions and cannot be treated as an edge case |
+| A-07 | Most active vendors at launch are co-located within a small number of physical hubs; standalone vendors are the minority |
 
 ## 8. Risks
 
@@ -175,6 +190,7 @@ Recorded so that, if any turns out to be false, we know exactly what to revisit.
 | R-04 | Marketplace cold start — no vendors means no customers | Launch failure | Seed one category in one area before widening |
 | R-05 | Fraudulent vendors or fake listings | Trust collapse | Mandatory KYC, staged trust levels, payout delay for new vendors |
 | R-06 | Solo developer, four surfaces | Schedule overrun | Staged roadmap in stage 03; shared component library; each surface reaches usable state before the next begins |
+| R-08 | Hub multi-stop dispatch (§3.1) adds real complexity to rider assignment and the rider UI | Schedule slip on that slice specifically | Ship single-vendor dispatch first; add hub grouping as a second pass once the walking skeleton works end to end |
 
 ## 9. Open questions
 
@@ -185,3 +201,6 @@ Recorded so that, if any turns out to be false, we know exactly what to revisit.
 | Q-03 | Are riders assigned automatically by proximity, or do they claim from an open pool? |
 | Q-04 | Is there a customer wallet, or is every payment a fresh transaction? (Bears directly on R-01) |
 | Q-05 | Self-service vendor signup with later vetting, or admin-invite only at launch? |
+| Q-06 | Multi-stop surcharge — flat amount per extra stop, or a formula? |
+| Q-07 | Hub wait-timeout before a lagging vendor is split into its own job — proposed default 20 minutes, needs confirming against real hub behaviour |
+| Q-08 | Does a vendor missing the wait-timeout carry a real penalty (e.g. a shortened auto-accept window) from launch, or informational-only on the reliability metric until there's data to justify one? |
