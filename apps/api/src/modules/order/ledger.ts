@@ -58,6 +58,23 @@ export function escrowReleaseEntries(orderId: string, totalMinor: number, split:
   return rows;
 }
 
+/**
+ * Cash on delivery's equivalent of `escrowHoldEntries` — the rider now
+ * physically holds the cash (an amount they owe back to the platform,
+ * tracked as `rider_cash_float`, brief R-03/US-R-08), which is what backs
+ * the same `customer_escrow` credit a card/transfer payment gets from
+ * Monnify instead. Fired at delivery confirmation (Dispatch), not at
+ * order-PAID time, since for cash no money has actually moved until then.
+ */
+export function codCollectionEntries(orderId: string, totalMinor: number): LedgerRow[] {
+  const rows: LedgerRow[] = [
+    { orderId, account: "rider_cash_float", direction: "debit", amountMinor: totalMinor },
+    { orderId, account: "customer_escrow", direction: "credit", amountMinor: totalMinor },
+  ];
+  assertBalanced(rows);
+  return rows;
+}
+
 /** A refund — full amount, reversing the hold. Used on vendor rejection, self-service cancellation, and (later) admin-forced refunds. */
 export function refundEntries(orderId: string, totalMinor: number): LedgerRow[] {
   const rows: LedgerRow[] = [

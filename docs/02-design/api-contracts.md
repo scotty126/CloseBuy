@@ -84,17 +84,21 @@ No endpoints — the cart is client-side state (device-local), per brief §3.1b.
 
 ## Dispatch (delivery-fulfilment orders only)
 
+**One simplification worth stating plainly:** there's no separate "job offer" resource, unlike the shape this table originally sketched. An unclaimed `READY_FOR_PICKUP` delivery order *is* the offer (US-R-03's open-pool model, Q-03) — `GET /riders/me/offers` just lists those orders directly. Accepting is an atomic conditional update (`riderId IS NULL AND status = 'READY_FOR_PICKUP'`), the same pattern US-V-04's stock decrement uses, so two riders racing for the same job can never both win. Declining is consequently a genuine no-op against the database — nothing is tracked per-rider, so a declined job stays visible to everyone including the rider who declined it. A real "don't show me this again" needs a dismissals table this doesn't have yet.
+
 | Method & path | Purpose | Notes |
 |---|---|---|
-| `PATCH /riders/me/duty` *(rider)* | Toggle on/off duty | US-R-02 |
-| `GET /riders/me/offers` *(rider)* | Poll for a pending job offer | Short-poll while on duty and idle — no persistent connection (ADR-0001) |
-| `POST /riders/me/offers/:id/accept` *(rider)* | Accept a job | Exclusive assignment enforced at the DB layer — a second rider's accept on the same order 409s (US-R-03) |
-| `POST /riders/me/offers/:id/decline` *(rider)* | Decline | No penalty recorded (US-R-03) |
-| `POST /orders/:id/confirm-collection` *(rider)* | Confirm pickup from vendor | `{ code }` → `IN_TRANSIT` (US-R-04) |
-| `POST /orders/:id/confirm-delivery` *(rider)* | Confirm delivery to customer | `{ proof: { photo_url? , recipient_name?, code? }, cash_collected_minor? }` → `DELIVERED` (US-R-05) |
-| `POST /orders/:id/delivery-failed` *(rider)* | Report failure | `{ reason }` → `DELIVERY_FAILED` (US-R-06) |
-| `GET /riders/me/earnings` *(rider)* | Earnings list + cash balance | US-R-07 |
-| `POST /riders/me/remit` *(rider)* | Log a cash remittance | Recorded by admin in practice — this may end up admin-initiated rather than rider-initiated; confirm during M3 build (US-R-08) |
+| `POST /riders` *(rider)* | Submit rider application | US-R-01; creates `RiderProfile` in `pending`, mirroring `POST /vendors` |
+| `GET /riders/me` *(rider)* | Own profile, any status | Mirrors `GET /vendors/me` |
+| `PATCH /riders/me/duty` *(rider)* | Toggle on/off duty | US-R-02; 403 if the application isn't `approved` yet |
+| `GET /riders/me/offers` *(rider)* | List open jobs | Short-poll while on duty and idle — no persistent connection (ADR-0001). Empty while off duty or unapproved, not an error |
+| `POST /riders/me/offers/:id/accept` *(rider)* | Claim a job | → `RIDER_ASSIGNED`. 409 `JOB_UNAVAILABLE` if it's already taken, or the rider isn't on duty (US-R-03) |
+| `POST /riders/me/offers/:id/decline` *(rider)* | Decline | No penalty, no persisted effect (US-R-03) — see the note above |
+| `POST /orders/:id/confirm-collection` *(rider)* | Confirm pickup from vendor | `{ code }`, checked against `collection_code` — the same code a pickup order's customer would show instead (US-V-06); → `IN_TRANSIT` (US-R-04) |
+| `POST /orders/:id/confirm-delivery` *(rider)* | Confirm delivery to customer | `{ photoUrl?, recipientName?, code?, cashCollectedMinor? }` — at least one proof field required. For `cash_on_delivery`, `cashCollectedMinor` must equal the order total exactly (400 `CASH_MISMATCH` otherwise) and posts the cash-collection ledger entries (data-model.md §4a) — this is the moment money first enters the books for a cash order, since nothing moved at checkout. → `DELIVERED`, schedules the escrow-release timer (US-R-05) |
+| `POST /orders/:id/delivery-failed` *(rider)* | Report failure | `{ reason, notes? }` → `DELIVERY_FAILED`. Admin follow-up (refund decision, whether to return goods) isn't built yet — this records the failure honestly rather than pretending to resolve it (US-R-06) |
+| `GET /riders/me/earnings` *(rider)* | Cleared vs. pending earnings + cash float | US-R-07 |
+| `POST /riders/me/remit` *(rider)* | Log a cash remittance | Not built yet — recorded by admin in practice may end up the real answer rather than rider-initiated; still open, confirm during M3 (US-R-08) |
 
 ## Notifications
 

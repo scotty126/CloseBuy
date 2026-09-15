@@ -174,7 +174,7 @@ This is the part that cannot be sloppy (NFR-07, R-01).
 |---|---|---|
 | id | uuid | |
 | order_id | fk | |
-| gateway | enum: monnify, paystack, cash | `cash` isn't a real gateway — cash on delivery still gets a real row here (for the same idempotency mechanism), it just never touches Monnify. Money moves at delivery instead, tracked via `rider_cash_float` (Dispatch module) |
+| gateway | enum: monnify, paystack, cash | `cash` isn't a real gateway — cash on delivery still gets a real row here (for the same idempotency mechanism), it just never touches Monnify. Money moves at delivery instead, tracked via `rider_cash_float` (Dispatch, M1 — `confirm-delivery` posts the entries) |
 | gateway_reference | string, unique | The client's `Idempotency-Key` header, reused as Monnify's `paymentReference` — one value serves both purposes, and a repeated request or webhook with the same reference is a no-op (US-C-06) |
 | amount_minor | int | |
 | status | enum: pending, succeeded, failed, refunded | |

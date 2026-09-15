@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { escrowHoldEntries, computeEscrowSplit, escrowReleaseEntries, refundEntries } from "./ledger.js";
+import { escrowHoldEntries, computeEscrowSplit, escrowReleaseEntries, refundEntries, codCollectionEntries } from "./ledger.js";
 
 function sumByDirection(rows: { direction: string; amountMinor: number }[]) {
   return {
@@ -62,6 +62,16 @@ describe("ledger — data-model.md §6 invariant: every entry set balances", () 
     expect(rows.find((r) => r.account === "rider_payable")).toBeUndefined();
     const { debits, credits } = sumByDirection(rows);
     expect(debits).toBe(credits);
+  });
+
+  it("codCollectionEntries: debits rider_cash_float instead of platform_clearing, credits customer_escrow the same way card/transfer does", () => {
+    const rows = codCollectionEntries("order_1", 500000);
+    const { debits, credits } = sumByDirection(rows);
+
+    expect(debits).toBe(500000);
+    expect(credits).toBe(500000);
+    expect(rows.find((r) => r.account === "rider_cash_float")?.direction).toBe("debit");
+    expect(rows.find((r) => r.account === "customer_escrow")?.direction).toBe("credit");
   });
 
   it("refundEntries: reverses the hold exactly, balances", () => {
