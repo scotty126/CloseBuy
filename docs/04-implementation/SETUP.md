@@ -14,6 +14,7 @@ Covers what M0 actually built (roadmap.md) and how to run it. Update this file a
 - Optional: a [Termii](https://termii.com) account — needed only for vendor/rider/admin OTP sign-in, which has no onboarding UI yet regardless (M1). The API boots and everything else works without it; a Sender ID needs CAC business verification, so this is genuinely fine to defer.
 - A free [Resend](https://resend.com) account — needed for customer email verification/password-reset emails. Customer register/login work without it; only the emails won't send.
 - Optional: a Google Cloud OAuth client, for "Continue with Google" — everything else works without it (brief §3.1b).
+- Optional: a [Monnify](https://developers.monnify.com) sandbox account — needed only for card/transfer checkout. Cash on delivery works without it, and that's most of what proves the order lifecycle end to end.
 
 ## First-time setup
 
@@ -73,8 +74,12 @@ Per roadmap.md M0 — verified working as of this commit (`pnpm typecheck && pnp
 
 - **Catalog, real** — public browse/search (`GET /vendors`, `/vendors/:id`, `/vendors/:id/products`), vendor application (US-V-01), self-service storefront and product CRUD (US-V-02/03), all real against Postgres, all unit-tested (`apps/api/src/modules/catalog/service.test.ts`, 6 tests, including a cross-tenant access-control check — vendor B genuinely cannot edit vendor A's product). Categories are seeded (`pnpm db:seed`), not yet admin-manageable — that's Admin, still unbuilt.
 - Known gap, not silently ignored: `lat`/`lng` search params are accepted but not yet used for distance filtering — needs PostGIS or an application-level distance calculation, neither built.
+- **Order & Checkout, real** — `POST /checkout` (server-side re-validation of price/stock/vendor status, the full guest-vs-signed-in split from brief §3.1b, idempotent on the client's `Idempotency-Key`), a real double-entry escrow ledger (`apps/api/src/modules/order/ledger.ts` — pure functions, 7 unit tests just on the balance math), the Monnify integration (`apps/api/src/modules/payments/monnify.ts` — auth, initialize-transaction, webhook signature verification, refund, every shape checked against Monnify's actual docs rather than assumed), and BullMQ-backed timers for the vendor accept-window auto-reject and the post-delivery escrow-release window (`apps/api/src/modules/order/jobs.ts`). 24 more unit tests across `order/service.test.ts` (17) and `order/ledger.test.ts` (7) — 45 total now, up from 21.
+  - **Fully working without any Monnify credentials:** cash-on-delivery orders — checkout, vendor accept (with atomic stock decrement), reject-and-refund-logic (a no-op for cash, correctly), mark-ready, and pickup-order completion all run end to end once a local Postgres/Redis exist.
+  - **Needs real Monnify sandbox credentials to actually complete:** card/transfer checkout and the webhook that confirms it — the code is real and correct against Monnify's documented API shapes, just not live-tested end to end yet.
+  - **Deliberately not built this pass:** Dispatch (rider job offer/accept, delivery confirmation) — a delivery order correctly reaches `READY_FOR_PICKUP` and then waits there; a pickup order completes fully without Dispatch at all.
 
-**Not built yet, deliberately** — Cart-at-checkout, Order, Payments, Dispatch, Notifications, and most of Admin exist only as empty directories matching architecture.md's module boundaries, or as `Placeholder` screens in the relevant app linking back to the story and milestone that will build them.
+**Not built yet, deliberately** — Dispatch, Notifications, and most of Admin exist only as empty directories matching architecture.md's module boundaries, or as `Placeholder` screens in the relevant app linking back to the story and milestone that will build them.
 
 ## Known rough edges, not yet worth fixing
 

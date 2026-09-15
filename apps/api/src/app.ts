@@ -7,6 +7,7 @@ import { redisPlugin } from "./plugins/redis.js";
 import { staffAuthRoutes } from "./modules/auth/routes.js";
 import { customerAuthRoutes } from "./modules/auth/customer/routes.js";
 import { catalogRoutes } from "./modules/catalog/routes.js";
+import { orderRoutes } from "./modules/order/routes.js";
 import { requireAuth } from "./lib/auth-guard.js";
 import { serializeUser } from "./lib/serialize-user.js";
 
@@ -16,11 +17,10 @@ import { serializeUser } from "./lib/serialize-user.js";
  * prisma/redis must be ready before any route that touches them.
  *
  * Auth is two separate route sets, by role (brief §3.1b) — staff (phone/
- * OTP) and customer (email/password/OAuth) — plus a smoke-test Catalog
- * read. M0 scope (roadmap.md). Cart, Order, Payments, Dispatch,
- * Notifications and Admin are real module boundaries in architecture.md §2
- * and in the Prisma schema already, but their routes are M1+ and
- * deliberately not built yet.
+ * OTP) and customer (email/password/OAuth). Catalog and Order/Checkout
+ * are real, M1 (roadmap.md). Dispatch, Notifications and most of Admin are
+ * real module boundaries in architecture.md §2 and in the Prisma schema
+ * already, but their routes aren't built yet.
  */
 export async function buildApp() {
   const app = Fastify({
@@ -47,6 +47,7 @@ export async function buildApp() {
   await app.register(staffAuthRoutes);
   await app.register(customerAuthRoutes);
   await app.register(catalogRoutes);
+  await app.register(orderRoutes);
 
   return app;
 }

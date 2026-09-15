@@ -140,13 +140,15 @@ The unit everything else hangs off. One vendor, one customer, one (eventual) rid
 | alternate_contact_phone | string, nullable | Optional second contact for this order (US-C-06) |
 | fulfilment_type | enum: delivery, pickup | Brief §3.1a |
 | scheduled_for | timestamp, nullable | Null means "as soon as possible"; set means a reserved slot |
-| address_id | fk, nullable | Null for pickup orders — see note below |
+| collection_code | string, nullable | Set when the order reaches `READY_FOR_PICKUP`. One field for both directions of the same action — a pickup order's customer shows it, a delivery order's rider shows it instead (US-C-07/US-R-04/US-V-06) |
+| delivery_lat, delivery_lng, delivery_landmark | float, float, string — all nullable | **The authoritative delivery location, snapshotted at checkout** — resolves the open question this table used to carry (see below). Null for pickup orders |
+| address_id | fk, nullable | A signed-in customer's saved address, kept only for their own convenience (relabelling, reuse next time) — never authoritative for this order, and always null for a guest (no `CustomerProfile` to own an `Address` at all) |
 | status | enum | Exactly the states in brief §4; a pickup order skips `RIDER_ASSIGNED`/`IN_TRANSIT` |
 | payment_method | enum: card, transfer, cash_on_delivery | `cash_on_delivery` is only valid when `fulfilment_type = delivery` |
 | subtotal_minor, delivery_fee_minor, discount_minor, commission_minor, total_minor | int | `delivery_fee_minor` is always 0 for pickup; `commission_minor` is computed at completion per §4a, not charged to the customer |
 | created_at, updated_at | timestamp | |
 
-**Snapshotting matters here.** `OrderItem` copies `name` and `price_minor` from the product at the moment of purchase — editing a product later must never alter a historical order's figures (US-V-03). Address is referenced by id for convenience but the lat/lng/landmark used for that specific delivery should be considered immutable once the order leaves `PAID`; if the customer edits or deletes a saved `Address` row later, the order's copy must not silently change. (Open implementation question — see §5.)
+**Snapshotting matters here.** `OrderItem` copies `name` and `price_minor` from the product at the moment of purchase — editing a product later must never alter a historical order's figures (US-V-03). The delivery location works the same way now: `delivery_lat`/`delivery_lng`/`delivery_landmark` are copied onto the order itself at checkout, not read live from `Address` — this table's own previously-open question (editing or deleting a saved `Address` later must not silently change an order already placed against it) is resolved by the copy existing at all, and was also the only way to support a guest order, which has no `CustomerProfile` to own an `Address` in the first place.
 
 ### OrderStateTransition
 Append-only. This table, not application logs, is the evidence base for disputes (US-A-04) and reconciliation (US-A-05).
@@ -172,8 +174,8 @@ This is the part that cannot be sloppy (NFR-07, R-01).
 |---|---|---|
 | id | uuid | |
 | order_id | fk | |
-| gateway | enum: monnify, paystack | |
-| gateway_reference | string, unique | Idempotency key — a repeated webhook with the same reference is a no-op (US-C-06) |
+| gateway | enum: monnify, paystack, cash | `cash` isn't a real gateway — cash on delivery still gets a real row here (for the same idempotency mechanism), it just never touches Monnify. Money moves at delivery instead, tracked via `rider_cash_float` (Dispatch module) |
+| gateway_reference | string, unique | The client's `Idempotency-Key` header, reused as Monnify's `paymentReference` — one value serves both purposes, and a repeated request or webhook with the same reference is a no-op (US-C-06) |
 | amount_minor | int | |
 | status | enum: pending, succeeded, failed, refunded | |
 
@@ -184,7 +186,7 @@ Double-entry, append-only. Every money movement is (at least) two rows that net 
 |---|---|---|
 | id | uuid | |
 | order_id | fk | |
-| account | enum: customer_escrow, vendor_payable, platform_commission, rider_payable, rider_cash_float | |
+| account | enum: platform_clearing, customer_escrow, vendor_payable, platform_commission, rider_payable, rider_cash_float | `platform_clearing` is the debit side of a successful payment (funds received from Monnify, not yet allocated) — without it, crediting `customer_escrow` on payment success had nothing to balance against, so it wasn't real double-entry yet |
 | direction | enum: debit, credit | |
 | amount_minor | int | |
 | created_at | timestamp | |
@@ -249,5 +251,6 @@ These are the rules a migration or a future feature must never violate:
 
 ## Open items for implementation stage
 
-- Whether `Order.address_id` should instead fully embed a copy of the address fields at order time (safer against a later address edit, more denormalised) rather than a foreign key — leaning toward embedding, to be confirmed when the Order table is actually migrated.
+- **Resolved, M1:** `Order` embeds its own delivery location (`delivery_lat`/`delivery_lng`/`delivery_landmark`) rather than only referencing `Address` by id — see §3's Order table.
 - Exact set of `Category`-level fields needed per brief §3.3's fulfilment-rule table (prep time, returnability, special handling) — the table above has the minimum; category-specific validation rules (e.g. pharmacy licence check) may need their own small config structure rather than flat columns.
+- The flat delivery fee and vendor reliability-score penalty on rejection/auto-reject (M1) are placeholder figures, not researched ones — a real fee schedule and scoring model are later refinements, not silent guesses left in permanently.

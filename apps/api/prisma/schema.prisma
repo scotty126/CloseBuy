@@ -71,6 +71,11 @@ enum PaymentMethod {
 enum PaymentGateway {
   monnify
   paystack
+  // Not a real gateway — cash on delivery still gets a real Payment row
+  // (for the same Idempotency-Key mechanism card/transfer use), it just
+  // never touches Monnify. Money moves at delivery, tracked via
+  // rider_cash_float instead (Dispatch module).
+  cash
 }
 
 enum PaymentStatus {
@@ -82,6 +87,11 @@ enum PaymentStatus {
 
 // data-model.md §4a
 enum LedgerAccount {
+  // Funds received from Monnify, not yet allocated — the debit side of a
+  // successful payment; without this, "credit customer_escrow" on payment
+  // success has nothing to balance against and the ledger isn't real
+  // double-entry, just a label on a number.
+  platform_clearing
   customer_escrow
   vendor_payable
   platform_commission
@@ -336,7 +346,27 @@ model Order {
   fulfilmentType FulfilmentType // brief §3.1a
   scheduledFor   DateTime?      // null = as soon as possible
 
-  addressId String?  // null for pickup orders
+  // Set when the order reaches READY_FOR_PICKUP. One field covers both
+  // directions of the same underlying action ("someone collects the goods
+  // from the vendor's counter and enters a code to prove it"): a pickup
+  // order's customer shows it (US-C-07/US-V-06); a delivery order's rider
+  // shows it instead (US-R-04/US-V-06). Never the same value as
+  // trackingToken — this one is meant to be read aloud at a counter.
+  collectionCode String?
+
+  // The authoritative delivery location for THIS order — a snapshot, not a
+  // live reference, for the same reason OrderItem snapshots price (US-V-03):
+  // if a saved Address is edited or deleted later, an order already placed
+  // against it must not silently change (data-model.md §3's original open
+  // question, resolved here). Null for pickup orders.
+  deliveryLat         Float?
+  deliveryLng         Float?
+  deliveryLandmark    String?
+  // Optional link back to a signed-in customer's saved address, for their
+  // own convenience (editing the label, reusing it next time) — never
+  // authoritative for this order. Always null for a guest order, since
+  // there's no CustomerProfile to own an Address at all (brief §3.1b).
+  addressId String?
   address   Address? @relation(fields: [addressId], references: [id])
 
   status        OrderStatus   @default(PENDING_PAYMENT)

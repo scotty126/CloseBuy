@@ -19,6 +19,7 @@
     "@closebuy/types": "workspace:*",
     "@fastify/rate-limit": "^10.1.0",
     "argon2": "^0.41.0",
+    "bullmq": "^5.34.0",
     "openid-client": "^6.8.0",
     "resend": "^4.0.0",
     "@fastify/sensible": "^6.0.0",

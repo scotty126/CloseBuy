@@ -23,7 +23,7 @@ export const PAYMENT_METHODS = ["card", "transfer", "cash_on_delivery"] as const
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 // ADR-0001: Monnify primary, Paystack documented fallback
-export const PAYMENT_GATEWAYS = ["monnify", "paystack"] as const;
+export const PAYMENT_GATEWAYS = ["monnify", "paystack", "cash"] as const; // "cash" = cash on delivery, no real gateway involved
 export type PaymentGateway = (typeof PAYMENT_GATEWAYS)[number];
 
 export const USER_ROLES = ["customer", "vendor", "rider", "admin"] as const;
@@ -37,6 +37,7 @@ export type RiderStatus = (typeof RIDER_STATUSES)[number];
 
 // data-model.md §4a — per fulfilment type, not per category
 export const LEDGER_ACCOUNTS = [
+  "platform_clearing", // funds received from Monnify, not yet allocated
   "customer_escrow",
   "vendor_payable",
   "platform_commission",
