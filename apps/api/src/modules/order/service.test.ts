@@ -8,6 +8,7 @@ import {
   CartInvalidError,
   InvalidOrderStateError,
   InvalidCollectionCodeError,
+  VendorProfileNotFoundError,
 } from "./service.js";
 import type { MonnifyClient } from "../payments/monnify.js";
 import type { OrderQueue } from "./jobs.js";
@@ -98,7 +99,12 @@ function createFakePrisma() {
         orders.set(where.id, updated);
         return updated;
       },
-      findMany: async ({ where }: any) => [...orders.values()].filter((o) => o.customerId === where.customerId),
+      findMany: async ({ where }: any) =>
+        [...orders.values()].filter((o) => {
+          if (where.customerId !== undefined && o.customerId !== where.customerId) return false;
+          if (where.vendorId !== undefined && o.vendorId !== where.vendorId) return false;
+          return true;
+        }),
     },
     orderItem: {
       findMany: async ({ where }: any) => orderItems.filter((i) => i.orderId === where.orderId),
@@ -428,6 +434,41 @@ describe("order service — vendor actions (US-V-05/06)", () => {
     const { svc, order } = await checkedOutOrder({ sub: CUSTOMER_USER_ID, role: "customer" });
     await svc.rejectOrder(VENDOR_USER_ID, order.id, { reason: "Out of ingredients" });
     expect(notifications.notify).toHaveBeenCalledWith(CUSTOMER_USER_ID, "order_rejected", { orderId: order.id, reason: "Out of ingredients" });
+  });
+
+  it("listVendorOrders: only this vendor's own orders, never another vendor's (screens-navigation.md §2.1)", async () => {
+    const { svc, order } = await checkedOutOrder();
+    prisma.__state.vendors.set("vendor_other", { id: "vendor_other", userId: "vendor_user_other", status: "approved", isOpen: true });
+    prisma.__state.orders.set("order_other_vendor", { id: "order_other_vendor", vendorId: "vendor_other", status: "PAID", createdAt: new Date() });
+
+    const orders = await svc.listVendorOrders(VENDOR_USER_ID);
+    expect(orders.map((o: any) => o.id)).toEqual([order.id]);
+  });
+
+  it("listVendorOrders: throws for an account with no vendor profile", async () => {
+    await expect(service().listVendorOrders("nobody")).rejects.toThrow(VendorProfileNotFoundError);
+  });
+
+  it("getVendorEarnings: a vendor is paid the goods total minus commission, never the delivery fee (brief §3.2a)", async () => {
+    const svc = service();
+    prisma.__state.orders.set("order_cleared", {
+      id: "order_cleared", vendorId: VENDOR_ID, status: "COMPLETED",
+      subtotalMinor: 500000, commissionMinor: 25000, deliveryFeeMinor: 50000, updatedAt: new Date(),
+    });
+    prisma.__state.orders.set("order_in_flight", {
+      id: "order_in_flight", vendorId: VENDOR_ID, status: "PREPARING",
+      subtotalMinor: 300000, commissionMinor: 0, deliveryFeeMinor: 50000, updatedAt: new Date(),
+    });
+
+    const earnings = await svc.getVendorEarnings(VENDOR_USER_ID);
+    expect(earnings.clearedMinor).toBe(475000); // 500000 - 25000 commission, delivery fee excluded either way
+    expect(earnings.pendingMinor).toBe(300000); // gross estimate — commission isn't final until COMPLETED
+    expect(earnings.orders).toHaveLength(1);
+    expect(earnings.orders[0]).toMatchObject({ orderId: "order_cleared", grossMinor: 500000, commissionMinor: 25000, netMinor: 475000 });
+  });
+
+  it("getVendorEarnings: throws for an account with no vendor profile", async () => {
+    await expect(service().getVendorEarnings("nobody")).rejects.toThrow(VendorProfileNotFoundError);
   });
 });
 

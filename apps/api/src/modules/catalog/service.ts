@@ -116,6 +116,18 @@ export function createCatalogService(prisma: PrismaClient) {
     },
 
     /**
+     * US-V-03/04 — the vendor's own product list, active AND inactive
+     * (screens-navigation.md §2.2 needs both, with a state indicator) —
+     * unlike `getVendorProducts` above (public, active-only, gates on the
+     * vendor being `approved` too).
+     */
+    async getOwnVendorProducts(userId: string) {
+      const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
+      if (!vendor) throw new VendorNotFoundError();
+      return prisma.product.findMany({ where: { vendorId: vendor.id }, orderBy: { name: "asc" } });
+    },
+
+    /**
      * US-V-02 — editable regardless of application status (a pending
      * vendor can still prepare their storefront); only `searchVendors`/
      * `getVendor` above gate on `status: approved` for customer-facing

@@ -58,6 +58,7 @@ Two separate paths, by role (brief §3.1b) — a customer never touches the OTP 
 | `POST /vendors` *(vendor)* | Submit vendor application | US-V-01; creates `VendorProfile` in `pending`. 422 `OUTSIDE_SERVICE_AREA` if `pickupLat`/`pickupLng` fall outside the launch polygon (brief §2a, data-model.md's `Config` §5) |
 | `GET /vendors/me` *(vendor)* | Own storefront, any status | Unlike `GET /vendors/:id`, not gated on `approved` — a pending vendor needs to see their own application |
 | `PATCH /vendors/me` *(vendor)* | Edit storefront | Name, hours, `is_open`, `supports_pickup` — US-V-02. Editable regardless of application status; only customer-facing visibility gates on `approved` |
+| `GET /vendors/me/products` *(vendor)* | Own product list, active AND inactive | Unlike `GET /vendors/:id/products` (public, active-only) — screens-navigation.md §2.2 needs a state indicator on both |
 | `POST /vendors/me/products` *(vendor)* | Create product | US-V-03 |
 | `PATCH /vendors/me/products/:id` *(vendor)* | Edit product | Price edits never touch past `OrderItem` snapshots |
 | `DELETE /vendors/me/products/:id` *(vendor)* | Deactivate (not delete) | Sets `is_active = false` |
@@ -78,6 +79,8 @@ No endpoints — the cart is client-side state (device-local), per brief §3.1b.
 | `GET /orders/:id` *(customer/vendor/rider — own orders only)* | Order detail | Includes current status, full state-transition history, fulfilment type, `scheduled_for` |
 | `GET /orders` *(customer)* | Order history | US-C-09 |
 | `POST /orders/:id/cancel` *(customer)* | Self-service cancel | Only while `status = PAID` (US-C-08); 422 otherwise. Refunds via Monnify if actually paid, no-ops for cash on delivery (nothing was ever charged) |
+| `GET /vendors/me/orders` *(vendor)* | Own order queue | US-V-05. One flat, newest-first list — the New/In Progress/Scheduled/History tabs (screens-navigation.md §2.1) are bucketed client-side from this, not four separate queries |
+| `GET /vendors/me/earnings` *(vendor)* | Running balance + per-order breakdown | US-V-07. `clearedMinor` (net of commission, `COMPLETED` orders only) vs. `pendingMinor` (gross estimate — commission isn't final until an order completes). A vendor is never paid the delivery fee, that goes to the rider (brief §3.2a) |
 | `POST /orders/:id/accept` *(vendor)* | Accept a `PAID` order | → `PREPARING`; atomically decrements stock per item (422 if any item's stock ran out while the order waited in the accept window — data-model.md §6 invariant 4); cancels the auto-reject timer (US-V-05) |
 | `POST /orders/:id/reject` *(vendor)* | Reject | `{ reason }` required; → `CANCELLED` → `REFUNDED` (via Monnify if paid, a no-op for cash); vendor's reliability score takes a hit |
 | `POST /orders/:id/ready` *(vendor)* | Mark ready | → `READY_FOR_PICKUP`, generates the `collection_code` both confirmation paths below need. For delivery, this is also the moment the order becomes visible to Dispatch's open job pool (`GET /riders/me/offers`) |

@@ -43,6 +43,11 @@ export class InvalidCollectionCodeError extends Error {
     super("That code doesn't match.");
   }
 }
+export class VendorProfileNotFoundError extends Error {
+  constructor() {
+    super("No vendor application found for this account.");
+  }
+}
 
 export interface AuthContext {
   sub: string;
@@ -284,6 +289,55 @@ export function createOrderService(deps: OrderServiceDeps) {
       const customer = await prisma.customerProfile.findUnique({ where: { userId } });
       if (!customer) return [];
       return prisma.order.findMany({ where: { customerId: customer.id }, orderBy: { createdAt: "desc" } });
+    },
+
+    /**
+     * US-V-05 — the vendor's own order queue. One flat, newest-first list;
+     * the New/In Progress/Scheduled/History tabs screens-navigation.md
+     * §2.1 describes are bucketed client-side from this, not four separate
+     * queries — the bucketing rule (scheduled-vs-not, then status) is a
+     * display concern, not a different dataset.
+     */
+    async listVendorOrders(vendorUserId: string) {
+      const vendor = await prisma.vendorProfile.findUnique({ where: { userId: vendorUserId } });
+      if (!vendor) throw new VendorProfileNotFoundError();
+      return prisma.order.findMany({
+        where: { vendorId: vendor.id },
+        include: { items: true, transitions: { orderBy: { createdAt: "asc" } } },
+        orderBy: { createdAt: "desc" },
+      });
+    },
+
+    /**
+     * US-V-07 — running balance + per-order breakdown. A vendor is only
+     * ever paid for the goods, never the delivery fee (brief §3.2a — that
+     * passes to the rider); `commissionMinor` is exact for a `COMPLETED`
+     * order (computed once at `releaseEscrow`) but a gross estimate for
+     * anything still in flight, since the real split isn't final until
+     * escrow actually releases — the two are deliberately not blended
+     * into one number.
+     */
+    async getVendorEarnings(vendorUserId: string) {
+      const vendor = await prisma.vendorProfile.findUnique({ where: { userId: vendorUserId } });
+      if (!vendor) throw new VendorProfileNotFoundError();
+
+      const orders = await prisma.order.findMany({ where: { vendorId: vendor.id }, orderBy: { updatedAt: "desc" } });
+      const cleared = orders.filter((o) => o.status === "COMPLETED");
+      const pendingStatuses = ["PAID", "PREPARING", "READY_FOR_PICKUP", "RIDER_ASSIGNED", "IN_TRANSIT", "DELIVERED"];
+      const pending = orders.filter((o) => pendingStatuses.includes(o.status));
+
+      return {
+        clearedMinor: cleared.reduce((sum, o) => sum + (o.subtotalMinor - o.commissionMinor), 0),
+        pendingMinor: pending.reduce((sum, o) => sum + o.subtotalMinor, 0), // gross estimate — see docstring
+        foundingVendorCommissionWaivedUntil: vendor.foundingVendorCommissionWaivedUntil,
+        orders: cleared.slice(0, 50).map((o) => ({
+          orderId: o.id,
+          grossMinor: o.subtotalMinor,
+          commissionMinor: o.commissionMinor,
+          netMinor: o.subtotalMinor - o.commissionMinor,
+          completedAt: o.updatedAt,
+        })),
+      };
     },
 
     /** US-C-08 — self-service only while PAID; anything further along needs a support/dispute path. */

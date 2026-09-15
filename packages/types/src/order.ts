@@ -135,3 +135,13 @@ export interface CheckoutResponse {
   checkoutUrl?: string; // present only for card/transfer — Monnify's hosted payment page
   replay: boolean;
 }
+
+// GET /vendors/me/earnings — US-V-07. `orders` is only ever COMPLETED
+// ones (commission is final only there); clearedMinor/pendingMinor cover
+// the running balance screens-navigation.md §2.4 needs at a glance.
+export interface VendorEarningsDto {
+  clearedMinor: number;
+  pendingMinor: number;
+  foundingVendorCommissionWaivedUntil: string | null;
+  orders: Array<{ orderId: string; grossMinor: number; commissionMinor: number; netMinor: number; completedAt: string }>;
+}

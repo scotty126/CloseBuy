@@ -19,6 +19,7 @@ import {
   ForbiddenError,
   InvalidOrderStateError,
   InvalidCollectionCodeError,
+  VendorProfileNotFoundError,
 } from "./service.js";
 
 /**
@@ -199,6 +200,28 @@ export async function orderRoutes(app: FastifyInstance) {
   });
 
   // ── Vendor actions ──────────────────────────────────────────────────
+
+  app.get("/vendors/me/orders", { preHandler: requireAuth(["vendor"]) }, async (req, reply) => {
+    try {
+      return reply.send({ orders: await order.listVendorOrders(req.authUser!.sub) });
+    } catch (err) {
+      if (err instanceof VendorProfileNotFoundError) {
+        return reply.code(404).send({ error: { code: "VENDOR_NOT_FOUND", message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.get("/vendors/me/earnings", { preHandler: requireAuth(["vendor"]) }, async (req, reply) => {
+    try {
+      return reply.send(await order.getVendorEarnings(req.authUser!.sub));
+    } catch (err) {
+      if (err instanceof VendorProfileNotFoundError) {
+        return reply.code(404).send({ error: { code: "VENDOR_NOT_FOUND", message: err.message } });
+      }
+      throw err;
+    }
+  });
 
   const vendorOrderAction = (
     handler: (vendorUserId: string, orderId: string, body: unknown) => Promise<unknown>,

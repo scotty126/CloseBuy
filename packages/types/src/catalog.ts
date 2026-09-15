@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { phoneSchema } from "./auth.js";
+import type { VendorStatus } from "./enums.js";
 
 // ── Vendor ──────────────────────────────────────────────────────────────
 
@@ -104,4 +105,29 @@ export interface VendorDto {
   reliabilityScore: string; // Prisma Decimal serializes as a string over JSON
   pickupLandmark: string;
   foundingVendorCommissionWaivedUntil: string | null;
+}
+
+// GET/PATCH /vendors/me — the raw VendorProfile row, unlike VendorDto
+// above (a public, storefront-shaped view). Distinct type rather than a
+// union of optional fields: `status`, `pickupLat`/`pickupLng`,
+// `bankAccountRef` etc. genuinely never appear on the public shape at all.
+export interface OwnVendorProfileDto {
+  id: string;
+  userId: string;
+  businessName: string;
+  categoryId: string;
+  description: string | null;
+  logoUrl: string | null;
+  pickupLat: number;
+  pickupLng: number;
+  pickupLandmark: string;
+  pickupPhone: string;
+  bankAccountRef: string | null;
+  status: VendorStatus;
+  isOpen: boolean;
+  supportsPickup: boolean;
+  openingHours: Record<string, [string, string]>;
+  reliabilityScore: string; // Decimal serializes as a string over JSON
+  foundingVendorCommissionWaivedUntil: string | null;
+  createdAt: string;
 }

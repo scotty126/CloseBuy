@@ -54,8 +54,10 @@ function createFakePrisma() {
     },
     product: {
       findUnique: async ({ where }: { where: { id: string } }) => products.get(where.id) ?? null,
-      findMany: async ({ where }: { where: { vendorId: string } }) =>
-        [...products.values()].filter((p) => p.vendorId === where.vendorId),
+      findMany: async ({ where }: { where: { vendorId: string; isActive?: boolean } }) =>
+        [...products.values()].filter(
+          (p) => p.vendorId === where.vendorId && (where.isActive === undefined || p.isActive === where.isActive),
+        ),
       create: async ({ data }: { data: any }) => {
         const product = { id: id(), isActive: true, ...data };
         products.set(product.id, product);
@@ -177,5 +179,26 @@ describe("catalog service", () => {
         stock: 1,
       }),
     ).rejects.toThrow(VendorNotFoundError);
+  });
+
+  it("a vendor's own product list includes inactive products (screens-navigation.md §2.2's state indicator needs both)", async () => {
+    const svc = createCatalogService(prisma);
+    await svc.submitApplication(USER_A, APPLICATION);
+    const product = await svc.createProduct(USER_A, {
+      categoryId: "cat_food",
+      name: "Discontinued stew",
+      priceMinor: 100000,
+      images: ["https://example.com/stew.jpg"],
+      stock: 0,
+    });
+    await svc.deactivateProduct(USER_A, product.id);
+
+    const ownList = await svc.getOwnVendorProducts(USER_A);
+    expect(ownList).toHaveLength(1);
+    expect(ownList[0]!.isActive).toBe(false);
+  });
+
+  it("throws getting a product list for an account with no vendor profile", async () => {
+    await expect(createCatalogService(prisma).getOwnVendorProducts("nobody")).rejects.toThrow(VendorNotFoundError);
   });
 });

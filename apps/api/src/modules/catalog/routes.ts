@@ -87,6 +87,17 @@ export async function catalogRoutes(app: FastifyInstance) {
     }
   });
 
+  app.get("/vendors/me/products", { preHandler: requireAuth(["vendor"]) }, async (req, reply) => {
+    try {
+      return reply.send({ products: await catalog.getOwnVendorProducts(req.authUser!.sub) });
+    } catch (err) {
+      if (err instanceof VendorNotFoundError) {
+        return reply.code(404).send({ error: { code: "VENDOR_NOT_FOUND", message: err.message } });
+      }
+      throw err;
+    }
+  });
+
   app.patch("/vendors/me", { preHandler: requireAuth(["vendor"]) }, async (req, reply) => {
     const body = vendorUpdateSchema.parse(req.body);
     try {

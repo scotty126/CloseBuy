@@ -1,6 +1,6 @@
 "use client";
 
-import { createApiClient, createAuthApi } from "@closebuy/api-client";
+import { createApiClient, createAuthApi, createCatalogApi, createOrderApi } from "@closebuy/api-client";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -16,3 +16,5 @@ export function getAccessToken(): string | null {
 
 const client = createApiClient({ baseUrl, getAccessToken });
 export const authApi = createAuthApi(client);
+export const catalogApi = createCatalogApi(client);
+export const orderApi = createOrderApi(client);
