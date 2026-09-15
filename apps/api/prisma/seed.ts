@@ -28,6 +28,29 @@ const CONFIG: Array<{ key: string; value: unknown }> = [
   { key: "vendor_accept_window_minutes", value: 15 },
   { key: "escrow_release_window_hours", value: 48 }, // US-C-11's dispute window
   { key: "flat_delivery_fee_minor", value: 50000 }, // ₦500 — see lib/config.ts for why this is flat, not distance-based
+  {
+    key: "service_area_polygon",
+    // Riverpark's real traced boundary (brief §2a, US-C-05) — supplied as
+    // a geojson.io export, converted from [lng, lat] (GeoJSON's order) to
+    // this app's {lat, lng} shape. The closing point (identical to the
+    // first, standard GeoJSON ring closure) is dropped — the point-in-
+    // polygon check doesn't need it explicitly repeated (lib/geo.ts).
+    value: [
+      { lat: 8.9867879, lng: 7.3303654 },
+      { lat: 8.9921894, lng: 7.3419188 },
+      { lat: 8.9877769, lng: 7.3449997 },
+      { lat: 8.9774364, lng: 7.3495609 },
+      { lat: 8.9704651, lng: 7.3506784 },
+      { lat: 8.9712203, lng: 7.3437212 },
+      { lat: 8.9719934, lng: 7.3425362 },
+      { lat: 8.9727864, lng: 7.3415423 },
+      { lat: 8.974392, lng: 7.3402044 },
+      { lat: 8.9718397, lng: 7.3364862 },
+      { lat: 8.9771625, lng: 7.3329444 },
+      { lat: 8.9837732, lng: 7.3279248 },
+      { lat: 8.9861793, lng: 7.3279007 },
+    ],
+  },
 ];
 
 async function main() {

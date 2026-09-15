@@ -6,10 +6,17 @@ import type {
   ProductCreateInput,
   ProductUpdateInput,
 } from "@closebuy/types";
+import { isWithinServiceArea } from "../../lib/geo.js";
 
 export class VendorAlreadyExistsError extends Error {
   constructor() {
     super("This account has already submitted a vendor application.");
+  }
+}
+
+export class OutsideServiceAreaError extends Error {
+  constructor(message = "Sorry, we're only onboarding vendors in Riverpark for now.") {
+    super(message);
   }
 }
 
@@ -80,6 +87,10 @@ export function createCatalogService(prisma: PrismaClient) {
     async submitApplication(userId: string, input: VendorApplicationInput) {
       const existing = await prisma.vendorProfile.findUnique({ where: { userId } });
       if (existing) throw new VendorAlreadyExistsError();
+
+      if (!(await isWithinServiceArea(prisma, input.pickupLat, input.pickupLng))) {
+        throw new OutsideServiceAreaError(); // brief §2a — launch is Riverpark only, same check checkout uses
+      }
 
       return prisma.vendorProfile.create({
         data: {

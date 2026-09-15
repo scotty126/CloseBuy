@@ -232,7 +232,7 @@ At order completion, the ledger computation is: commission = 0 if the founding-v
 
 **Notification** — user_id, type, payload (jsonb), sent_at, read_at.
 
-**Config** — key, value (jsonb), version (int), effective_at. Never overwritten — a new row with an incremented version is how a value changes, so a historical order can be checked against the config that was live when it was placed (US-A-02). Examples: `commission_rate.pickup`, `commission_rate.delivery` (§4a).
+**Config** — key, value (jsonb), version (int), effective_at. Never overwritten — a new row with an incremented version is how a value changes, so a historical order can be checked against the config that was live when it was placed (US-A-02). Examples: `commission_rate.pickup`, `commission_rate.delivery` (§4a); `vendor_accept_window_minutes`, `escrow_release_window_hours`, `flat_delivery_fee_minor` (M1); `service_area_polygon` — a `[{lat, lng}]` ring, checked by point-in-polygon (US-C-05, brief §2a) against both a delivery order's address and a vendor application's pickup location. Launch is Riverpark only, so this is currently one polygon for the whole platform; the moment a second area opens, "which service area" stops being a single global answer and this needs revisiting — not built ahead of that need.
 
 **AuditLog** — actor_id, action, target_type, target_id, reason, created_at. Broader than `OrderStateTransition`: covers config changes, vetting decisions, suspensions, forced interventions (US-A-08) — anything consequential that isn't itself an order-state change.
 

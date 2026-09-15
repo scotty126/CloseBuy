@@ -13,6 +13,7 @@ import { createOrderQueue, startOrderWorker } from "./jobs.js";
 import {
   createOrderService,
   VendorUnavailableError,
+  OutsideServiceAreaError,
   CartInvalidError,
   OrderNotFoundError,
   ForbiddenError,
@@ -71,6 +72,9 @@ export async function orderRoutes(app: FastifyInstance) {
     } catch (err) {
       if (err instanceof VendorUnavailableError) {
         return reply.code(422).send({ error: { code: "VENDOR_UNAVAILABLE", message: err.message } });
+      }
+      if (err instanceof OutsideServiceAreaError) {
+        return reply.code(422).send({ error: { code: "OUTSIDE_SERVICE_AREA", message: err.message } });
       }
       if (err instanceof CartInvalidError) {
         return reply.code(409).send({ error: { code: "CART_INVALID", message: err.message } });

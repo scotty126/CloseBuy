@@ -3,9 +3,21 @@ import type { PrismaClient } from "@prisma/client";
 import {
   createCatalogService,
   VendorAlreadyExistsError,
+  OutsideServiceAreaError,
   VendorNotFoundError,
   ProductNotFoundError,
 } from "./service.js";
+
+// A simple 0–10 / 0–10 square, standing in for the real Riverpark polygon
+// (prisma/seed.ts) — the geometry itself is tested in lib/geo.test.ts;
+// this only needs *a* working boundary so submitApplication's check has
+// something real to evaluate against.
+const TEST_SERVICE_AREA = [
+  { lat: 0, lng: 0 },
+  { lat: 0, lng: 10 },
+  { lat: 10, lng: 10 },
+  { lat: 10, lng: 0 },
+];
 
 /**
  * Minimal in-memory fake covering exactly the Prisma surface the catalog
@@ -56,6 +68,10 @@ function createFakePrisma() {
         return updated;
       },
     },
+    config: {
+      findFirst: async ({ where }: { where: { key: string } }) =>
+        where.key === "service_area_polygon" ? { key: where.key, value: TEST_SERVICE_AREA } : null,
+    },
   } as unknown as PrismaClient;
 }
 
@@ -84,6 +100,13 @@ describe("catalog service", () => {
 
     expect(vendor.status).toBe("pending");
     expect(vendor.businessName).toBe("Ada's Kitchen");
+  });
+
+  it("rejects an application with a pickup location outside the service area (brief §2a — Riverpark only)", async () => {
+    const svc = createCatalogService(prisma);
+    await expect(
+      svc.submitApplication(USER_A, { ...APPLICATION, pickupLat: 55, pickupLng: 55 }), // well outside the 0-10 test square
+    ).rejects.toThrow(OutsideServiceAreaError);
   });
 
   it("rejects a second application from the same account", async () => {

@@ -4,6 +4,7 @@ import { checkoutSchema } from "@closebuy/types";
 import {
   createOrderService,
   VendorUnavailableError,
+  OutsideServiceAreaError,
   CartInvalidError,
   InvalidOrderStateError,
   InvalidCollectionCodeError,
@@ -35,6 +36,17 @@ function createFakePrisma() {
     ["vendor_accept_window_minutes", 15],
     ["escrow_release_window_hours", 48],
     ["flat_delivery_fee_minor", 50000],
+    // Simple 0-10/0-10 test square, standing in for the real Riverpark
+    // polygon (prisma/seed.ts) — geometry itself is tested in lib/geo.test.ts.
+    [
+      "service_area_polygon",
+      [
+        { lat: 0, lng: 0 },
+        { lat: 0, lng: 10 },
+        { lat: 10, lng: 10 },
+        { lat: 10, lng: 0 },
+      ],
+    ],
   ]);
   let nextId = 1;
   const id = () => `id_${nextId++}`;
@@ -239,6 +251,17 @@ describe("order service — checkout (US-C-06)", () => {
   it("rejects checkout when the vendor is closed and the order isn't scheduled", async () => {
     seed(prisma, { vendor: { isOpen: false } });
     await expect(service().checkout(baseInput(), null, "idem-4")).rejects.toThrow(VendorUnavailableError);
+  });
+
+  it("accepts a delivery order whose address falls inside the service area", async () => {
+    const input = { ...baseInput(), fulfilmentType: "delivery" as const, deliveryLat: 5, deliveryLng: 5, deliveryLandmark: "Blue gate" };
+    const result = await service().checkout(input, null, "idem-area-1");
+    expect(result.order.status).toBe("PAID");
+  });
+
+  it("rejects a delivery order whose address falls outside the service area (brief §2a — Riverpark only)", async () => {
+    const input = { ...baseInput(), fulfilmentType: "delivery" as const, deliveryLat: 55, deliveryLng: 55, deliveryLandmark: "Somewhere else entirely" };
+    await expect(service().checkout(input, null, "idem-area-2")).rejects.toThrow(OutsideServiceAreaError);
   });
 
   it("rejects checkout for more items than are in stock", async () => {

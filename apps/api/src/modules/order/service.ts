@@ -3,11 +3,17 @@ import type { PrismaClient } from "@prisma/client";
 import type { MonnifyClient, WebhookEvent } from "../payments/monnify.js";
 import type { OrderQueue } from "./jobs.js";
 import { ConfigKeys } from "../../lib/config.js";
+import { isWithinServiceArea } from "../../lib/geo.js";
 import { escrowHoldEntries, computeEscrowSplit, escrowReleaseEntries, refundEntries, postLedgerEntries } from "./ledger.js";
 import type { CheckoutInput, RejectOrderInput, ConfirmPickupInput, RateOrderInput, DisputeOrderInput } from "@closebuy/types";
 
 export class VendorUnavailableError extends Error {
   constructor(message = "This vendor isn't accepting orders right now.") {
+    super(message);
+  }
+}
+export class OutsideServiceAreaError extends Error {
+  constructor(message = "Sorry, we don't deliver there yet — we're only in Riverpark for now.") {
     super(message);
   }
 }
@@ -99,6 +105,12 @@ export function createOrderService(deps: OrderServiceDeps) {
       if (!input.scheduledFor && !vendor.isOpen) throw new VendorUnavailableError("This vendor is currently closed.");
       if (input.fulfilmentType === "pickup" && !vendor.supportsPickup) {
         throw new VendorUnavailableError("This vendor doesn't offer pickup.");
+      }
+      if (
+        input.fulfilmentType === "delivery" &&
+        !(await isWithinServiceArea(prisma, input.deliveryLat!, input.deliveryLng!))
+      ) {
+        throw new OutsideServiceAreaError(); // US-C-05 — brief §2a, launch is Riverpark only
       }
 
       const products = await prisma.product.findMany({

@@ -10,6 +10,7 @@ import { requireAuth } from "../../lib/auth-guard.js";
 import {
   createCatalogService,
   VendorAlreadyExistsError,
+  OutsideServiceAreaError,
   VendorNotFoundError,
   ProductNotFoundError,
 } from "./service.js";
@@ -58,6 +59,9 @@ export async function catalogRoutes(app: FastifyInstance) {
     } catch (err) {
       if (err instanceof VendorAlreadyExistsError) {
         return reply.code(409).send({ error: { code: "VENDOR_EXISTS", message: err.message } });
+      }
+      if (err instanceof OutsideServiceAreaError) {
+        return reply.code(422).send({ error: { code: "OUTSIDE_SERVICE_AREA", message: err.message } });
       }
       throw err;
     }
