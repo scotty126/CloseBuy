@@ -29,4 +29,4 @@ Development follows a staged lifecycle; each stage leaves a durable artifact in 
 
 ## Status
 
-Pre-implementation. Currently in the requirements stage.
+Pre-implementation. Stage 01 (requirements) drafted; stage 02 (design) next.
