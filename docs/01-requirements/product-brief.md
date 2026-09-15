@@ -6,9 +6,11 @@
 
 ## 1. Problem statement
 
-In West African markets, small and mid-sized sellers have inventory and customers have demand, but the connection between them is fragmented. Sellers transact over Instagram and WhatsApp with no order management, no payment guarantee and no delivery network. Buyers have no protection against paying for goods that never arrive. Independent riders have no steady source of jobs.
+In West African markets, small and mid-sized sellers have inventory and customers have demand, but the connection between them is fragmented. A customer today searches Instagram, checks WhatsApp, messages the vendor, asks what's in stock and what it costs, figures out delivery themselves, transfers money on trust, and waits — with no order record, no payment guarantee, and no recourse if it goes wrong. Independent riders have no steady source of jobs.
 
-CloseBuy connects all three sides on one platform: vendors list and sell, customers order and pay under escrow protection, and riders deliver — with the platform operator retaining oversight of the whole flow.
+CloseBuy turns that into one experience: **search → discover → order → pay → deliver.** Vendors get a digital storefront, orders and payment infrastructure, and delivery support without giving up what they're already doing elsewhere — this is an additional channel, not a replacement. Customers get one trustworthy place to find what's nearby and have it arrive. Riders get a steady stream of paid jobs. The platform operator retains oversight of the whole flow, including the money.
+
+**The ambition is bigger than any one order.** CloseBuy isn't "another online store" — it's meant to become **local commerce infrastructure**: the place people go to find practically anything they need from businesses near them, across categories, not just one vertical. That framing matters for a decision already made in §3.3 (category is configurable, not hardcoded) and for how the platform expands geographically — see §2a.
 
 ## 2. Actors
 
@@ -20,6 +22,16 @@ CloseBuy connects all three sides on one platform: vendors list and sell, custom
 | **Superadmin** | Admin dashboard | Onboard and vet actors, resolve disputes, control money and config |
 
 A fifth implicit actor is the **system itself**, which runs dispatch, payouts, notifications and scheduled reconciliation without human involvement.
+
+## 2a. Launch geography
+
+A marketplace needs a working density of customers, vendors and delivery demand in one place before it needs scale — a thousand users spread across a country prove nothing; a few hundred concentrated in one community can. The sequence, in order:
+
+**Riverpark → Abuja → Lagos → broader Nigeria.**
+
+Riverpark is deliberately the first target: small enough to reach saturation with a modest vendor count, concentrated enough that delivery distances stay short (which also keeps R-08's parked hub-dispatch question low-stakes for a long time — most early orders will be short single-vendor trips regardless). Expansion to the next stage happens once the current one is actually working, not on a calendar date. This sequencing is the primary input to how stage 03 (Planning) stages the rollout — not something resolved further in this document.
+
+This sharpens assumption A-01: single-country is true, but "launch" more precisely means one neighbourhood first.
 
 ## 3. Domain decisions that shape everything downstream
 
@@ -53,18 +65,35 @@ Customer payment is captured by the platform and held. Funds are released to the
 
 **Consequence — and it is a serious one:** holding customer funds may constitute regulated activity under CBN rules. See Risk R-01.
 
+### 3.2a Commission and the Founding Vendor Program
+
+Commission is **per fulfilment type, platform-wide** — not per category, not tiered by volume (resolves Q-01):
+
+| Fulfilment type | Commission |
+|---|---|
+| Pickup | 5% |
+| Delivery | 10% |
+
+The gap reflects reality, not an arbitrary split: a delivery order costs the platform a rider job to coordinate; a pickup order doesn't. Commission is strictly separate from two other deductions that touch the same order — **payment gateway processing fees** (the gateway's own cut, a cost of accepting payment at all) and **the delivery fee itself** (which passes to the rider, not to CloseBuy). CloseBuy's revenue on an order is the commission, full stop.
+
+**Founding Vendor Program** — the primary answer to cold start (R-04): a vendor approved during the launch window pays **0% commission for their first 3 months**, reverting to the standard rates above afterward. Bundled with priority onboarding, launch promotion, featured placement, early feature access and a direct feedback channel to the team. The pitch to an early Riverpark vendor is explicitly: join early, get established before the marketplace gets crowded, grow with us.
+
+No monthly subscription, no setup cost, ever — vendors are only charged when they make a sale.
+
 ### 3.3 Category determines the rules
 
-A mixed marketplace cannot have one fulfilment flow. Each vendor category carries its own configuration:
+A mixed marketplace cannot have one fulfilment flow. Each vendor category carries its own configuration. The category list is illustrative, not exhaustive — category is a first-class configurable entity (admin-managed, US-A-02), not a hardcoded enum branch, and is expected to grow well past this table as the platform's "practically anything nearby" ambition (§1) plays out:
 
 | Category | Prep time | Delivery window | Returnable | Special handling |
 |---|---|---|---|---|
-| Food | Minutes | Immediate | No | Temperature, tight SLA |
-| Retail goods | Hours | Same/next day | Yes | Standard |
+| Food & groceries | Minutes | Immediate | Partial | Substitutions, weight pricing, temperature, tight SLA |
+| Fashion | Hours | Same/next day | Yes | Standard |
+| Beauty | Hours | Same/next day | Yes | Standard |
+| Electronics | Hours | Same/next day | Yes, subject to seal/condition | Higher-value proof-of-delivery |
+| Home | Hours | Same/next day | Yes | Standard |
 | Pharmacy | Minutes | Immediate | No | Licence check, restricted items |
-| Groceries | Minutes | Immediate | Partial | Substitutions, weight pricing |
 
-Category is a first-class configurable entity, not a hardcoded enum branch.
+Pharmacy remains listed because the regulatory handling it needs is real even though it wasn't named among the initial launch categories — better to keep the configuration model honest about it now than retrofit it under pressure later.
 
 ### 3.4 Addresses are map pins, not postal strings
 
@@ -149,6 +178,9 @@ Deferred deliberately, and recorded so they are not silently reintroduced:
 - Hub-scoped multi-vendor cart and split checkout — parked per §3.1, may return post-v1
 - Live rider position on a map for the customer — tracking is status-based; see 3.5
 - Automatic route optimisation or turn-by-turn navigation inside the rider app
+- Algorithmic/automated rider dispatch — v1 is an offer-and-accept open pool (resolves Q-03)
+- Vendor-facing sales analytics dashboard, beyond the existing earnings/payout view (US-V-07)
+- Customer favourites, wallet, and referral system
 - Public API for third parties
 
 ## 6. Non-functional requirements
@@ -174,7 +206,7 @@ Recorded so that, if any turns out to be false, we know exactly what to revisit.
 
 | ID | Assumption |
 |---|---|
-| A-01 | Launch is single-country, single-currency (NGN) |
+| A-01 | Launch is single-country, single-currency (NGN), and single-neighbourhood first — Riverpark (§2a) |
 | A-02 | Riders are independent contractors, not employees |
 | A-03 | Vendors hold their own stock; the platform never takes possession of goods |
 | A-04 | Delivery is intra-city; no inter-state logistics in v1 |
@@ -190,7 +222,7 @@ Recorded so that, if any turns out to be false, we know exactly what to revisit.
 | R-02 | ~~Rider background GPS unreliable on PWA~~ **Largely retired** by the status-based tracking decision in 3.5 | Low | Location is read only in the foreground at pickup and delivery. Revisit only if live tracking is reintroduced |
 | R-07 | Without live tracking, customers phone support asking "where is my order?" | Support load | Proactive notification on every state change; show a clear expected-by window rather than a silent gap |
 | R-03 | Cash-on-delivery reconciliation; riders holding platform money | Financial loss | Per-rider cash ledger, float limits, mandatory remittance before new jobs |
-| R-04 | Marketplace cold start — no vendors means no customers | Launch failure | Seed one category in one area before widening |
+| R-04 | Marketplace cold start — no vendors means no customers | Launch failure | Seed Riverpark specifically before widening (§2a); the Founding Vendor Program (§3.2a) exists largely to solve this side of cold start |
 | R-05 | Fraudulent vendors or fake listings | Trust collapse | Mandatory KYC, staged trust levels, payout delay for new vendors |
 | R-06 | Solo developer, four surfaces | Schedule overrun | Staged roadmap in stage 03; shared component library; each surface reaches usable state before the next begins |
 | R-08 | Hub multi-vendor dispatch was scoped out (§3.1) specifically to avoid this: order-splitting, multi-stop pickup and cross-vendor readiness timeouts are real complexity a solo build shouldn't carry before the single-vendor path is proven | N/A — parked, not active | If revisited, re-open with the surcharge amount, hub wait-timeout and late-vendor penalty policy decided up front, and treat it as its own milestone rather than folding it into the walking skeleton |
@@ -200,10 +232,12 @@ Recorded so that, if any turns out to be false, we know exactly what to revisit.
 
 | ID | Question |
 |---|---|
-| Q-01 | Commission model — flat percentage, per-category, or tiered by volume? |
 | Q-02 | Who bears the delivery fee — customer, vendor, or split? |
-| Q-03 | Are riders assigned automatically by proximity, or do they claim from an open pool? |
 | Q-04 | Is there a customer wallet, or is every payment a fresh transaction? (Bears directly on R-01) |
 | Q-05 | Self-service vendor signup with later vetting, or admin-invite only at launch? |
+
+**Resolved:**
+- **Q-01** (commission model) — per fulfilment type, not per-category or tiered. See §3.2a.
+- **Q-03** (rider assignment) — open pool, not automated proximity dispatch: on-duty riders see job offers and accept or decline (US-R-03). Algorithmic auto-dispatch is out of scope for v1 (§5) — a small early rider pool doesn't need it, and it's a meaningfully harder problem to build correctly than an offer/accept model.
 
 Q-06–Q-08 (multi-stop surcharge, hub wait-timeout, late-vendor penalty) were parked with the hub model — see R-08.

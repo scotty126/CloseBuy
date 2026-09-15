@@ -180,7 +180,8 @@ As a vendor I want to signal that an order is ready so that a rider is dispatche
 As a vendor I want to see what I have earned and when I will be paid.
 
 - A running balance separates funds held in escrow from funds cleared for payout
-- Each order shows gross value, commission deducted and net payable
+- Each order shows gross value, commission deducted (0% if the Founding Vendor Program waiver is still active) and net payable
+- While the founding-vendor waiver is active, its end date is shown clearly so the vendor isn't surprised when commission starts
 - Past payouts are listed with date, amount and reference
 - Figures reconcile exactly against admin records — no rounding drift
 
@@ -261,12 +262,14 @@ As an operator I want to review vendor and rider applications so that only legit
 - Approval or rejection is one action, with a mandatory reason on rejection
 - The decision, the operator and the timestamp are written to the audit log
 - Approval immediately grants the relevant surface
+- Approving a vendor while the Founding Vendor Program is active starts their 3-month 0% commission window automatically (brief §3.2a); this is visible on the vendor's own dashboard so they know when it ends
 
 ### US-A-02 — Configure the platform · **M**
 As an operator I want to control categories, commission and fees without a code deploy.
 
 - Categories can be created, renamed and deactivated
-- Commission is configurable per category
+- The pickup and delivery commission rates are each configurable independently (brief §3.2a) — commission is not set per category
+- The Founding Vendor Program's waiver duration (default 3 months) and whether it's currently open to new vendors are both configurable
 - Delivery fee rules and the vendor accept-window are configurable
 - A configuration change is versioned and never alters orders already placed
 
