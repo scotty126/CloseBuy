@@ -7,6 +7,7 @@ import { serializeUser } from "../../lib/serialize-user.js";
 
 /** Vendor / rider / admin — phone + OTP (brief §3.1b). Customer auth lives in ./customer/routes.js instead. */
 export async function staffAuthRoutes(app: FastifyInstance) {
+  const termiiConfigured = Boolean(app.env.TERMII_API_KEY && app.env.TERMII_SENDER_ID);
   const termii = createTermiiClient(app.env.TERMII_API_KEY, app.env.TERMII_SENDER_ID);
   const authService = createAuthService({
     prisma: app.prisma,
@@ -27,6 +28,11 @@ export async function staffAuthRoutes(app: FastifyInstance) {
     });
 
     scoped.post("/auth/otp/request", async (req, reply) => {
+      if (!termiiConfigured) {
+        return reply
+          .code(503)
+          .send({ error: { code: "TERMII_NOT_CONFIGURED", message: "OTP sign-in isn't set up yet." } });
+      }
       const body = otpRequestSchema.parse(req.body);
       await authService.requestOtp(body.phone);
       return reply.code(204).send();
@@ -34,6 +40,11 @@ export async function staffAuthRoutes(app: FastifyInstance) {
   });
 
   app.post("/auth/otp/verify", async (req, reply) => {
+    if (!termiiConfigured) {
+      return reply
+        .code(503)
+        .send({ error: { code: "TERMII_NOT_CONFIGURED", message: "OTP sign-in isn't set up yet." } });
+    }
     const body = otpVerifySchema.parse(req.body);
 
     try {

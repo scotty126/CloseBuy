@@ -17,7 +17,27 @@ export interface TermiiClient {
   verifyOtp(pinId: string, code: string): Promise<{ verified: boolean }>;
 }
 
-export function createTermiiClient(apiKey: string, senderId: string): TermiiClient {
+/**
+ * Returns a client that throws a clear, specific error the moment it's
+ * actually used, rather than at boot, when either credential is missing —
+ * same pattern as createEmailClient (customer/email.ts). A registered
+ * Sender ID needs CAC business verification, which can take a while; there
+ * is no reason vendor/rider onboarding UI (unbuilt regardless, M1) or
+ * anything else should be blocked on that in the meantime.
+ */
+export function createTermiiClient(apiKey: string | undefined, senderId: string | undefined): TermiiClient {
+  if (!apiKey || !senderId) {
+    const missingCredentialsError = () => {
+      throw new Error(
+        "TERMII_API_KEY / TERMII_SENDER_ID are not set — see .env.example. Vendor/rider/admin OTP cannot send without them.",
+      );
+    };
+    return {
+      sendOtp: async () => missingCredentialsError(),
+      verifyOtp: async () => missingCredentialsError(),
+    };
+  }
+
   return {
     async sendOtp(phone: string) {
       const res = await fetch(`${TERMII_BASE_URL}/sms/otp/send`, {
@@ -29,8 +49,8 @@ export function createTermiiClient(apiKey: string, senderId: string): TermiiClie
           to: phone,
           from: senderId,
           channel: "generic",
-          pin_attempts: 5, // US-C-01: 5 failed attempts locks further attempts
-          pin_time_to_live: 10, // minutes — US-C-01: code expires after 10 minutes
+          pin_attempts: 5, // US-V-01 / US-R-01: 5 failed attempts locks further attempts
+          pin_time_to_live: 10, // minutes — code expires after 10 minutes
           pin_length: 6,
           pin_placeholder: "< 123456 >",
           message_text: "Your CloseBuy verification code is < 123456 >. It expires in 10 minutes.",

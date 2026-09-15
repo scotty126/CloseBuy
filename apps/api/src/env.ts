@@ -18,10 +18,13 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
 
   // Termii — vendor/rider/admin OTP + guest order tracking SMS (brief
-  // §3.1b). Get a free account at termii.com; sandbox mode works without a
-  // paid sender ID for local development.
-  TERMII_API_KEY: z.string().min(1),
-  TERMII_SENDER_ID: z.string().min(1),
+  // §3.1b). Optional: a registered Sender ID needs CAC business
+  // verification docs, which can take a while to sort out — the app boots
+  // and everything else works without this; only vendor/rider/admin sign-in
+  // actually needs it, and fails loudly and specifically right there, not
+  // at boot.
+  TERMII_API_KEY: z.string().optional(),
+  TERMII_SENDER_ID: z.string().optional(),
 
   // Password hashing pepper — argon2's own salt is per-hash and stored
   // alongside it, this is an additional server-side secret so a leaked DB
