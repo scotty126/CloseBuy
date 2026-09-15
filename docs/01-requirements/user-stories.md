@@ -1,4 +1,4 @@
-# OmniDash — User Stories & Acceptance Criteria
+# NearBuy — User Stories & Acceptance Criteria
 
 - **Status:** Draft
 - **Date:** 2026-09-15
@@ -67,7 +67,7 @@ As a customer I want to give my location as a map pin and a description so that 
 As a customer I want to pay by card, transfer or cash on delivery so that I can use whichever means I have.
 
 - Checkout shows an itemised total: goods, delivery fee and any discount
-- Card and transfer are processed by the payment gateway; card details never reach OmniDash servers
+- Card and transfer are processed by the payment gateway; card details never reach NearBuy servers
 - Cash on delivery is offered only where the vendor permits it
 - A successful payment creates the order in `PAID`
 - A failed payment leaves the cart intact and states why

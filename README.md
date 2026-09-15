@@ -1,4 +1,4 @@
-# OmniDash
+# NearBuy
 
 A B2C multi-vendor e-commerce marketplace with integrated delivery logistics.
 

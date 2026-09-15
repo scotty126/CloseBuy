@@ -1,4 +1,4 @@
-# OmniDash — Product Brief
+# NearBuy — Product Brief
 
 - **Status:** Draft
 - **Date:** 2026-09-15
@@ -8,7 +8,7 @@
 
 In West African markets, small and mid-sized sellers have inventory and customers have demand, but the connection between them is fragmented. Sellers transact over Instagram and WhatsApp with no order management, no payment guarantee and no delivery network. Buyers have no protection against paying for goods that never arrive. Independent riders have no steady source of jobs.
 
-OmniDash connects all three sides on one platform: vendors list and sell, customers order and pay under escrow protection, and riders deliver — with the platform operator retaining oversight of the whole flow.
+NearBuy connects all three sides on one platform: vendors list and sell, customers order and pay under escrow protection, and riders deliver — with the platform operator retaining oversight of the whole flow.
 
 ## 2. Actors
 
