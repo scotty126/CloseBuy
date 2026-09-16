@@ -14,7 +14,8 @@
     "test": "turbo run test",
     "db:generate": "pnpm --filter @closebuy/api prisma generate",
     "db:migrate": "pnpm --filter @closebuy/api prisma migrate dev",
-    "db:validate": "pnpm --filter @closebuy/api prisma validate"
+    "db:validate": "pnpm --filter @closebuy/api prisma validate",
+    "db:seed": "pnpm --filter @closebuy/api db:seed"
   },
   "devDependencies": {
     "turbo": "^2.3.0",
