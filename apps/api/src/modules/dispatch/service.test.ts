@@ -53,6 +53,12 @@ function createFakePrisma() {
           if (where.fulfilmentType && o.fulfilmentType !== where.fulfilmentType) return false;
           return true;
         }),
+      findFirst: async ({ where }: any) =>
+        [...orders.values()].find((o) => {
+          if (where.riderId !== undefined && o.riderId !== where.riderId) return false;
+          if (where.status?.in && !where.status.in.includes(o.status)) return false;
+          return true;
+        }) ?? null,
       update: async ({ where, data }: any) => {
         const o = orders.get(where.id);
         const updated = { ...o, ...applyOps(o, data) };
@@ -279,5 +285,20 @@ describe("dispatch service", () => {
     expect(earnings.pendingMinor).toBe(50000);
     expect(earnings.cashBalanceMinor).toBe(150000);
     expect(earnings.deliveries).toHaveLength(1);
+  });
+
+  it("getActiveJob: finds the rider's current in-progress order (RIDER_ASSIGNED or IN_TRANSIT), with vendor pickup details, and nothing once it's DELIVERED", async () => {
+    seedApprovedOnDutyRider(prisma);
+    prisma.__state.orders.set(ORDER_ID, {
+      id: ORDER_ID, riderId: RIDER_ID, status: "RIDER_ASSIGNED", fulfilmentType: "delivery",
+      vendor: { businessName: "Ada's Kitchen" },
+    });
+
+    const active = await service().getActiveJob(RIDER_USER_ID);
+    expect(active?.id).toBe(ORDER_ID);
+    expect((active as any).vendor.businessName).toBe("Ada's Kitchen");
+
+    prisma.__state.orders.set(ORDER_ID, { ...prisma.__state.orders.get(ORDER_ID), status: "DELIVERED" });
+    expect(await service().getActiveJob(RIDER_USER_ID)).toBeNull();
   });
 });

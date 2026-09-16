@@ -68,11 +68,14 @@ export function OrderCard({ order, onChanged }: { order: OrderDto; onChanged: ()
         {!isPickup && order.deliveryLandmark && <> · {order.deliveryLandmark}</>}
       </div>
 
+      {order.status === "READY_FOR_PICKUP" && !isPickup && order.collectionCode && (
+        <div className="rounded-lg border-2 border-dashed border-primary px-3 py-2 text-center">
+          <p className="text-[10px] text-muted">Read this to the rider when they arrive</p>
+          <p className="text-xl font-bold tracking-widest text-primary">{order.collectionCode}</p>
+        </div>
+      )}
       {order.status === "RIDER_ASSIGNED" && order.rider && (
         <p className="text-xs text-muted">Rider: {order.rider.fullName} · {order.rider.user.phone}</p>
-      )}
-      {order.status === "READY_FOR_PICKUP" && !isPickup && (
-        <p className="text-xs text-warning">Waiting for a rider to accept this delivery.</p>
       )}
       {order.status === "IN_TRANSIT" && <p className="text-xs text-muted">Out for delivery.</p>}
 

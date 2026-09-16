@@ -133,9 +133,23 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
       if (count === 0) throw new JobUnavailableError();
 
       await writeTransition(prisma, orderId, "READY_FOR_PICKUP", "RIDER_ASSIGNED", userId);
-      const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+      const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { vendor: true } });
       await notifyCustomer(order, "order_rider_assigned", { orderId });
       return order;
+    },
+
+    /**
+     * US-R-04/05 — reconstructs the rider's current job on load (e.g.
+     * after a refresh mid-delivery). Nothing else exposes "what am I
+     * currently carrying" — `listOpenJobs` only ever returns *unclaimed*
+     * jobs, so a rider's own active one never appears there once accepted.
+     */
+    async getActiveJob(userId: string) {
+      const rider = await getOwnRider(userId);
+      return prisma.order.findFirst({
+        where: { riderId: rider.id, status: { in: ["RIDER_ASSIGNED", "IN_TRANSIT"] } },
+        include: { vendor: true },
+      });
     },
 
     /** No penalty (US-R-03) — see the class comment on listOpenJobs for why this doesn't persist anything. */

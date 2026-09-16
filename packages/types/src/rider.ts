@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { RiderStatus, OrderStatus, PaymentMethod } from "./enums.js";
 
 // US-R-01 — same shape of decision as vendor onboarding (catalog.ts):
 // identity is already established via phone OTP (staff auth), this just
@@ -45,3 +46,54 @@ export const deliveryFailedSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 export type DeliveryFailedInput = z.infer<typeof deliveryFailedSchema>;
+
+// ── Response shapes ─────────────────────────────────────────────────────
+// Hand-written wire contracts, not re-exported from Prisma — see admin.ts
+// for why.
+
+export interface RiderProfileDto {
+  id: string;
+  userId: string;
+  fullName: string;
+  vehicleType: string;
+  idDocumentUrl: string | null;
+  bankAccountRef: string | null;
+  status: RiderStatus;
+  onDuty: boolean;
+  cashBalanceMinor: number;
+  createdAt: string;
+}
+
+// GET /riders/me/offers (unclaimed), the result of POST .../accept, and
+// GET /riders/me/active-job (already claimed) all share this shape — the
+// backend never models a separate "offer" entity (dispatch/service.ts),
+// an unclaimed READY_FOR_PICKUP delivery order *is* the offer.
+export interface RiderJobDto {
+  id: string;
+  vendorId: string;
+  status: OrderStatus;
+  collectionCode: string | null;
+  paymentMethod: PaymentMethod;
+  totalMinor: number;
+  deliveryFeeMinor: number;
+  deliveryLat: number;
+  deliveryLng: number;
+  deliveryLandmark: string;
+  contactPhone: string;
+  alternateContactPhone: string | null;
+  updatedAt: string;
+  vendor: {
+    businessName: string;
+    pickupLat: number;
+    pickupLng: number;
+    pickupLandmark: string;
+    pickupPhone: string;
+  };
+}
+
+export interface RiderEarningsDto {
+  clearedMinor: number;
+  pendingMinor: number;
+  cashBalanceMinor: number;
+  deliveries: Array<{ orderId: string; amountMinor: number; completedAt: string }>;
+}

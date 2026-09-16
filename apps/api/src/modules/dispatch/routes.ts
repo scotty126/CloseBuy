@@ -76,6 +76,10 @@ export async function dispatchRoutes(app: FastifyInstance) {
     return reply.send({ offers: await dispatch.listOpenJobs(req.authUser!.sub) });
   });
 
+  app.get("/riders/me/active-job", { preHandler: requireAuth(["rider"]) }, async (req, reply) => {
+    return reply.send({ order: await dispatch.getActiveJob(req.authUser!.sub) });
+  });
+
   app.post("/riders/me/offers/:id/accept", { preHandler: requireAuth(["rider"]) }, async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
