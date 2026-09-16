@@ -347,13 +347,23 @@ model Order {
   fulfilmentType FulfilmentType // brief §3.1a
   scheduledFor   DateTime?      // null = as soon as possible
 
-  // Set when the order reaches READY_FOR_PICKUP. One field covers both
-  // directions of the same underlying action ("someone collects the goods
-  // from the vendor's counter and enters a code to prove it"): a pickup
-  // order's customer shows it (US-C-07/US-V-06); a delivery order's rider
-  // shows it instead (US-R-04/US-V-06). Never the same value as
-  // trackingToken — this one is meant to be read aloud at a counter.
+  // Set when the order reaches READY_FOR_PICKUP. For a pickup order, the
+  // customer reads this to the vendor at the counter (US-C-07/US-V-06). For
+  // a delivery order, the *vendor* reads it to the rider at handoff
+  // (US-R-04/US-V-06) — the rider's own app deliberately never displays
+  // this value (dispatch/service.ts's rider-facing reads all omit it), or
+  // typing it back would prove nothing: the whole point is that the code
+  // has to come from the vendor in person, not from the rider's own
+  // screen. Never the same value as trackingToken.
   collectionCode String?
+
+  // Delivery orders only, set alongside collectionCode at the same
+  // READY_FOR_PICKUP moment. The customer reads *this* one to the rider at
+  // drop-off (US-R-05) — the second handoff check, confirming the rider
+  // is delivering to the right person, not just that they're carrying the
+  // right order. Same reasoning as collectionCode: never exposed in any
+  // rider-facing API response, or the rider could skip asking entirely.
+  deliveryCode String?
 
   // The authoritative delivery location for THIS order — a snapshot, not a
   // live reference, for the same reason OrderItem snapshots price (US-V-03):

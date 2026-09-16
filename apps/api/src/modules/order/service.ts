@@ -5,6 +5,7 @@ import type { OrderQueue } from "./jobs.js";
 import type { NotificationService } from "../notifications/service.js";
 import { ConfigKeys } from "../../lib/config.js";
 import { isWithinServiceArea } from "../../lib/geo.js";
+import { omitFields } from "../../lib/redact.js";
 import { escrowHoldEntries, computeEscrowSplit, escrowReleaseEntries, refundEntries, postLedgerEntries } from "./ledger.js";
 import type { CheckoutInput, RejectOrderInput, ConfirmPickupInput, RateOrderInput, DisputeOrderInput, NotificationType } from "@closebuy/types";
 
@@ -62,8 +63,8 @@ export interface OrderServiceDeps {
   customerAppUrl: string; // Monnify's redirectUrl lands here, on the tracking page
 }
 
-function generateCollectionCode(): string {
-  return String(randomInt(100000, 999999)); // 6 digits, matches US-R-04/US-C-07's "short code"
+function generateShortCode(): string {
+  return String(randomInt(100000, 999999)); // 6 digits — used for both collectionCode and deliveryCode
 }
 
 // Shared by getOrder/getOrderByTrackingToken — exactly what the tracking
@@ -267,6 +268,13 @@ export function createOrderService(deps: OrderServiceDeps) {
         (auth.role === "rider" && order.riderId && (await prisma.riderProfile.findUnique({ where: { userId: auth.sub } }))?.id === order.riderId);
       if (!owns) throw new ForbiddenError();
 
+      // Both codes exist so the right party can be told them in person —
+      // reading either back from your own screen defeats that (see the
+      // schema comment on Order.collectionCode/deliveryCode). A vendor
+      // still needs to see collectionCode (they're the one reading it
+      // aloud); a rider needs neither, ever.
+      if (auth.role === "rider") return omitFields(order, ["collectionCode", "deliveryCode"]);
+      if (auth.role === "vendor") return omitFields(order, ["deliveryCode"]);
       return order;
     },
 
@@ -301,11 +309,15 @@ export function createOrderService(deps: OrderServiceDeps) {
     async listVendorOrders(vendorUserId: string) {
       const vendor = await prisma.vendorProfile.findUnique({ where: { userId: vendorUserId } });
       if (!vendor) throw new VendorProfileNotFoundError();
-      return prisma.order.findMany({
+      const orders = await prisma.order.findMany({
         where: { vendorId: vendor.id },
         include: { items: true, transitions: { orderBy: { createdAt: "asc" } } },
         orderBy: { createdAt: "desc" },
       });
+      // collectionCode stays — the vendor generates it and reads it aloud
+      // to the rider (US-V-06). deliveryCode is the customer's to the
+      // rider; the vendor has no part in that handoff.
+      return orders.map((o) => omitFields(o, ["deliveryCode"]));
     },
 
     /**
@@ -408,18 +420,25 @@ export function createOrderService(deps: OrderServiceDeps) {
       const order = await getOwnedVendorOrder(vendorUserId, orderId);
       if (order.status !== "PREPARING") throw new InvalidOrderStateError(`Cannot mark ready an order in status ${order.status}.`);
 
-      const collectionCode = generateCollectionCode();
-      await prisma.order.update({ where: { id: orderId }, data: { status: "READY_FOR_PICKUP", collectionCode } });
+      const collectionCode = generateShortCode();
+      // Delivery orders get a second code here too — the customer reads
+      // *this* one to the rider at drop-off (US-R-05), the second of two
+      // handoff checks. Generated now rather than later so it's ready
+      // whenever the customer first looks, no matter when a rider claims
+      // the job.
+      const deliveryCode = order.fulfilmentType === "delivery" ? generateShortCode() : null;
+      await prisma.order.update({ where: { id: orderId }, data: { status: "READY_FOR_PICKUP", collectionCode, deliveryCode } });
       await transition(orderId, "PREPARING", "READY_FOR_PICKUP", "vendor", vendorUserId);
 
-      // Pickup: the code IS the notification payload — it's what the
-      // customer shows at the counter (US-C-07). Delivery: no code here
-      // (that copy goes to whichever rider claims it, Dispatch), just
-      // "ready, dispatching a rider" — Dispatch picks up from here.
+      // Pickup: collectionCode is what the customer shows at the counter
+      // (US-C-07). Delivery: deliveryCode is what the customer reads to
+      // the rider at their door — collectionCode itself never reaches the
+      // customer (or Dispatch) via notification; the vendor's own screen
+      // is where that one lives (US-V-06).
       await notifyCustomer(
         order,
         "order_ready_for_pickup",
-        order.fulfilmentType === "pickup" ? { orderId, collectionCode } : { orderId },
+        order.fulfilmentType === "pickup" ? { orderId, collectionCode } : { orderId, deliveryCode },
       );
     },
 

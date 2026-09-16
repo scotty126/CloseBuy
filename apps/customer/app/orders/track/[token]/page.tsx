@@ -141,6 +141,13 @@ export default function OrderTrackingPage() {
         </div>
       )}
 
+      {!isPickup && order.deliveryCode && ["READY_FOR_PICKUP", "RIDER_ASSIGNED", "IN_TRANSIT"].includes(order.status) && (
+        <div className="rounded-xl border-2 border-dashed border-primary p-4 text-center">
+          <p className="text-xs text-muted">Read this to your rider when they arrive</p>
+          <p className="text-3xl font-bold tracking-widest text-primary">{order.deliveryCode}</p>
+        </div>
+      )}
+
       {!isPickup && order.rider && (
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <p className="text-xs text-muted">Your rider</p>

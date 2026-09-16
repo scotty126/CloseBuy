@@ -6,6 +6,7 @@ import {
   RiderNotFoundError,
   JobUnavailableError,
   InvalidCollectionCodeError,
+  InvalidDeliveryCodeError,
   CashAmountMismatchError,
 } from "./service.js";
 import type { OrderQueue } from "../order/jobs.js";
@@ -138,6 +139,7 @@ function seedOpenOrder(prisma: ReturnType<typeof createFakePrisma>, overrides?: 
     fulfilmentType: "delivery",
     riderId: null,
     collectionCode: "123456",
+    deliveryCode: "654321",
     paymentMethod: "card",
     totalMinor: 500000,
     deliveryFeeMinor: 50000,
@@ -238,7 +240,7 @@ describe("dispatch service", () => {
     await service().confirmCollection(RIDER_USER_ID, ORDER_ID, { code: "123456" });
     expect(notifications.notify).toHaveBeenCalledWith(CUSTOMER_USER_ID, "order_in_transit", { orderId: ORDER_ID });
 
-    await service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John" });
+    await service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John", code: "654321" });
     expect(notifications.notify).toHaveBeenCalledWith(CUSTOMER_USER_ID, "order_delivered", { orderId: ORDER_ID });
 
     (notifications.notify as any).mockClear();
@@ -251,10 +253,30 @@ describe("dispatch service", () => {
     seedApprovedOnDutyRider(prisma);
     seedOpenOrder(prisma, { status: "IN_TRANSIT", riderId: RIDER_ID, paymentMethod: "card" });
 
-    const order = await service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John" });
+    const order = await service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John", code: "654321" });
     expect(order.status).toBe("DELIVERED");
     expect(queue.scheduleEscrowRelease).toHaveBeenCalledWith(ORDER_ID, expect.any(Number));
     expect(prisma.__state.ledgerEntries).toHaveLength(0); // nothing to post — card/transfer already has its escrow entries from checkout
+  });
+
+  it("confirmDelivery: the customer's code must match exactly — the second handoff check, confirming the right person (US-R-05)", async () => {
+    seedApprovedOnDutyRider(prisma);
+    seedOpenOrder(prisma, { status: "IN_TRANSIT", riderId: RIDER_ID, paymentMethod: "card" });
+
+    await expect(
+      service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John", code: "000000" }),
+    ).rejects.toThrow(InvalidDeliveryCodeError);
+    // A rejected attempt must not have moved the order.
+    expect(prisma.__state.orders.get(ORDER_ID).status).toBe("IN_TRANSIT");
+
+    // recipientName/photo alone, with no code at all, is also rejected —
+    // this isn't an alternate path around the code, reportDeliveryFailed is.
+    await expect(
+      service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John" }),
+    ).rejects.toThrow(InvalidDeliveryCodeError);
+
+    const order = await service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John", code: "654321" });
+    expect(order.status).toBe("DELIVERED");
   });
 
   it("confirmDelivery: cash on delivery requires the exact total, and posts the collection ledger entries when correct", async () => {
@@ -262,16 +284,41 @@ describe("dispatch service", () => {
     seedOpenOrder(prisma, { status: "IN_TRANSIT", riderId: RIDER_ID, paymentMethod: "cash_on_delivery", totalMinor: 500000 });
 
     await expect(
-      service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John", cashCollectedMinor: 400000 }),
+      service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John", code: "654321", cashCollectedMinor: 400000 }),
     ).rejects.toThrow(CashAmountMismatchError);
     // Rejected attempt must not have moved the order or touched the rider's balance.
     expect(prisma.__state.orders.get(ORDER_ID).status).toBe("IN_TRANSIT");
     expect(prisma.__state.riders.get(RIDER_ID).cashBalanceMinor).toBe(0);
 
-    const order = await service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John", cashCollectedMinor: 500000 });
+    const order = await service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John", code: "654321", cashCollectedMinor: 500000 });
     expect(order.status).toBe("DELIVERED");
     expect(prisma.__state.riders.get(RIDER_ID).cashBalanceMinor).toBe(500000); // now owed back to the platform (US-R-08)
     expect(prisma.__state.ledgerEntries).toHaveLength(2); // codCollectionEntries — debit rider_cash_float, credit customer_escrow
+  });
+
+  it("rider-facing responses never include collectionCode or deliveryCode, at any stage of the job", async () => {
+    seedApprovedOnDutyRider(prisma);
+    seedOpenOrder(prisma, { customerId: CUSTOMER_ID });
+
+    const offers = await service().listOpenJobs(RIDER_USER_ID);
+    expect(offers[0]).not.toHaveProperty("collectionCode");
+    expect(offers[0]).not.toHaveProperty("deliveryCode");
+
+    const claimed = await service().claimJob(RIDER_USER_ID, ORDER_ID);
+    expect(claimed).not.toHaveProperty("collectionCode");
+    expect(claimed).not.toHaveProperty("deliveryCode");
+
+    const active = await service().getActiveJob(RIDER_USER_ID);
+    expect(active).not.toHaveProperty("collectionCode");
+    expect(active).not.toHaveProperty("deliveryCode");
+
+    const collected = await service().confirmCollection(RIDER_USER_ID, ORDER_ID, { code: "123456" });
+    expect(collected).not.toHaveProperty("collectionCode");
+    expect(collected).not.toHaveProperty("deliveryCode");
+
+    const delivered = await service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John", code: "654321" });
+    expect(delivered).not.toHaveProperty("collectionCode");
+    expect(delivered).not.toHaveProperty("deliveryCode");
   });
 
   it("earnings: separates cleared (COMPLETED) from pending (still in flight), and surfaces the cash float", async () => {

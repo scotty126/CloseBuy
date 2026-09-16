@@ -15,6 +15,7 @@ import {
   JobUnavailableError,
   OrderNotFoundError,
   InvalidCollectionCodeError,
+  InvalidDeliveryCodeError,
   CashAmountMismatchError,
 } from "./service.js";
 
@@ -131,6 +132,9 @@ export async function dispatchRoutes(app: FastifyInstance) {
       }
       if (err instanceof JobUnavailableError) {
         return reply.code(422).send({ error: { code: "INVALID_STATE", message: err.message } });
+      }
+      if (err instanceof InvalidDeliveryCodeError) {
+        return reply.code(400).send({ error: { code: "INVALID_DELIVERY_CODE", message: err.message } });
       }
       if (err instanceof CashAmountMismatchError) {
         return reply.code(400).send({ error: { code: "CASH_MISMATCH", message: err.message } });

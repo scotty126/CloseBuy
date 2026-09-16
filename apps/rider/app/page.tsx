@@ -251,8 +251,8 @@ function DeliveryStep({ order, onChanged }: { order: RiderJobDto; onChanged: () 
     e.preventDefault();
     setError(null);
 
-    if (!recipientName.trim() && !code.trim()) {
-      setError("Enter the recipient's name or a confirmation code.");
+    if (code.trim().length !== 6) {
+      setError("Ask the customer to read out their 6-digit code — it has to match before you can confirm.");
       return;
     }
     const cashCollectedMinor = isCod ? Math.round(Number(cashCollected) * 100) : undefined;
@@ -265,7 +265,7 @@ function DeliveryStep({ order, onChanged }: { order: RiderJobDto; onChanged: () 
     try {
       await dispatchApi.confirmDelivery(order.id, {
         recipientName: recipientName.trim() || undefined,
-        code: code.trim() || undefined,
+        code: code.trim(),
         cashCollectedMinor,
       });
       onChanged();
@@ -340,8 +340,15 @@ function DeliveryStep({ order, onChanged }: { order: RiderJobDto; onChanged: () 
       )}
 
       <form onSubmit={handleConfirm} className="flex flex-col gap-3">
-        <Input label="Recipient's name" value={recipientName} onChange={(e) => setRecipientName(e.target.value)} />
-        <Input label="Or a confirmation code, if given one" value={code} onChange={(e) => setCode(e.target.value)} />
+        <Input
+          label="Confirmation code (ask the customer to read it out)"
+          inputMode="numeric"
+          maxLength={6}
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          required
+        />
+        <Input label="Recipient's name (optional)" value={recipientName} onChange={(e) => setRecipientName(e.target.value)} />
         {isCod && (
           <Input
             label="Cash collected (₦)"
@@ -352,11 +359,11 @@ function DeliveryStep({ order, onChanged }: { order: RiderJobDto; onChanged: () 
           />
         )}
         {error && <p className="text-sm text-danger">{error}</p>}
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy || code.length !== 6}>
           {busy ? "Confirming…" : "Confirm delivery"}
         </Button>
         <button type="button" onClick={() => setReportingFailed(true)} className="text-xs text-muted underline">
-          Couldn&apos;t deliver this?
+          Couldn&apos;t get the code? Report a failed delivery
         </button>
       </form>
     </div>

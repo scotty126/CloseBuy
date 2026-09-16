@@ -24,6 +24,7 @@ function createFakePrisma() {
   const vendors = new Map<string, any>();
   const products = new Map<string, any>();
   const customers = new Map<string, any>();
+  const riders = new Map<string, any>();
   const orders = new Map<string, any>();
   const orderItems: any[] = [];
   const transitions: any[] = [];
@@ -67,6 +68,10 @@ function createFakePrisma() {
     customerProfile: {
       findUnique: async ({ where }: any) =>
         where.id ? (customers.get(where.id) ?? null) : [...customers.values()].find((c) => c.userId === where.userId) ?? null,
+    },
+    riderProfile: {
+      findUnique: async ({ where }: any) =>
+        where.id ? (riders.get(where.id) ?? null) : [...riders.values()].find((r) => r.userId === where.userId) ?? null,
     },
     product: {
       findMany: async ({ where }: any) => [...products.values()].filter((p) => where.id.in.includes(p.id)),
@@ -156,7 +161,7 @@ function createFakePrisma() {
     },
     $transaction: async (fn: any) => fn(db),
     // Exposed for assertions, not part of the real Prisma surface.
-    __state: { vendors, products, customers, orders, orderItems, transitions, payments, ledgerEntries, disputes },
+    __state: { vendors, products, customers, riders, orders, orderItems, transitions, payments, ledgerEntries, disputes },
   };
 
   function applyOps(existing: any, data: any) {
@@ -199,6 +204,8 @@ const VENDOR_USER_ID = "vendor_user_1";
 const PRODUCT_ID = "product_1";
 const CUSTOMER_ID = "customer_1";
 const CUSTOMER_USER_ID = "customer_user_1";
+const RIDER_ID = "rider_1";
+const RIDER_USER_ID = "rider_user_1";
 
 function seed(prisma: ReturnType<typeof createFakePrisma>, overrides?: { vendor?: any; product?: any }) {
   prisma.__state.vendors.set(VENDOR_ID, {
@@ -469,6 +476,97 @@ describe("order service — vendor actions (US-V-05/06)", () => {
 
   it("getVendorEarnings: throws for an account with no vendor profile", async () => {
     await expect(service().getVendorEarnings("nobody")).rejects.toThrow(VendorProfileNotFoundError);
+  });
+
+  it("markReady: generates a deliveryCode for delivery orders, never for pickup (US-R-05's second handoff check)", async () => {
+    const svc = service();
+
+    const { order: pickupOrder } = await checkedOutOrder(); // defaults to pickup
+    await svc.acceptOrder(VENDOR_USER_ID, pickupOrder.id);
+    await svc.markReady(VENDOR_USER_ID, pickupOrder.id);
+    const storedPickup = prisma.__state.orders.get(pickupOrder.id);
+    expect(storedPickup.collectionCode).toMatch(/^\d{6}$/);
+    expect(storedPickup.deliveryCode).toBeNull();
+
+    const { order: deliveryOrder } = await svc.checkout(
+      {
+        vendorId: VENDOR_ID,
+        items: [{ productId: PRODUCT_ID, quantity: 1 }],
+        fulfilmentType: "delivery",
+        paymentMethod: "cash_on_delivery",
+        contactPhone: "+2348012345678",
+        deliveryLat: 5,
+        deliveryLng: 5,
+        deliveryLandmark: "Blue gate",
+      },
+      null,
+      `idem-${Math.random()}`,
+    );
+    await svc.acceptOrder(VENDOR_USER_ID, deliveryOrder.id);
+    await svc.markReady(VENDOR_USER_ID, deliveryOrder.id);
+    const storedDelivery = prisma.__state.orders.get(deliveryOrder.id);
+    expect(storedDelivery.collectionCode).toMatch(/^\d{6}$/);
+    expect(storedDelivery.deliveryCode).toMatch(/^\d{6}$/);
+    expect(storedDelivery.deliveryCode).not.toBe(storedDelivery.collectionCode);
+  });
+
+  it("getOrder redacts collectionCode/deliveryCode by role — customer sees both, vendor keeps only collectionCode, rider sees neither", async () => {
+    const svc = service();
+    prisma.__state.riders.set(RIDER_ID, { id: RIDER_ID, userId: RIDER_USER_ID });
+
+    const { order } = await svc.checkout(
+      {
+        vendorId: VENDOR_ID,
+        items: [{ productId: PRODUCT_ID, quantity: 1 }],
+        fulfilmentType: "delivery",
+        paymentMethod: "cash_on_delivery",
+        contactPhone: "+2348012345678",
+        deliveryLat: 5,
+        deliveryLng: 5,
+        deliveryLandmark: "Blue gate",
+      },
+      { sub: CUSTOMER_USER_ID, role: "customer" },
+      `idem-${Math.random()}`,
+    );
+    await svc.acceptOrder(VENDOR_USER_ID, order.id);
+    await svc.markReady(VENDOR_USER_ID, order.id);
+    prisma.__state.orders.set(order.id, { ...prisma.__state.orders.get(order.id), riderId: RIDER_ID });
+
+    const asCustomer = await svc.getOrder(order.id, { sub: CUSTOMER_USER_ID, role: "customer" });
+    expect((asCustomer as any).collectionCode).toEqual(expect.any(String));
+    expect((asCustomer as any).deliveryCode).toEqual(expect.any(String));
+
+    const asVendor = await svc.getOrder(order.id, { sub: VENDOR_USER_ID, role: "vendor" });
+    expect((asVendor as any).collectionCode).toEqual(expect.any(String));
+    expect(asVendor).not.toHaveProperty("deliveryCode");
+
+    const asRider = await svc.getOrder(order.id, { sub: RIDER_USER_ID, role: "rider" });
+    expect(asRider).not.toHaveProperty("collectionCode");
+    expect(asRider).not.toHaveProperty("deliveryCode");
+  });
+
+  it("listVendorOrders never includes deliveryCode — that handoff doesn't involve the vendor", async () => {
+    const svc = service();
+    const { order } = await svc.checkout(
+      {
+        vendorId: VENDOR_ID,
+        items: [{ productId: PRODUCT_ID, quantity: 1 }],
+        fulfilmentType: "delivery",
+        paymentMethod: "cash_on_delivery",
+        contactPhone: "+2348012345678",
+        deliveryLat: 5,
+        deliveryLng: 5,
+        deliveryLandmark: "Blue gate",
+      },
+      null,
+      `idem-${Math.random()}`,
+    );
+    await svc.acceptOrder(VENDOR_USER_ID, order.id);
+    await svc.markReady(VENDOR_USER_ID, order.id);
+
+    const orders = await svc.listVendorOrders(VENDOR_USER_ID);
+    expect(orders[0]!.collectionCode).toEqual(expect.any(String));
+    expect(orders[0]).not.toHaveProperty("deliveryCode");
   });
 });
 

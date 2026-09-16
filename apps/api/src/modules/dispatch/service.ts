@@ -2,6 +2,7 @@ import type { PrismaClient, Order } from "@prisma/client";
 import type { OrderQueue } from "../order/jobs.js";
 import type { NotificationService } from "../notifications/service.js";
 import { ConfigKeys } from "../../lib/config.js";
+import { omitFields } from "../../lib/redact.js";
 import { codCollectionEntries, postLedgerEntries } from "../order/ledger.js";
 import type {
   RiderApplicationInput,
@@ -35,6 +36,11 @@ export class OrderNotFoundError extends Error {
 export class InvalidCollectionCodeError extends Error {
   constructor() {
     super("That code doesn't match.");
+  }
+}
+export class InvalidDeliveryCodeError extends Error {
+  constructor() {
+    super("That code doesn't match — confirm it with the customer.");
   }
 }
 export class CashAmountMismatchError extends Error {
@@ -77,6 +83,17 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
     await notifications.notify(customer.userId, type, payload);
   }
 
+  /**
+   * Every order this module ever hands back to a rider goes through this
+   * first. Both codes exist specifically so they have to come from
+   * someone else in person (the vendor, then the customer) — a rider who
+   * could just read them off their own screen wouldn't need to ask
+   * either, which defeats the point of having a code at all.
+   */
+  function redactForRider<T extends Record<string, unknown>>(order: T): Omit<T, "collectionCode" | "deliveryCode"> {
+    return omitFields(order, ["collectionCode", "deliveryCode"]);
+  }
+
   return {
     /** US-R-01 */
     async applyToRide(userId: string, input: RiderApplicationInput) {
@@ -114,11 +131,12 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
       const rider = await getOwnRider(userId);
       if (rider.status !== "approved" || !rider.onDuty) return [];
 
-      return prisma.order.findMany({
+      const orders = await prisma.order.findMany({
         where: { status: "READY_FOR_PICKUP", fulfilmentType: "delivery", riderId: null },
         include: { vendor: true },
         orderBy: { updatedAt: "asc" },
       });
+      return orders.map(redactForRider);
     },
 
     /** US-R-03 — atomic claim; two riders racing for the same job can never both win (the `updateMany` count is the guard, same pattern as US-V-04's stock decrement). */
@@ -135,7 +153,7 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
       await writeTransition(prisma, orderId, "READY_FOR_PICKUP", "RIDER_ASSIGNED", userId);
       const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { vendor: true } });
       await notifyCustomer(order, "order_rider_assigned", { orderId });
-      return order;
+      return redactForRider(order);
     },
 
     /**
@@ -146,10 +164,11 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
      */
     async getActiveJob(userId: string) {
       const rider = await getOwnRider(userId);
-      return prisma.order.findFirst({
+      const order = await prisma.order.findFirst({
         where: { riderId: rider.id, status: { in: ["RIDER_ASSIGNED", "IN_TRANSIT"] } },
         include: { vendor: true },
       });
+      return order ? redactForRider(order) : null;
     },
 
     /** No penalty (US-R-03) — see the class comment on listOpenJobs for why this doesn't persist anything. */
@@ -159,7 +178,7 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
       if (!order) throw new OrderNotFoundError();
     },
 
-    /** US-R-04 — checked against the same collection_code the vendor's dashboard shows (one field, two directions — see the schema comment on Order.collectionCode). */
+    /** US-R-04 — the first of two handoff checks: the vendor's own dashboard shows collectionCode and reads it to the rider in person (see the schema comment on Order.collectionCode for why the rider's own app never does). */
     async confirmCollection(userId: string, orderId: string, input: ConfirmCollectionInput) {
       const order = await getOwnedRiderOrder(userId, orderId);
       if (order.status !== "RIDER_ASSIGNED") throw new JobUnavailableError(`Cannot confirm collection for an order in status ${order.status}.`);
@@ -169,14 +188,25 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
       await writeTransition(prisma, orderId, "RIDER_ASSIGNED", "IN_TRANSIT", userId);
       const updated = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
       await notifyCustomer(updated, "order_in_transit", { orderId });
-      return updated;
+      return redactForRider(updated);
     },
 
-    /** US-R-05 — the moment cash-on-delivery money actually enters the books (order/ledger.ts's codCollectionEntries), since nothing moved at checkout for COD. */
+    /**
+     * US-R-05 — the moment cash-on-delivery money actually enters the
+     * books (order/ledger.ts's codCollectionEntries), since nothing moved
+     * at checkout for COD. Also the second handoff check: when the order
+     * has a deliveryCode (every delivery order, since markReady), the
+     * customer reads it to the rider and it must match exactly — the same
+     * shape of check confirmCollection already does against the vendor's
+     * code. A mismatch rejects outright rather than falling back to
+     * recipientName/photo as an alternative; "I couldn't get the code"
+     * is what reportDeliveryFailed is for, not a quieter way past this.
+     */
     async confirmDelivery(userId: string, orderId: string, input: ConfirmDeliveryInput) {
       const rider = await getOwnRider(userId);
       const order = await getOwnedRiderOrder(userId, orderId);
       if (order.status !== "IN_TRANSIT") throw new JobUnavailableError(`Cannot confirm delivery for an order in status ${order.status}.`);
+      if (order.deliveryCode && input.code !== order.deliveryCode) throw new InvalidDeliveryCodeError();
 
       if (order.paymentMethod === "cash_on_delivery") {
         if (input.cashCollectedMinor !== order.totalMinor) {
@@ -197,7 +227,7 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
 
       const updated = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
       await notifyCustomer(updated, "order_delivered", { orderId });
-      return updated;
+      return redactForRider(updated);
     },
 
     /** US-R-06 — admin follow-up (whether to return goods, refund) isn't built yet; this just records the failure honestly rather than pretending to resolve it. */
@@ -209,7 +239,7 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
       await writeTransition(prisma, orderId, "IN_TRANSIT", "DELIVERY_FAILED", userId, `${input.reason}${input.notes ? `: ${input.notes}` : ""}`);
       const updated = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
       await notifyCustomer(updated, "order_delivery_failed", { orderId, reason: input.reason });
-      return updated;
+      return redactForRider(updated);
     },
 
     /** US-R-07 */

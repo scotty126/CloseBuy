@@ -68,11 +68,16 @@ export interface RiderProfileDto {
 // GET /riders/me/active-job (already claimed) all share this shape — the
 // backend never models a separate "offer" entity (dispatch/service.ts),
 // an unclaimed READY_FOR_PICKUP delivery order *is* the offer.
+//
+// Deliberately no collectionCode or deliveryCode here — the API never
+// sends either to a rider (dispatch/service.ts's redactForRider), on
+// purpose: both exist so they have to come from someone else in person
+// (the vendor, then the customer), and a rider who could just read them
+// off their own screen wouldn't need to ask.
 export interface RiderJobDto {
   id: string;
   vendorId: string;
   status: OrderStatus;
-  collectionCode: string | null;
   paymentMethod: PaymentMethod;
   totalMinor: number;
   deliveryFeeMinor: number;

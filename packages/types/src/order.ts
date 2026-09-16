@@ -108,6 +108,11 @@ export interface OrderDto {
   fulfilmentType: FulfilmentType;
   scheduledFor: string | null;
   collectionCode: string | null;
+  // Delivery orders only. Customer-visible; deliberately absent (not just
+  // null) from any vendor- or rider-facing read — see the schema comment
+  // on Order.deliveryCode for why. Optional here because who's asking
+  // determines whether the key exists in the response at all.
+  deliveryCode?: string | null;
   deliveryLat: number | null;
   deliveryLng: number | null;
   deliveryLandmark: string | null;
