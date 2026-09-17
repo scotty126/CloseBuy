@@ -72,14 +72,21 @@ export function createCustomerAuthService(deps: CustomerAuthDeps) {
       });
 
       const verifyToken = randomToken();
-      await deps.redis.set(verifyTokenKey(verifyToken), user.id, "EX", VERIFY_TOKEN_TTL_SECONDS);
-      await deps.email
-        .sendVerificationEmail(email, `${deps.appBaseUrl}/verify-email?token=${verifyToken}`)
-        .catch((err) => {
-          // Never fail signup because the courtesy email didn't send —
-          // logged, not thrown. The account is fully usable either way.
-          console.error("Failed to send verification email:", err);
-        });
+      try {
+        await deps.redis.set(verifyTokenKey(verifyToken), user.id, "EX", VERIFY_TOKEN_TTL_SECONDS);
+        await deps.email
+          .sendVerificationEmail(email, `${deps.appBaseUrl}/verify-email?token=${verifyToken}`)
+          .catch((err) => {
+            // Never fail signup because the courtesy email didn't send —
+            // logged, not thrown. The account is fully usable either way.
+            console.error("Failed to send verification email:", err);
+          });
+      } catch (err) {
+        // Same non-gating guarantee as the email send above — the user row
+        // is already committed, so a flaky Redis here must not strand it
+        // unverified with no way to ever retry (email is taken either way).
+        console.error("Failed to store email verification token:", err);
+      }
 
       return { user, ...issueSession(user) };
     },

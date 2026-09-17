@@ -125,6 +125,17 @@ describe("customer auth service — US-C-01", () => {
     expect(email.sendVerificationEmail).toHaveBeenCalledWith(EMAIL, expect.stringContaining("/verify-email?token="));
   });
 
+  it("still creates a usable account and session when the verification-token write fails (bad Redis)", async () => {
+    redis.set = vi.fn().mockRejectedValue(new Error("redis down"));
+    const svc = service();
+
+    const result = await svc.register(EMAIL, PASSWORD);
+
+    expect(result.user.email).toBe(EMAIL);
+    expect(result.accessToken).toEqual(expect.any(String));
+    expect(email.sendVerificationEmail).not.toHaveBeenCalled();
+  });
+
   it("rejects registering an email that's already taken", async () => {
     const svc = service();
     await svc.register(EMAIL, PASSWORD);
