@@ -55,6 +55,26 @@ export function createOrderQueue(redisUrl: string): OrderQueue {
   };
 }
 
+/**
+ * The accept-window/escrow-release timers are a safety net, not the
+ * primary action — scheduling one must never fail or hang the checkout /
+ * pickup-confirmation / delivery-confirmation request it's called from.
+ * The BullMQ producer connection above retries indefinitely on a dropped
+ * connection rather than rejecting (maxRetriesPerRequest: null), so this
+ * also bounds how long we wait before giving up and logging instead of
+ * hanging forever. The order is still correctly PAID/DELIVERED either
+ * way — only the automatic follow-up job would be missing, same
+ * non-gating guarantee as notifications.notify.
+ */
+export async function scheduleTimer(label: string, orderId: string, schedule: () => Promise<void>) {
+  const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timed out after 5s")), 5000));
+  try {
+    await Promise.race([schedule(), timeout]);
+  } catch (err) {
+    console.error(`Failed to schedule ${label} for order ${orderId}:`, err);
+  }
+}
+
 export interface OrderTimerHandlers {
   onAutoReject(orderId: string): Promise<void>;
   onEscrowRelease(orderId: string): Promise<void>;

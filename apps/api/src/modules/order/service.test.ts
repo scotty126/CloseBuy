@@ -260,6 +260,12 @@ describe("order service — checkout (US-C-06)", () => {
     expect(result.order.customerId).toBeUndefined();
   });
 
+  it("still completes checkout as PAID when scheduling the auto-reject timer fails (bad Redis)", async () => {
+    queue.scheduleAutoReject = vi.fn().mockRejectedValue(new Error("redis down"));
+    const result = await service().checkout(baseInput(), null, "idem-1b");
+    expect(result.order.status).toBe("PAID");
+  });
+
   it("computes the total server-side from the DB price, never trusting a client-submitted price", async () => {
     const result = await service().checkout(baseInput(), null, "idem-2");
     expect(result.order.subtotalMinor).toBe(500000); // 2 x 250000, not whatever a client might have sent
@@ -417,6 +423,18 @@ describe("order service — vendor actions (US-V-05/06)", () => {
     await svc.confirmCustomerPickup(VENDOR_USER_ID, order.id, { code: withCode.collectionCode });
     expect(prisma.__state.orders.get(order.id).status).toBe("DELIVERED");
     expect(queue.scheduleEscrowRelease).toHaveBeenCalledWith(order.id, expect.any(Number));
+  });
+
+  it("still completes confirmCustomerPickup as DELIVERED when scheduling escrow release fails (bad Redis)", async () => {
+    const { svc, order } = await checkedOutOrder();
+    await svc.acceptOrder(VENDOR_USER_ID, order.id);
+    await svc.markReady(VENDOR_USER_ID, order.id);
+    const { collectionCode } = prisma.__state.orders.get(order.id);
+
+    queue.scheduleEscrowRelease = vi.fn().mockRejectedValue(new Error("redis down"));
+    await svc.confirmCustomerPickup(VENDOR_USER_ID, order.id, { code: collectionCode });
+
+    expect(prisma.__state.orders.get(order.id).status).toBe("DELIVERED");
   });
 
   it("notifies a signed-in customer on accept, reject and ready — never a guest order, which has no account to notify", async () => {

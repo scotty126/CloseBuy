@@ -1,5 +1,5 @@
 import type { PrismaClient, Order } from "@prisma/client";
-import type { OrderQueue } from "../order/jobs.js";
+import { type OrderQueue, scheduleTimer } from "../order/jobs.js";
 import type { NotificationService } from "../notifications/service.js";
 import { ConfigKeys } from "../../lib/config.js";
 import { omitFields } from "../../lib/redact.js";
@@ -223,7 +223,7 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
       await writeTransition(prisma, orderId, "IN_TRANSIT", "DELIVERED", userId);
 
       const escrowReleaseWindowHours = await ConfigKeys.escrowReleaseWindowHours(prisma);
-      await queue.scheduleEscrowRelease(orderId, escrowReleaseWindowHours);
+      await scheduleTimer("escrow-release", orderId, () => queue.scheduleEscrowRelease(orderId, escrowReleaseWindowHours));
 
       const updated = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
       await notifyCustomer(updated, "order_delivered", { orderId });

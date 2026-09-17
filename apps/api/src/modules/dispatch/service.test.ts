@@ -259,6 +259,15 @@ describe("dispatch service", () => {
     expect(prisma.__state.ledgerEntries).toHaveLength(0); // nothing to post — card/transfer already has its escrow entries from checkout
   });
 
+  it("confirmDelivery: still completes as DELIVERED when scheduling escrow release fails (bad Redis)", async () => {
+    seedApprovedOnDutyRider(prisma);
+    seedOpenOrder(prisma, { status: "IN_TRANSIT", riderId: RIDER_ID, paymentMethod: "card" });
+    queue.scheduleEscrowRelease = vi.fn().mockRejectedValue(new Error("redis down"));
+
+    const order = await service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John", code: "654321" });
+    expect(order.status).toBe("DELIVERED");
+  });
+
   it("confirmDelivery: the customer's code must match exactly — the second handoff check, confirming the right person (US-R-05)", async () => {
     seedApprovedOnDutyRider(prisma);
     seedOpenOrder(prisma, { status: "IN_TRANSIT", riderId: RIDER_ID, paymentMethod: "card" });

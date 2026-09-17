@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
 import type { PrismaClient, Order } from "@prisma/client";
 import type { MonnifyClient, WebhookEvent } from "../payments/monnify.js";
-import type { OrderQueue } from "./jobs.js";
+import { type OrderQueue, scheduleTimer } from "./jobs.js";
 import type { NotificationService } from "../notifications/service.js";
 import { ConfigKeys } from "../../lib/config.js";
 import { isWithinServiceArea } from "../../lib/geo.js";
@@ -108,7 +108,7 @@ export function createOrderService(deps: OrderServiceDeps) {
     await transition(orderId, "PENDING_PAYMENT", "PAID", actorType, null);
 
     const acceptWindowMinutes = await ConfigKeys.vendorAcceptWindowMinutes(prisma);
-    await queue.scheduleAutoReject(orderId, acceptWindowMinutes);
+    await scheduleTimer("auto-reject", orderId, () => queue.scheduleAutoReject(orderId, acceptWindowMinutes));
 
     const vendor = await prisma.vendorProfile.findUnique({ where: { id: order.vendorId } });
     if (vendor) {
@@ -453,7 +453,7 @@ export function createOrderService(deps: OrderServiceDeps) {
       await transition(orderId, "READY_FOR_PICKUP", "DELIVERED", "vendor", vendorUserId);
 
       const escrowReleaseWindowHours = await ConfigKeys.escrowReleaseWindowHours(prisma);
-      await queue.scheduleEscrowRelease(orderId, escrowReleaseWindowHours);
+      await scheduleTimer("escrow-release", orderId, () => queue.scheduleEscrowRelease(orderId, escrowReleaseWindowHours));
     },
 
     async rateOrder(orderId: string, input: RateOrderInput, customerId: string | null) {
