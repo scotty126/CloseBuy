@@ -26,6 +26,13 @@ const envSchema = z.object({
   TERMII_API_KEY: z.string().optional(),
   TERMII_SENDER_ID: z.string().optional(),
 
+  // Explicit, opt-in escape hatch for while TERMII_SENDER_ID is still
+  // pending CAC approval — never activates just because Termii is
+  // unconfigured, has to be deliberately turned on. See termii.ts. Once
+  // real Termii credentials exist this flag simply stops being read;
+  // nothing else needs to change.
+  OTP_DEV_FALLBACK: z.coerce.boolean().default(false),
+
   // Password hashing pepper — argon2's own salt is per-hash and stored
   // alongside it, this is an additional server-side secret so a leaked DB
   // alone still isn't enough to brute-force offline. Same bar as the JWT

@@ -36,14 +36,15 @@ const pinIdKey = (phone: string) => `otp:pinid:${phone}`;
 export function createAuthService(deps: AuthDeps) {
   return {
     /** US-C-01: request a fresh code, whether the number is new or returning. */
-    async requestOtp(phone: string): Promise<void> {
+    async requestOtp(phone: string): Promise<{ devCode?: string }> {
       const locked = await deps.redis.get(attemptsKey(phone));
       if (locked && Number(locked) >= MAX_ATTEMPTS) {
         throw new OtpLockedError();
       }
 
-      const { pinId } = await deps.termii.sendOtp(phone);
+      const { pinId, devCode } = await deps.termii.sendOtp(phone);
       await deps.redis.set(pinIdKey(phone), pinId, "EX", PIN_TTL_SECONDS);
+      return { devCode };
     },
 
     /**
