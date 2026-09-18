@@ -1,0 +1,5 @@
+[build]
+command = "(corepack enable || true) && pnpm install --frozen-lockfile && npx turbo run build --filter=@closebuy/customer"
+
+[[plugins]]
+package = "@netlify/plugin-nextjs"
