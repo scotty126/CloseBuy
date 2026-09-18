@@ -27,6 +27,9 @@ jobs:
 
     env:
       DATABASE_URL: "postgresql://closebuy_app:ci@localhost:5432/closebuy"
+      # Plain local Postgres, no pooler in front of it — same value as
+      # DATABASE_URL (see .env.example).
+      DIRECT_URL: "postgresql://closebuy_app:ci@localhost:5432/closebuy"
       REDIS_URL: "redis://localhost:6379"
       JWT_ACCESS_SECRET: "ci-only-secret-not-used-in-real-environments-000000"
       JWT_REFRESH_SECRET: "ci-only-secret-not-used-in-real-environments-000001"
