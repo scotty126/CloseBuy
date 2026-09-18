@@ -59,6 +59,9 @@ const envSchema = z.object({
   MONNIFY_API_KEY: z.string().optional(),
   MONNIFY_SECRET_KEY: z.string().optional(),
   MONNIFY_CONTRACT_CODE: z.string().optional(),
+  // Which Monnify wallet/account payouts disburse from — only the
+  // payouts module's transfer() needs this; checkout/refund are unaffected.
+  MONNIFY_DISBURSEMENT_SOURCE_ACCOUNT_NUMBER: z.string().optional(),
   GOOGLE_MAPS_API_KEY: z.string().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),

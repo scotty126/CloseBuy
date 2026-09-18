@@ -144,9 +144,13 @@ export interface CheckoutResponse {
 // GET /vendors/me/earnings — US-V-07. `orders` is only ever COMPLETED
 // ones (commission is final only there); clearedMinor/pendingMinor cover
 // the running balance screens-navigation.md §2.4 needs at a glance.
+// availableToWithdrawMinor is a genuinely different number — it's
+// clearedMinor net of money already requested/paid out (payouts module) —
+// this is what a "withdraw" button should actually validate against.
 export interface VendorEarningsDto {
   clearedMinor: number;
   pendingMinor: number;
+  availableToWithdrawMinor: number;
   foundingVendorCommissionWaivedUntil: string | null;
   orders: Array<{ orderId: string; grossMinor: number; commissionMinor: number; netMinor: number; completedAt: string }>;
 }

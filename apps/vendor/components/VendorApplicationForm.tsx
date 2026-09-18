@@ -19,7 +19,9 @@ export function VendorApplicationForm({ onSubmitted }: { onSubmitted: () => void
   const [categoryId, setCategoryId] = useState("");
   const [description, setDescription] = useState("");
   const [pickupPhone, setPickupPhone] = useState("");
-  const [bankAccountRef, setBankAccountRef] = useState("");
+  const [bankAccountNumber, setBankAccountNumber] = useState("");
+  const [bankCode, setBankCode] = useState("");
+  const [bankAccountName, setBankAccountName] = useState("");
 
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
@@ -81,7 +83,9 @@ export function VendorApplicationForm({ onSubmitted }: { onSubmitted: () => void
         pickupLng: lng,
         pickupLandmark: landmark.trim(),
         pickupPhone: pickupPhone.trim(),
-        bankAccountRef: bankAccountRef.trim() || undefined,
+        bankAccountNumber: bankAccountNumber.trim() || undefined,
+        bankCode: bankCode.trim() || undefined,
+        bankAccountName: bankAccountName.trim() || undefined,
       });
       onSubmitted();
     } catch (err) {
@@ -170,12 +174,22 @@ export function VendorApplicationForm({ onSubmitted }: { onSubmitted: () => void
           placeholder="+2348012345678"
           required
         />
-        <Input
-          label="Bank account reference (optional)"
-          value={bankAccountRef}
-          onChange={(e) => setBankAccountRef(e.target.value)}
-          placeholder="Used for payouts once you're approved"
-        />
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-medium text-ink">Bank details (optional — needed to withdraw once approved)</p>
+          <Input
+            label="Account number"
+            value={bankAccountNumber}
+            onChange={(e) => setBankAccountNumber(e.target.value)}
+            placeholder="10-digit NUBAN"
+          />
+          <Input label="Bank code" value={bankCode} onChange={(e) => setBankCode(e.target.value)} placeholder="e.g. 058" />
+          <Input
+            label="Account name"
+            value={bankAccountName}
+            onChange={(e) => setBankAccountName(e.target.value)}
+            placeholder="As it appears at the bank"
+          />
+        </div>
 
         {error && <p className="text-sm text-danger">{error}</p>}
 

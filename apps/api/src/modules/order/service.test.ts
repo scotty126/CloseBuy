@@ -30,6 +30,7 @@ function createFakePrisma() {
   const transitions: any[] = [];
   const payments = new Map<string, any>();
   const ledgerEntries: any[] = [];
+  const payouts: any[] = [];
   const disputes = new Map<string, any>();
   // Same defaults as prisma/seed.ts — the order service reads these
   // through lib/config.ts exactly the way it would read real seeded rows.
@@ -144,6 +145,24 @@ function createFakePrisma() {
         ledgerEntries.push(...data);
         return { count: data.length };
       },
+      // getVendorEarnings folds in computeVendorBalance (payouts/balance.ts)
+      // now, so this fake needs to answer that query shape too.
+      aggregate: async ({ where }: any) => ({
+        _sum: {
+          amountMinor: ledgerEntries
+            .filter((e) => e.account === where.account && e.direction === where.direction && orders.get(e.orderId)?.vendorId === where.order.vendorId)
+            .reduce((s, e) => s + e.amountMinor, 0),
+        },
+      }),
+    },
+    payout: {
+      aggregate: async ({ where }: any) => ({
+        _sum: {
+          amountMinor: payouts
+            .filter((p: any) => p.payeeType === where.payeeType && p.payeeId === where.payeeId && where.status.in.includes(p.status))
+            .reduce((s: number, p: any) => s + p.amountMinor, 0),
+        },
+      }),
     },
     dispute: {
       create: async ({ data }: any) => {
@@ -161,7 +180,7 @@ function createFakePrisma() {
     },
     $transaction: async (fn: any) => fn(db),
     // Exposed for assertions, not part of the real Prisma surface.
-    __state: { vendors, products, customers, riders, orders, orderItems, transitions, payments, ledgerEntries, disputes },
+    __state: { vendors, products, customers, riders, orders, orderItems, transitions, payments, ledgerEntries, payouts, disputes },
   };
 
   function applyOps(existing: any, data: any) {
@@ -181,6 +200,7 @@ function createFakeMonnify(overrides?: Partial<MonnifyClient>): MonnifyClient {
     initializeTransaction: vi.fn().mockResolvedValue({ checkoutUrl: "https://sandbox.monnify.com/pay/abc", transactionReference: "txn_1" }),
     verifyWebhookSignature: vi.fn().mockReturnValue(true),
     refund: vi.fn().mockResolvedValue(undefined),
+    transfer: vi.fn().mockResolvedValue({ status: "SUCCESS", providerReference: "transfer_1" }),
     ...overrides,
   };
 }
@@ -494,6 +514,22 @@ describe("order service — vendor actions (US-V-05/06)", () => {
 
   it("getVendorEarnings: throws for an account with no vendor profile", async () => {
     await expect(service().getVendorEarnings("nobody")).rejects.toThrow(VendorProfileNotFoundError);
+  });
+
+  it("getVendorEarnings: availableToWithdrawMinor is clearedMinor net of a payout already made — a genuinely different number, not a copy of it", async () => {
+    const svc = service();
+    prisma.__state.orders.set("order_cleared", {
+      id: "order_cleared", vendorId: VENDOR_ID, status: "COMPLETED",
+      subtotalMinor: 500000, commissionMinor: 25000, deliveryFeeMinor: 50000, updatedAt: new Date(),
+    });
+    // escrowReleaseEntries' real shape (order/ledger.ts) — vendor_payable credited net of commission.
+    prisma.__state.ledgerEntries.push({ orderId: "order_cleared", account: "vendor_payable", direction: "credit", amountMinor: 475000 });
+    prisma.__state.payouts.push({ payeeType: "vendor", payeeId: VENDOR_ID, status: "paid", amountMinor: 200000 });
+
+    const earnings = await svc.getVendorEarnings(VENDOR_USER_ID);
+    expect(earnings.clearedMinor).toBe(475000);
+    expect(earnings.availableToWithdrawMinor).toBe(275000);
+    expect(earnings.availableToWithdrawMinor).toBeLessThan(earnings.clearedMinor);
   });
 
   it("markReady: generates a deliveryCode for delivery orders, never for pickup (US-R-05's second handoff check)", async () => {

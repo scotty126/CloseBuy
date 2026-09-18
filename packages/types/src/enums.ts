@@ -55,6 +55,15 @@ export type DisputeResolution = (typeof DISPUTE_RESOLUTIONS)[number];
 export const RATING_TARGET_TYPES = ["vendor", "rider"] as const;
 export type RatingTargetType = (typeof RATING_TARGET_TYPES)[number];
 
+export const PAYEE_TYPES = ["vendor", "rider"] as const;
+export type PayeeType = (typeof PAYEE_TYPES)[number];
+
+// requested (vendor asked) -> scheduled (admin approved, about to call
+// Monnify) -> paid | failed. Or requested -> rejected (admin declined,
+// no money ever moved). See apps/api/src/modules/payouts/service.ts.
+export const PAYOUT_STATUSES = ["requested", "scheduled", "paid", "failed", "rejected"] as const;
+export type PayoutStatus = (typeof PAYOUT_STATUSES)[number];
+
 // Notifications (architecture.md's Notifications module) — the fixed set
 // of event types Order, Dispatch and Admin actually fire today. A plain
 // string on the Notification row itself (schema.prisma), not a DB enum,
@@ -74,5 +83,8 @@ export const NOTIFICATION_TYPES = [
   "order_delivered", // → customer
   "order_delivery_failed", // → customer, delivery only
   "order_auto_rejected", // → customer — vendor never responded in the accept window
+  "payout_paid", // → vendor
+  "payout_failed", // → vendor, Monnify attempt didn't succeed
+  "payout_rejected", // → vendor, admin declined before any money moved
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

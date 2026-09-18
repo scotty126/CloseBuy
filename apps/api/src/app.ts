@@ -11,6 +11,7 @@ import { catalogRoutes } from "./modules/catalog/routes.js";
 import { orderRoutes } from "./modules/order/routes.js";
 import { dispatchRoutes } from "./modules/dispatch/routes.js";
 import { adminRoutes } from "./modules/admin/routes.js";
+import { payoutRoutes } from "./modules/payouts/routes.js";
 import { notificationRoutes } from "./modules/notifications/routes.js";
 import { requireAuth } from "./lib/auth-guard.js";
 import { serializeUser } from "./lib/serialize-user.js";
@@ -23,8 +24,8 @@ import { serializeUser } from "./lib/serialize-user.js";
  * Auth is two separate route sets, by role (brief §3.1b) — staff (phone/
  * OTP) and customer (email/password/OAuth). Catalog, Order/Checkout and
  * Dispatch are real, M1 (roadmap.md). Admin is real for application
- * vetting (US-A-01) only — the rest of api-contracts.md's Admin section
- * (order oversight, disputes, config writes, payouts, metrics, audit-log
+ * vetting (US-A-01) and payouts — the rest of api-contracts.md's Admin
+ * section (order oversight, disputes, config writes, metrics, audit-log
  * search) is a real module boundary already but its routes aren't built
  * yet.
  *
@@ -62,6 +63,7 @@ export async function buildApp() {
   await app.register(orderRoutes);
   await app.register(dispatchRoutes);
   await app.register(adminRoutes);
+  await app.register(payoutRoutes);
   await app.register(notificationRoutes);
 
   return app;

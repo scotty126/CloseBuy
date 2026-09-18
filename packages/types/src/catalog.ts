@@ -14,7 +14,11 @@ export const vendorApplicationSchema = z.object({
   pickupLng: z.number().min(-180).max(180),
   pickupLandmark: z.string().min(3).max(200),
   pickupPhone: phoneSchema,
-  bankAccountRef: z.string().optional(),
+  // Structured, not a free-form reference — a real transfer (payouts
+  // module) needs an account number and bank code as separate fields.
+  bankAccountNumber: z.string().length(10).optional(),
+  bankCode: z.string().min(1).optional(),
+  bankAccountName: z.string().min(2).optional(),
 });
 export type VendorApplicationInput = z.infer<typeof vendorApplicationSchema>;
 
@@ -27,6 +31,9 @@ export const vendorUpdateSchema = z.object({
   isOpen: z.boolean().optional(),
   supportsPickup: z.boolean().optional(), // brief §3.1a — independent of isOpen
   openingHours: z.record(z.string(), z.array(z.string()).length(2)).optional(),
+  bankAccountNumber: z.string().length(10).optional(),
+  bankCode: z.string().min(1).optional(),
+  bankAccountName: z.string().min(2).optional(),
 });
 export type VendorUpdateInput = z.infer<typeof vendorUpdateSchema>;
 
@@ -110,7 +117,7 @@ export interface VendorDto {
 // GET/PATCH /vendors/me — the raw VendorProfile row, unlike VendorDto
 // above (a public, storefront-shaped view). Distinct type rather than a
 // union of optional fields: `status`, `pickupLat`/`pickupLng`,
-// `bankAccountRef` etc. genuinely never appear on the public shape at all.
+// `bankAccountNumber` etc. genuinely never appear on the public shape at all.
 export interface OwnVendorProfileDto {
   id: string;
   userId: string;
@@ -122,7 +129,9 @@ export interface OwnVendorProfileDto {
   pickupLng: number;
   pickupLandmark: string;
   pickupPhone: string;
-  bankAccountRef: string | null;
+  bankAccountNumber: string | null;
+  bankCode: string | null;
+  bankAccountName: string | null;
   status: VendorStatus;
   isOpen: boolean;
   supportsPickup: boolean;

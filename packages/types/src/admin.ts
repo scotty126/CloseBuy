@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { PayoutStatus } from "./enums.js";
 
 // US-A-01 — an "application" isn't its own database entity, it's a pending
 // VendorProfile or RiderProfile; `type` disambiguates the two id spaces
@@ -43,3 +44,42 @@ export interface PendingRiderApplication {
 }
 
 export type PendingApplication = PendingVendorApplication | PendingRiderApplication;
+
+// ── Payouts (vendor-requested, admin-approved) ──────────────────────────
+
+export const payoutRequestSchema = z.object({
+  amountMinor: z.number().int().positive().optional(), // omitted = full available balance
+});
+export type PayoutRequestInput = z.infer<typeof payoutRequestSchema>;
+
+// Same shape as applicationRejectSchema — mandatory reason on rejection.
+export const payoutRejectSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+export type PayoutRejectInput = z.infer<typeof payoutRejectSchema>;
+
+export interface VendorBalanceDto {
+  vendorId: string;
+  accruedMinor: number; // lifetime vendor_payable ledger credits, net of debits
+  reservedOrPaidMinor: number; // sum of requested/scheduled/paid Payout rows
+  availableToWithdrawMinor: number;
+}
+
+export interface PayoutDto {
+  id: string;
+  payeeType: "vendor" | "rider";
+  payeeId: string;
+  amountMinor: number;
+  status: PayoutStatus;
+  reference: string | null;
+  failureReason: string | null;
+  rejectionReason: string | null;
+  processedAt: string | null;
+  createdAt: string;
+}
+
+// GET /admin/payouts/requests — the approval queue, enriched with enough
+// vendor context to review without a second round trip.
+export interface PendingPayoutRequest extends PayoutDto {
+  vendor: { id: string; businessName: string };
+}

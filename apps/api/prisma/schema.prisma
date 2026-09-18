@@ -111,9 +111,11 @@ enum PayeeType {
 }
 
 enum PayoutStatus {
+  requested
   scheduled
   paid
   failed
+  rejected
 }
 
 enum DisputeStatus {
@@ -218,7 +220,13 @@ model VendorProfile {
   pickupLandmark    String
   pickupPhone       String
 
-  bankAccountRef String?
+  // Structured for real transfers (Monnify disbursement) — a free-form
+  // reference string can't be handed to a transfer API. bankAccountName
+  // is self-reported at application/update time, never verified against
+  // the actual bank (a real, flagged gap — see payouts module).
+  bankAccountNumber String?
+  bankCode          String?
+  bankAccountName   String?
   status         VendorStatus @default(pending)
   isOpen         Boolean      @default(false)
   supportsPickup Boolean      @default(false) // brief §3.1a, independent of isOpen
@@ -472,13 +480,17 @@ model LedgerEntry {
 }
 
 model Payout {
-  id          String       @id @default(uuid())
-  payeeType   PayeeType
-  payeeId     String
-  amountMinor Int
-  status      PayoutStatus @default(scheduled)
-  reference   String?      // Monnify transfer reference
-  createdAt   DateTime     @default(now())
+  id               String       @id @default(uuid())
+  payeeType        PayeeType
+  payeeId          String
+  amountMinor      Int
+  status           PayoutStatus @default(requested)
+  reference        String?      // Monnify transfer reference
+  failureReason    String?      // set when status = failed
+  rejectionReason  String?      // set when status = rejected
+  processedAt      DateTime?    // set once Monnify's transfer call resolves (paid or failed)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   @@index([payeeType, payeeId])
   @@map("payouts")

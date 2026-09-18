@@ -18,6 +18,13 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  *   (teamapt.atlassian.net/wiki/spaces/MON/pages/320864320)
  * - Refund: POST /api/v1/refunds/initiate-refund, `{ transactionReference,
  *   refundReference, refundAmount, refundReason }` (teamapt.atlassian.net/wiki/spaces/MON/pages/229900080)
+ * - Transfer (disbursement, payouts module): POST /api/v1/disbursements/single,
+ *   shape drafted from Monnify's docs but NOT yet verified against a live
+ *   call the way the sections above were — check the exact field
+ *   names/casing before relying on this in production. Requires the
+ *   Monnify account to have API disbursements enabled and OTP disabled
+ *   (email Monnify support) plus a whitelisted static outbound IP, neither
+ *   of which this code can do for you.
  */
 
 const SANDBOX_BASE_URL = "https://sandbox.monnify.com";
@@ -58,10 +65,25 @@ export interface WebhookEvent {
   };
 }
 
+export interface TransferInput {
+  amountMinor: number;
+  destinationAccountNumber: string;
+  destinationAccountName: string;
+  destinationBankCode: string;
+  narration: string;
+  reference: string; // our idempotency key — becomes Payout.reference and Monnify's own transfer reference
+}
+
+export interface TransferResult {
+  status: "SUCCESS" | "FAILED" | "PENDING";
+  providerReference: string; // Monnify's own reference for this transfer, for later lookup/reconciliation
+}
+
 export interface MonnifyClient {
   initializeTransaction(input: InitializeTransactionInput): Promise<{ checkoutUrl: string; transactionReference: string }>;
   verifyWebhookSignature(rawBody: string, signatureHeader: string | undefined): boolean;
   refund(input: RefundInput): Promise<void>;
+  transfer(input: TransferInput): Promise<TransferResult>;
 }
 
 interface CachedToken {
@@ -74,6 +96,7 @@ export function createMonnifyClient(
   secretKey: string | undefined,
   contractCode: string | undefined,
   env: "development" | "test" | "production",
+  disbursementSourceAccountNumber?: string,
 ): MonnifyClient {
   if (!apiKey || !secretKey || !contractCode) {
     const missingCredentialsError = () => {
@@ -88,6 +111,7 @@ export function createMonnifyClient(
       // every webhook, never accept one because verification never ran.
       verifyWebhookSignature: () => false,
       refund: async () => missingCredentialsError(),
+      transfer: async () => missingCredentialsError(),
     };
   }
 
@@ -188,6 +212,42 @@ export function createMonnifyClient(
       if (!res.ok) {
         throw new Error(`Monnify refund failed: ${res.status} ${await res.text()}`);
       }
+    },
+
+    async transfer(input) {
+      if (!disbursementSourceAccountNumber) {
+        throw new Error(
+          "MONNIFY_DISBURSEMENT_SOURCE_ACCOUNT_NUMBER is not set — see .env.example. Vendor payouts cannot send a real transfer without it.",
+        );
+      }
+
+      const accessToken = await getAccessToken();
+      const res = await fetch(`${baseUrl}/api/v1/disbursements/single`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: input.amountMinor / 100, // Monnify takes major units (Naira), not kobo
+          reference: input.reference,
+          narration: input.narration,
+          destinationBankCode: input.destinationBankCode,
+          destinationAccountNumber: input.destinationAccountNumber,
+          destinationAccountName: input.destinationAccountName,
+          currency: "NGN",
+          sourceAccountNumber: disbursementSourceAccountNumber,
+          async: false, // synchronous only — see this file's header comment
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`Monnify transfer failed: ${res.status} ${await res.text()}`);
+      }
+      const data = (await res.json()) as {
+        responseBody: { status: string; reference: string };
+      };
+      const status = data.responseBody.status;
+      return {
+        status: status === "SUCCESS" || status === "COMPLETED" ? "SUCCESS" : status === "FAILED" ? "FAILED" : "PENDING",
+        providerReference: data.responseBody.reference,
+      };
     },
   };
 }

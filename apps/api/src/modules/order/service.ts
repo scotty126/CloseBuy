@@ -7,6 +7,7 @@ import { ConfigKeys } from "../../lib/config.js";
 import { isWithinServiceArea } from "../../lib/geo.js";
 import { omitFields } from "../../lib/redact.js";
 import { escrowHoldEntries, computeEscrowSplit, escrowReleaseEntries, refundEntries, postLedgerEntries } from "./ledger.js";
+import { computeVendorBalance } from "../payouts/balance.js";
 import type { CheckoutInput, RejectOrderInput, ConfirmPickupInput, RateOrderInput, DisputeOrderInput, NotificationType } from "@closebuy/types";
 
 export class VendorUnavailableError extends Error {
@@ -338,9 +339,17 @@ export function createOrderService(deps: OrderServiceDeps) {
       const pendingStatuses = ["PAID", "PREPARING", "READY_FOR_PICKUP", "RIDER_ASSIGNED", "IN_TRANSIT", "DELIVERED"];
       const pending = orders.filter((o) => pendingStatuses.includes(o.status));
 
+      // clearedMinor/pendingMinor below answer "how much have I sold" (per
+      // order, gross of any payout) — a genuinely different question from
+      // "what can I withdraw right now", which has to net out money
+      // already requested/paid (payouts/balance.ts's the one place that
+      // math happens, so this and the payouts module can't drift apart).
+      const balance = await computeVendorBalance(prisma, vendor.id);
+
       return {
         clearedMinor: cleared.reduce((sum, o) => sum + (o.subtotalMinor - o.commissionMinor), 0),
         pendingMinor: pending.reduce((sum, o) => sum + o.subtotalMinor, 0), // gross estimate — see docstring
+        availableToWithdrawMinor: balance.availableToWithdrawMinor,
         foundingVendorCommissionWaivedUntil: vendor.foundingVendorCommissionWaivedUntil,
         orders: cleared.slice(0, 50).map((o) => ({
           orderId: o.id,
