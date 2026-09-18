@@ -1,4 +1,4 @@
 [build]
 base = "apps/customer"
 command = "cd ../.. && (corepack enable || true) && pnpm install --frozen-lockfile && npx turbo run build --filter=@closebuy/customer"
-publish = "apps/customer/.next"
+publish = ".next"
