@@ -63,7 +63,7 @@ const envSchema = z.object({
   CORS_ORIGINS: z
     .string()
     .default(
-      "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,https://closebuy1.netlify.app,https://closebuy-vendor.netlify.app,https://closebuy-rider.netlify.app,https://closebuy-admin.netlify.app",
+      "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3100,https://closebuy1.netlify.app,https://closebuy-vendor.netlify.app,https://closebuy-rider.netlify.app,https://closebuy-admin.netlify.app",
     ),
 
   // M1+ — not needed to run M0's auth flow, kept optional so the app boots
