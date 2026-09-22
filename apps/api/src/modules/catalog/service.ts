@@ -7,6 +7,27 @@ import type {
   ProductUpdateInput,
 } from "@closebuy/types";
 import { isWithinServiceArea } from "../../lib/geo.js";
+import { omitFields } from "../../lib/redact.js";
+
+// VendorDto (@closebuy/types) is the actual public contract — these
+// fields exist on the Prisma row but were never meant to leave the
+// service layer on the public browse/search/detail endpoints. Bank
+// details are the sharp edge here (findable via a plain GET, no auth),
+// but exact pickup coordinates and internal status/phone/timestamps
+// don't belong on a public response either.
+const PUBLIC_VENDOR_OMIT = [
+  "userId",
+  "categoryId",
+  "pickupLat",
+  "pickupLng",
+  "pickupPhone",
+  "bankAccountNumber",
+  "bankCode",
+  "bankAccountName",
+  "status",
+  "openingHours",
+  "createdAt",
+] as const;
 
 export class VendorAlreadyExistsError extends Error {
   constructor() {
@@ -64,7 +85,7 @@ export function createCatalogService(prisma: PrismaClient) {
       });
 
       const nextCursor = vendors.length === query.limit ? vendors[vendors.length - 1]?.id : undefined;
-      return { vendors, nextCursor };
+      return { vendors: vendors.map((v) => omitFields(v, [...PUBLIC_VENDOR_OMIT])), nextCursor };
     },
 
     async getVendor(vendorId: string) {
@@ -73,7 +94,7 @@ export function createCatalogService(prisma: PrismaClient) {
         include: { category: true },
       });
       if (!vendor || vendor.status !== "approved") throw new VendorNotFoundError();
-      return vendor;
+      return omitFields(vendor, [...PUBLIC_VENDOR_OMIT]);
     },
 
     async getVendorProducts(vendorId: string) {

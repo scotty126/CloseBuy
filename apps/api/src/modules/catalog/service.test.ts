@@ -126,6 +126,37 @@ describe("catalog service", () => {
     expect(vendors).toHaveLength(0); // still pending, not approved
   });
 
+  it("never exposes bank details or exact pickup coordinates on the public browse/detail endpoints", async () => {
+    const svc = createCatalogService(prisma);
+    const vendor = await svc.submitApplication(USER_A, {
+      ...APPLICATION,
+      bankAccountNumber: "0123456789",
+      bankCode: "058",
+      bankAccountName: "Ada Okafor",
+    });
+    await prisma.vendorProfile.update({ where: { userId: USER_A }, data: { status: "approved" } });
+
+    const fetched = await svc.getVendor(vendor.id);
+    const { vendors: searched } = await svc.searchVendors({ limit: 20 } as any);
+
+    for (const v of [fetched, searched[0]]) {
+      expect(v).not.toHaveProperty("bankAccountNumber");
+      expect(v).not.toHaveProperty("bankCode");
+      expect(v).not.toHaveProperty("bankAccountName");
+      expect(v).not.toHaveProperty("pickupLat");
+      expect(v).not.toHaveProperty("pickupLng");
+      expect(v).not.toHaveProperty("pickupPhone");
+      expect(v).not.toHaveProperty("status");
+      expect(v).not.toHaveProperty("userId");
+    }
+    // and confirm the fields genuinely existed on the underlying row —
+    // this test would pass vacuously against a row that never had them
+    expect((await prisma.vendorProfile.findUnique({ where: { id: vendor.id } })) as any).toMatchObject({
+      bankAccountNumber: "0123456789",
+      bankCode: "058",
+    });
+  });
+
   it("a vendor cannot edit another vendor's product (cross-tenant access control)", async () => {
     const svc = createCatalogService(prisma);
     const vendorA = await svc.submitApplication(USER_A, APPLICATION);
