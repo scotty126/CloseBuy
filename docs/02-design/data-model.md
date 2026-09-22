@@ -9,13 +9,13 @@ Entities are grouped by the module that owns them (architecture.md §2). All mon
 ## 1. Entity relationship overview
 
 ```
-User (email-identified) ──┬── CustomerProfile ── Address (many)
-    │                     
-    └── OAuthAccount (0+, google/apple — brief §3.1b)
+User (customer role) ──┬── CustomerProfile ── Address (many)
+    │
+    └── OAuthAccount (0+, google/apple — any role now, see §2's User invariant)
 
-User (phone-identified) ──┬── VendorProfile ──── Product (many) ──── Category
-                           ├── RiderProfile
-                           └── AdminProfile
+User (vendor/rider/admin role) ──┬── VendorProfile ──── Product (many) ──── Category
+                                   ├── RiderProfile
+                                   └── AdminProfile
 
 (client-side cart, device-local — brief §3.1b, no server table)
                      │
@@ -37,25 +37,25 @@ Notification ── User
 PushSubscription ── User
 ```
 
-One `User` table, but a customer row and a vendor/rider/admin row are identified by different fields (email vs. phone) and never mix — see §2's `User` invariant.
+One `User` table. Brief §3.1b originally drew a hard line — customer rows identified by email, staff rows by phone, never mixed — relaxed once Termii (staff OTP) turned out to be blocked for months on CAC approval: vendor/rider/admin now also accept email/password or Google/Apple, using the same `email`/`password_hash` fields a customer row uses. See §2's `User` invariant for exactly what's still guaranteed and what isn't.
 
 ## 2. Core entities
 
 ### User
-The identity every role attaches to — but **which field is the identity depends on the role** (brief §3.1b), a deliberate asymmetry, not an inconsistency:
+The identity every role attaches to. Originally "which field is the identity depends on the role" (brief §3.1b) — now any role can use either field; the asymmetry that remains is just which identifiers are globally unique versus unique per role:
 
 | Field | Type | Notes |
 |---|---|---|
 | id | uuid | |
-| role | enum: customer, vendor, rider, admin | One role per user in v1 — no dual-role accounts |
-| email | string, unique, nullable | **Customer identity.** Required for a customer account; null for vendor/rider/admin (they don't use it) |
-| password_hash | string, nullable | Set for an email/password customer account; null for an OAuth-only customer account (brief §3.1b — a customer can have both, linked to the same row, never two rows) |
+| role | enum: customer, vendor, rider, admin | One role per user — no dual-role accounts. The identity fields below can each independently belong to a customer row AND a vendor row AND a rider row AND an admin row for the same real person — that's four distinct `User` rows, not one row holding four roles |
+| email | string, **globally** unique, nullable | Email/password or Google/Apple, any role. One email is one account, whichever single role it holds — a vendor and a rider can't currently share an email (not asked for; phone below already covers "same identity, several staff roles") |
+| password_hash | string, nullable | Set for an email/password account, any role; null for an OAuth-only account |
 | email_verified_at | timestamp, nullable | Informational only — never blocks signing in or ordering (US-C-01) |
-| phone | string, unique, nullable | **Vendor/rider/admin identity.** Required and is what US-V-01/US-R-01's OTP verifies. Not used for customer identity at all — a customer's delivery contact phone lives on `CustomerProfile`/`Order` instead, see below |
-| phone_verified_at | timestamp, nullable | Vendor/rider: null blocks selling or riding — always required there. Meaningless for a customer row (customers don't populate `phone` on `User` at all) |
+| phone | string, unique **per (phone, role)**, nullable | Phone+OTP, vendor/rider/admin only (US-V-01/US-R-01's OTP verifies it) — not globally unique like email: the same phone number can hold a vendor row, a rider row and an admin row at once. Customers never populate this |
+| phone_verified_at | timestamp, nullable | Vendor/rider: null blocks selling or riding — always required there. Meaningless for a customer row |
 | created_at | timestamp | |
 
-**Invariant:** a `customer` row always has `email` set; a `vendor`/`rider`/`admin` row always has `phone` set. Enforced at the application layer (and worth a DB check constraint once the schema is otherwise stable — noted, not yet built).
+**Invariant:** a `vendor`/`rider`/`admin` row can be reached by phone, email/password, or Google/Apple — whichever it was created or later linked through — but a fresh sign-in on any of those three can never mint a new **admin** row; admin is provisioned out of band only (`findOrCreateStaffUser` in service.ts, `AdminSelfRegistrationDisabledError` in email.ts, `OAuthAdminNotProvisionedError` in oauth-account.ts all enforce the same rule independently). Enforced at the application layer (and worth a DB check constraint once the schema is otherwise stable — noted, not yet built).
 
 ### OAuthAccount
 Links a customer `User` to a Google or Apple identity — a separate table, not flat `google_id`/`apple_id` columns on `User`, specifically so a customer can have *both* a password and a linked provider (or more than one provider) against the same account without a schema change later.
@@ -249,7 +249,7 @@ These are the rules a migration or a future feature must never violate:
 3. **A cart can reference exactly one vendor at a time** (brief §3.1) — client-side enforcement plus a server-side re-check at checkout (US-C-04), never trusted from the client alone.
 4. **Stock decrement is a single atomic transaction** with the order-status change on acceptance, guarding against the race condition named in US-V-04 ("stock cannot go negative under concurrent orders") — a `SELECT ... FOR UPDATE` or equivalent, not a read-then-write from the application.
 5. **Every `Config` change is versioned, never mutated in place**, so a historical order's totals can always be explained by the config active at the time.
-6. **A customer `User` row has `email` set; a vendor/rider/admin row has `phone` set** — never the other role's identity field (brief §3.1b). A customer's `phone`/`phone_verified_at` columns are simply unused, not repurposed.
+6. **A fresh sign-in — phone, email/password, or Google/Apple — can never mint a new `admin` row**, whichever of the three it comes through (§2's `User` invariant). Vendor/rider self-registration is fine on all three; admin is provisioned out of band only, always.
 7. **`password_hash` is never plaintext or reversibly encrypted** — bcrypt or argon2id only, matching NFR-05's spirit for anything credential-shaped, not just card data.
 8. **`Order.customer_id`, `Dispute.customer_id` and `Rating.customer_id` are nullable together** — a guest order has none of the three set, and access to all three goes through `Order.tracking_token`, never a phone-number or email lookup (brief §3.1b).
 
