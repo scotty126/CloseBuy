@@ -13,6 +13,7 @@ const CATEGORIES = [
   { name: "Electronics", defaultPrepMinutes: 120 },
   { name: "Home", defaultPrepMinutes: 120 },
   { name: "Pharmacy", defaultPrepMinutes: 15 },
+  { name: "Restaurants", defaultPrepMinutes: 35 }, // cooked-to-order food, longer than a grocery pick-pack
 ];
 
 const prisma = new PrismaClient();
