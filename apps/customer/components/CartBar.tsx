@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ShoppingBag } from "lucide-react";
 import { formatNaira, minor } from "@closebuy/types";
 import { useCart } from "@/lib/cart";
 
@@ -16,7 +17,8 @@ export function CartBar() {
         href="/cart"
         className="flex items-center justify-between rounded-xl bg-primary px-4 py-3 text-white shadow-lg"
       >
-        <span className="text-sm font-medium">
+        <span className="flex items-center gap-2 text-sm font-medium">
+          <ShoppingBag size={16} />
           {itemCount} item{itemCount > 1 ? "s" : ""} · {cart.vendor.businessName}
         </span>
         <span className="text-sm font-semibold">View cart · {formatNaira(minor(subtotalMinor))}</span>

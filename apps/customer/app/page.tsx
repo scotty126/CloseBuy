@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
+import { MapPin, ChevronDown, Search } from "lucide-react";
 import type { CategoryDto, VendorDto } from "@closebuy/types";
 import { catalogApi } from "@/lib/api";
 import { VendorCard } from "@/components/VendorCard";
@@ -35,15 +36,23 @@ export default function HomePage() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      {/* Address/fulfilment bar — screens-navigation.md §1.1. Launch is
-          Riverpark-only (brief §2a), so this is a static label rather than
-          a live address switcher; that needs saved addresses + a maps
-          integration, neither built yet (a deliberate M1 simplification,
-          not a silent gap). */}
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs text-muted">Delivering in</p>
-          <p className="text-base font-semibold text-ink">Riverpark</p>
+        <div className="flex items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, not vendor-supplied */}
+          <img src="/logo-icon.png" alt="" className="h-8 w-8" />
+          {/* Static label, not a live address switcher — launch is
+              Riverpark-only (brief §2a); a real switcher needs saved
+              addresses + a maps integration, neither built yet (a
+              deliberate M1 simplification, not a silent gap). */}
+          <div className="flex items-center gap-1 text-ink">
+            <MapPin size={16} className="text-primary" />
+            <div>
+              <p className="text-[11px] leading-tight text-muted">Delivering in</p>
+              <p className="flex items-center gap-0.5 text-sm font-semibold leading-tight">
+                Riverpark <ChevronDown size={14} className="text-muted" />
+              </p>
+            </div>
+          </div>
         </div>
         {isLoaded && !session && (
           <Link href="/login" className="text-sm font-medium text-primary underline">
@@ -56,6 +65,7 @@ export default function HomePage() {
         href="/search"
         className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-muted shadow-sm"
       >
+        <Search size={18} className="shrink-0 text-muted" />
         Search vendors or products
       </Link>
 

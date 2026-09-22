@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Button } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
+import { ArrowLeft, Star, Clock, MapPin } from "lucide-react";
 import type { VendorDto, ProductDto } from "@closebuy/types";
 import { catalogApi } from "@/lib/api";
 import { useCart } from "@/lib/cart";
@@ -20,6 +21,7 @@ import { CartBar } from "@/components/CartBar";
  */
 export default function VendorPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { cart, addItem, replaceCart, updateQuantity, setFulfilmentType } = useCart();
 
   const [vendor, setVendor] = useState<VendorDto | null>(null);
@@ -76,27 +78,57 @@ export default function VendorPage() {
 
   const canToggleFulfilment = vendor.supportsPickup && (!cart.vendor || cart.vendor.id === vendor.id);
   const quickBuyProducts = products.filter((p) => p.isQuickBuy && p.stock > 0);
+  const score = Number(vendor.reliabilityScore);
 
   return (
     <div className="flex flex-col pb-28">
-      <div className="flex h-36 w-full items-center justify-center bg-surface">
+      <div className="relative flex h-36 w-full items-center justify-center bg-primary/10">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          aria-label="Back"
+          className="absolute left-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-ink shadow-sm"
+        >
+          <ArrowLeft size={18} />
+        </button>
         {vendor.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URL
           <img src={vendor.logoUrl} alt="" className="h-full w-full object-cover" />
         ) : (
           // No logo yet — the business name stands in for a cover image
           // rather than leaving a blank box.
-          <p className="px-4 text-center text-lg font-bold text-ink">{vendor.businessName}</p>
+          <p className="px-4 text-center text-lg font-bold text-primary">{vendor.businessName}</p>
         )}
       </div>
 
       <div className="flex flex-col gap-3 p-4">
         <div>
-          <h1 className="text-xl font-bold text-ink">{vendor.businessName}</h1>
-          <p className="text-sm text-muted">
-            {vendor.category.name} · {vendor.isOpen ? "Open now" : "Closed"}
-          </p>
-          {vendor.description && <p className="mt-1 text-sm text-ink">{vendor.description}</p>}
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="text-xl font-bold text-ink">{vendor.businessName}</h1>
+            {!vendor.isOpen && (
+              <span className="shrink-0 rounded-full bg-muted/10 px-2 py-0.5 text-[10px] font-medium text-muted">Closed</span>
+            )}
+          </div>
+          <p className="text-sm text-muted">{vendor.category.name}</p>
+
+          <div className="mt-1.5 flex items-center gap-3 text-xs text-muted">
+            <span className="flex items-center gap-1">
+              <Star size={13} className={score > 0 ? "fill-accent text-accent" : ""} />
+              {score > 0 ? score.toFixed(1) : "New"}
+            </span>
+            {vendor.avgDeliveryMinutes != null && (
+              <span className="flex items-center gap-1">
+                <Clock size={13} />
+                {vendor.avgDeliveryMinutes} min
+              </span>
+            )}
+          </div>
+          <div className="mt-1 flex items-center gap-1 text-xs text-muted">
+            <MapPin size={13} className="shrink-0" />
+            <span className="truncate">{vendor.pickupLandmark}</span>
+          </div>
+
+          {vendor.description && <p className="mt-2 text-sm text-ink">{vendor.description}</p>}
         </div>
 
         {canToggleFulfilment && (
