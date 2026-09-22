@@ -27,8 +27,10 @@ export function VendorCard({ vendor }: { vendor: VendorDto }) {
           <p className="truncate text-xs text-muted">{vendor.category.name}</p>
           <div className="flex items-center gap-2 text-xs text-muted">
             <span>{score > 0 ? `★ ${score.toFixed(1)}` : "New"}</span>
+            {vendor.avgDeliveryMinutes != null && <span>· {vendor.avgDeliveryMinutes} min</span>}
             {vendor.supportsPickup && <span>· Pickup available</span>}
           </div>
+          <p className="truncate text-xs text-muted">{vendor.pickupLandmark}</p>
         </div>
       </div>
     </Link>

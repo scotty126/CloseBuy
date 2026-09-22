@@ -233,6 +233,12 @@ model VendorProfile {
   openingHours   Json         // e.g. { mon: ["09:00","21:00"], ... }
   reliabilityScore Decimal    @default(0) @db.Decimal(3, 2)
 
+  // A static estimate (vendor/admin-set), not computed from distance —
+  // real per-order ETA (pickup distance + traffic) is a genuinely bigger
+  // feature, not built yet. Nullable: the card shows nothing until a
+  // vendor has one set, rather than a fake default.
+  avgDeliveryMinutes Int?
+
   // brief §3.2a — set to approvedAt + program duration on approval during
   // the launch window; null once expired or if joined outside it.
   foundingVendorCommissionWaivedUntil DateTime?
@@ -316,6 +322,12 @@ model Product {
   images      String[]
   stock       Int           @default(0)
   isActive    Boolean       @default(true) // deactivate, never hard-delete (US-V-03)
+
+  // Curated, not computed — a vendor/admin picks what shows in the
+  // storefront's "Quick Buy" row. A real "actually most-purchased"
+  // version needs order-history aggregation, not built yet (no order
+  // volume to aggregate from for a freshly onboarded vendor anyway).
+  isQuickBuy Boolean @default(false)
 
   orderItems OrderItem[]
 

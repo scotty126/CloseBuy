@@ -34,6 +34,7 @@ export const vendorUpdateSchema = z.object({
   bankAccountNumber: z.string().length(10).optional(),
   bankCode: z.string().min(1).optional(),
   bankAccountName: z.string().min(2).optional(),
+  avgDeliveryMinutes: z.number().int().positive().optional(), // static estimate, not computed — see schema.prisma
 });
 export type VendorUpdateInput = z.infer<typeof vendorUpdateSchema>;
 
@@ -59,6 +60,7 @@ export const productCreateSchema = z.object({
   priceMinor: z.number().int().nonnegative(),
   images: z.array(z.string().url()).min(1).max(8),
   stock: z.number().int().nonnegative().default(0),
+  isQuickBuy: z.boolean().optional(), // curated, not computed — see schema.prisma
 });
 export type ProductCreateInput = z.infer<typeof productCreateSchema>;
 
@@ -97,6 +99,7 @@ export interface ProductDto {
   images: string[];
   stock: number;
   isActive: boolean;
+  isQuickBuy: boolean;
 }
 
 // GET /vendors and /vendors/:id share this shape — the search list just
@@ -111,6 +114,7 @@ export interface VendorDto {
   supportsPickup: boolean;
   reliabilityScore: string; // Prisma Decimal serializes as a string over JSON
   pickupLandmark: string;
+  avgDeliveryMinutes: number | null;
   foundingVendorCommissionWaivedUntil: string | null;
 }
 
@@ -137,6 +141,7 @@ export interface OwnVendorProfileDto {
   supportsPickup: boolean;
   openingHours: Record<string, [string, string]>;
   reliabilityScore: string; // Decimal serializes as a string over JSON
+  avgDeliveryMinutes: number | null;
   foundingVendorCommissionWaivedUntil: string | null;
   createdAt: string;
 }

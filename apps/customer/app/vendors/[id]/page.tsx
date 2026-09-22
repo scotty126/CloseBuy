@@ -8,6 +8,7 @@ import type { VendorDto, ProductDto } from "@closebuy/types";
 import { catalogApi } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { ProductCard } from "@/components/ProductCard";
+import { QuickBuyCard } from "@/components/QuickBuyCard";
 import { CartBar } from "@/components/CartBar";
 
 /**
@@ -74,13 +75,18 @@ export default function VendorPage() {
   }
 
   const canToggleFulfilment = vendor.supportsPickup && (!cart.vendor || cart.vendor.id === vendor.id);
+  const quickBuyProducts = products.filter((p) => p.isQuickBuy && p.stock > 0);
 
   return (
     <div className="flex flex-col pb-28">
-      <div className="h-36 w-full bg-surface">
-        {vendor.logoUrl && (
+      <div className="flex h-36 w-full items-center justify-center bg-surface">
+        {vendor.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URL
           <img src={vendor.logoUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          // No logo yet — the business name stands in for a cover image
+          // rather than leaving a blank box.
+          <p className="px-4 text-center text-lg font-bold text-ink">{vendor.businessName}</p>
         )}
       </div>
 
@@ -108,6 +114,17 @@ export default function VendorPage() {
           <p className="rounded-lg bg-warning/10 p-3 text-sm text-warning">
             This vendor is closed right now — you can browse, but ordering isn&apos;t available until they reopen.
           </p>
+        )}
+
+        {quickBuyProducts.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-semibold text-ink">Quick Buy</p>
+            <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1">
+              {quickBuyProducts.map((product) => (
+                <QuickBuyCard key={product.id} product={product} onAdd={() => handleAdd(product)} />
+              ))}
+            </div>
+          </div>
         )}
 
         <div className="flex flex-col gap-2">
