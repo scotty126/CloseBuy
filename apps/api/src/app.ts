@@ -8,6 +8,7 @@ import { redisPlugin } from "./plugins/redis.js";
 import { notificationsPlugin } from "./plugins/notifications.js";
 import { staffAuthRoutes } from "./modules/auth/routes.js";
 import { customerAuthRoutes } from "./modules/auth/customer/routes.js";
+import { oauthRoutes } from "./modules/auth/oauth-routes.js";
 import { catalogRoutes } from "./modules/catalog/routes.js";
 import { orderRoutes } from "./modules/order/routes.js";
 import { dispatchRoutes } from "./modules/dispatch/routes.js";
@@ -22,8 +23,14 @@ import { serializeUser } from "./lib/serialize-user.js";
  * reads app.env (prisma/redis connection strings, Termii keys), and
  * prisma/redis must be ready before any route that touches them.
  *
- * Auth is two separate route sets, by role (brief §3.1b) — staff (phone/
- * OTP) and customer (email/password/OAuth). Catalog, Order/Checkout and
+ * Auth is three route sets: staff (phone+OTP or email/password,
+ * routes.js), customer (email/password, customer/routes.js), and Google/
+ * Apple OAuth shared by every role (oauth-routes.js) — brief §3.1b
+ * originally drew this as "staff = phone, customer = email", relaxed once
+ * Termii turned out to be a real, months-long bottleneck; see email.js
+ * and oauth-account.ts for the admin-provisioning safeguard that still
+ * applies no matter which of these three a sign-in comes through.
+ * Catalog, Order/Checkout and
  * Dispatch are real, M1 (roadmap.md). Admin is real for application
  * vetting (US-A-01) and payouts — the rest of api-contracts.md's Admin
  * section (order oversight, disputes, config writes, metrics, audit-log
@@ -70,6 +77,7 @@ export async function buildApp() {
 
   await app.register(staffAuthRoutes);
   await app.register(customerAuthRoutes);
+  await app.register(oauthRoutes);
   await app.register(catalogRoutes);
   await app.register(orderRoutes);
   await app.register(dispatchRoutes);

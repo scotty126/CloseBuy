@@ -152,13 +152,21 @@ model User {
   id    String   @id @default(uuid())
   role  UserRole
 
-  // Customer identity
+  // Customer identity — email/password or Google/Apple (brief §3.1b).
+  // Vendor/rider/admin now also accept email/password or Google/Apple as
+  // an alternative to phone+OTP, using these same fields — still globally
+  // unique, so one email is one account, whichever single role it holds.
   email           String?   @unique
-  passwordHash    String?   // null for an OAuth-only customer account
+  passwordHash    String?   // null for an OAuth-only account, any role
   emailVerifiedAt DateTime? // informational only — never blocks sign-in or ordering
 
-  // Vendor/rider/admin identity
-  phone           String?   @unique
+  // Vendor/rider/admin identity — phone+OTP. Unique per (phone, role)
+  // rather than globally: the same real phone number can independently be
+  // a vendor account AND a rider account AND an admin account — three
+  // distinct User rows, never one row holding multiple roles (that's a
+  // genuinely bigger change — RBAC, JWT claims and every profile relation
+  // below all assume a single role per row).
+  phone           String?
   phoneVerifiedAt DateTime? // vendor/rider: null blocks selling/riding. Meaningless for a customer row.
 
   createdAt DateTime @default(now())
@@ -171,6 +179,7 @@ model User {
   pushSubscriptions PushSubscription[]
   oauthAccounts   OAuthAccount[]
 
+  @@unique([phone, role])
   @@map("users")
 }
 

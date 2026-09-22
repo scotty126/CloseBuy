@@ -1,13 +1,26 @@
 import type { ApiClient } from "./client";
-import type { AuthSession, OtpRequestInput, OtpVerifyInput } from "@closebuy/types";
+import type { AuthSession, OtpRequestInput, OtpVerifyInput, StaffRegisterInput, StaffLoginInput } from "@closebuy/types";
 
 export function createAuthApi(client: ApiClient) {
   return {
+    // `session` is only ever set by the dev auto-signin fast path
+    // (DEV_AUTO_SIGNIN_PHONES) — when present, the caller already has a
+    // full session and can skip straight past the code-entry step.
     requestOtp: (input: OtpRequestInput) =>
-      client.request<void>("/auth/otp/request", { method: "POST", body: JSON.stringify(input) }),
+      client.request<{ devCode?: string; session?: AuthSession }>("/auth/otp/request", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
 
     verifyOtp: (input: OtpVerifyInput) =>
       client.request<AuthSession>("/auth/otp/verify", { method: "POST", body: JSON.stringify(input) }),
+
+    // Vendor/rider/admin's alternative to phone+OTP above.
+    staffRegister: (input: StaffRegisterInput) =>
+      client.request<AuthSession>("/auth/staff/register", { method: "POST", body: JSON.stringify(input) }),
+
+    staffLogin: (input: StaffLoginInput) =>
+      client.request<AuthSession>("/auth/staff/login", { method: "POST", body: JSON.stringify(input) }),
 
     refresh: (refreshToken: string) =>
       client.request<{ accessToken: string }>("/auth/refresh", {

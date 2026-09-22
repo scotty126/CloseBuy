@@ -54,25 +54,38 @@ function createFakeTermii(overrides?: Partial<TermiiClient>): TermiiClient {
   };
 }
 
+/**
+ * Keyed by (phone, role) — schema.prisma's real composite unique, now
+ * that the same phone number can hold a vendor row AND a rider row AND
+ * an admin row simultaneously. `seedAdmin` pre-provisions an admin row,
+ * matching prisma/seed.ts's SEED_ADMIN_PHONE (admin is never self-service).
+ */
 function createFakePrisma(seedAdmin?: { phone: string }): PrismaClient {
-  const adminUsers = new Map<string, any>();
+  const users = new Map<string, any>();
+  const key = (phone: string, role: string) => `${phone}:${role}`;
   if (seedAdmin) {
-    adminUsers.set(seedAdmin.phone, { id: "admin_1", phone: seedAdmin.phone, role: "admin", phoneVerifiedAt: null });
+    users.set(key(seedAdmin.phone, "admin"), {
+      id: "admin_1",
+      phone: seedAdmin.phone,
+      role: "admin",
+      phoneVerifiedAt: null,
+    });
   }
 
   return {
     user: {
-      upsert: vi.fn().mockResolvedValue({
-        id: "user_1",
-        phone: "+2348012345678",
-        role: "vendor",
-        phoneVerifiedAt: new Date(),
+      upsert: vi.fn(async ({ where, update, create }: any) => {
+        const k = key(where.phone_role.phone, where.phone_role.role);
+        const existing = users.get(k);
+        const row = existing ? { ...existing, ...update } : { id: `user_${users.size + 1}`, ...create };
+        users.set(k, row);
+        return row;
       }),
-      findUnique: vi.fn(async ({ where }: any) => adminUsers.get(where.phone) ?? null),
+      findUnique: vi.fn(async ({ where }: any) => users.get(key(where.phone_role.phone, where.phone_role.role)) ?? null),
       update: vi.fn(async ({ where, data }: any) => {
-        const existing = adminUsers.get(where.phone);
-        const updated = { ...existing, ...data };
-        adminUsers.set(where.phone, updated);
+        const k = key(where.phone_role.phone, where.phone_role.role);
+        const updated = { ...users.get(k), ...data };
+        users.set(k, updated);
         return updated;
       }),
     },
@@ -92,13 +105,14 @@ describe("staff auth service (vendor/rider/admin) — US-V-01 / US-R-01", () => 
     prisma = createFakePrisma();
   });
 
-  function service(termiiOverride?: TermiiClient) {
+  function service(termiiOverride?: TermiiClient, devAutoSigninPhones = "") {
     return createAuthService({
       prisma,
       redis,
       termii: termiiOverride ?? termii,
       jwtAccessSecret: "test-secret-at-least-32-characters-long",
       jwtRefreshSecret: "test-secret-at-least-32-characters-long-2",
+      devAutoSigninPhones,
     });
   }
 
@@ -160,16 +174,29 @@ describe("staff auth service (vendor/rider/admin) — US-V-01 / US-R-01", () => 
     const result = await svc.verifyOtp(PHONE, "333333", "vendor");
     expect(result.user.phone).toBe(PHONE);
   });
+
+  it("the same phone number holds independent vendor and rider accounts (unique per (phone, role), not globally)", async () => {
+    const svc = service();
+    await svc.requestOtp(PHONE);
+    const vendorResult = await svc.verifyOtp(PHONE, "123456", "vendor");
+    await svc.requestOtp(PHONE);
+    const riderResult = await svc.verifyOtp(PHONE, "123456", "rider");
+
+    expect(vendorResult.user.role).toBe("vendor");
+    expect(riderResult.user.role).toBe("rider");
+    expect(vendorResult.user.id).not.toBe(riderResult.user.id);
+  });
 });
 
 describe("admin provisioning is never self-service", () => {
-  function service(prisma: PrismaClient, termiiOverride?: TermiiClient) {
+  function service(prisma: PrismaClient, termiiOverride?: TermiiClient, devAutoSigninPhones = "") {
     return createAuthService({
       prisma,
       redis: createFakeRedis(),
       termii: termiiOverride ?? createFakeTermii(),
       jwtAccessSecret: "test-secret-at-least-32-characters-long",
       jwtRefreshSecret: "test-secret-at-least-32-characters-long-2",
+      devAutoSigninPhones,
     });
   }
 
@@ -191,5 +218,62 @@ describe("admin provisioning is never self-service", () => {
     expect(result.user.id).toBe("admin_1");
     expect(result.user.role).toBe("admin");
     expect((prisma.user as any).upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("dev auto-signin (DEV_AUTO_SIGNIN_PHONES) — requestOtp's fast path", () => {
+  function service(prisma: PrismaClient, devAutoSigninPhones: string) {
+    return createAuthService({
+      prisma,
+      redis: createFakeRedis(),
+      termii: createFakeTermii(),
+      jwtAccessSecret: "test-secret-at-least-32-characters-long",
+      jwtRefreshSecret: "test-secret-at-least-32-characters-long-2",
+      devAutoSigninPhones,
+    });
+  }
+
+  it("mints a real session with zero OTP round-trip for an allowlisted vendor/rider phone", async () => {
+    const prisma = createFakePrisma();
+    const svc = service(prisma, PHONE);
+
+    const result = await svc.tryAutoSignin(PHONE, "vendor");
+
+    expect(result).not.toBeNull();
+    expect(result!.user.role).toBe("vendor");
+    expect(result!.accessToken).toEqual(expect.any(String));
+  });
+
+  it("returns null for a phone not on the allowlist — falls through to the normal OTP flow", async () => {
+    const prisma = createFakePrisma();
+    const svc = service(prisma, "+2340000000000"); // a different number
+
+    const result = await svc.tryAutoSignin(PHONE, "vendor");
+    expect(result).toBeNull();
+  });
+
+  it("never mints an admin session for an allowlisted phone with no admin row provisioned", async () => {
+    const prisma = createFakePrisma(); // no admin row
+    const svc = service(prisma, PHONE);
+
+    const result = await svc.tryAutoSignin(PHONE, "admin");
+    expect(result).toBeNull();
+  });
+
+  it("does mint an admin session for an allowlisted phone that already has an admin row", async () => {
+    const prisma = createFakePrisma({ phone: PHONE });
+    const svc = service(prisma, PHONE);
+
+    const result = await svc.tryAutoSignin(PHONE, "admin");
+    expect(result).not.toBeNull();
+    expect(result!.user.role).toBe("admin");
+  });
+
+  it("empty allowlist (the real default) never activates for anyone", async () => {
+    const prisma = createFakePrisma();
+    const svc = service(prisma, "");
+
+    const result = await svc.tryAutoSignin(PHONE, "vendor");
+    expect(result).toBeNull();
   });
 });

@@ -52,6 +52,26 @@ const envSchema = z.object({
   APPLE_OAUTH_PRIVATE_KEY: z.string().optional(),
   API_PUBLIC_URL: z.string().default("http://localhost:4000"), // OAuth redirect base
   CUSTOMER_APP_URL: z.string().default("http://localhost:3000"), // where verify/reset/OAuth-complete links point
+  // Where each staff app's OAuth-complete landing page lives — same role
+  // as CUSTOMER_APP_URL above, one per app now that Google/Apple sign-in
+  // isn't customer-only. Server-side only (never client-supplied) so the
+  // OAuth callback's redirect target can't be hijacked by a caller-chosen
+  // URL — see auth/oauth-routes.ts's APP_URLS lookup.
+  VENDOR_APP_URL: z.string().default("http://localhost:3001"),
+  RIDER_APP_URL: z.string().default("http://localhost:3002"),
+  ADMIN_APP_URL: z.string().default("http://localhost:3003"),
+
+  // Personal/owner convenience: phone numbers (E.164, comma-separated)
+  // that skip Termii and the OTP round-trip entirely on the staff phone
+  // sign-in path (auth/service.ts's requestOtp) — typing the number and
+  // hitting "Continue" signs straight in. Empty by default, so this is
+  // inert unless deliberately turned on (same "opt-in, never silent"
+  // philosophy as OTP_DEV_FALLBACK) — set on Railway to the owner's own
+  // number(s), never committed here. Still can't mint a NEW admin session
+  // for a number with no existing admin User row (same safeguard
+  // verifyOtp's admin branch already enforces) — this only ever
+  // fast-paths a real, already-eligible sign-in.
+  DEV_AUTO_SIGNIN_PHONES: z.string().default(""),
 
   // Browser-facing origins allowed to call this API cross-origin (app.ts's
   // CORS plugin) — comma-separated, additive to the four local dev ports

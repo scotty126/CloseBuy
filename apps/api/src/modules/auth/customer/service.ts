@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import type { Redis } from "ioredis";
-import { hashPassword, verifyPassword } from "./password.js";
+import { hashPassword, verifyPassword } from "../../../lib/password.js";
 import type { EmailClient } from "./email.js";
 import { signAccessToken, signRefreshToken } from "../../../lib/jwt.js";
 
@@ -144,35 +144,10 @@ export function createCustomerAuthService(deps: CustomerAuthDeps) {
       return true;
     },
 
-    /**
-     * Google/Apple sign-in (brief §3.1b). Links to an existing account by
-     * verified email if one already exists (so someone who registered
-     * with a password and later taps "Sign in with Google" on the same
-     * address gets one account, not two) — otherwise creates a fresh one.
-     */
-    async findOrCreateFromOAuth(
-      provider: "google" | "apple",
-      providerAccountId: string,
-      email: string,
-    ) {
-      const existingLink = await deps.prisma.oAuthAccount.findUnique({
-        where: { provider_providerAccountId: { provider, providerAccountId } },
-        include: { user: true },
-      });
-      if (existingLink) return { user: existingLink.user, ...issueSession(existingLink.user) };
-
-      const user = await deps.prisma.user.upsert({
-        where: { email },
-        update: {}, // account already exists (password or another provider) — just link
-        create: { email, role: "customer", emailVerifiedAt: new Date(), customerProfile: { create: {} } },
-      });
-
-      await deps.prisma.oAuthAccount.create({
-        data: { userId: user.id, provider, providerAccountId },
-      });
-
-      return { user, ...issueSession(user) };
-    },
+    // Google/Apple sign-in used to live here (customer-only, brief §3.1b's
+    // original scope) — moved to ../oauth-account.js and generalized once
+    // vendor/rider/admin needed it too; ../oauth-routes.js is the caller
+    // now, for every role including this one.
   };
 }
 

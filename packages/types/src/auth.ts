@@ -16,10 +16,19 @@ export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters");
 
-// ── Vendor / rider / admin — phone + OTP (unchanged from M0) ──────────────
+// ── Vendor / rider / admin — phone + OTP, or email + password ─────────────
+// (brief §3.1b's original "staff = phone only" relaxed once Termii turned
+// out to be a real, months-long bottleneck — see apps/api's auth/email.ts.)
 
 export const otpRequestSchema = z.object({
   phone: phoneSchema,
+  // Required — the calling app already knows which one it is (vendor app
+  // only ever means vendor), and the API needs it up front now too: the
+  // dev auto-signin fast path (apps/api's auth/service.ts) can only mint
+  // a session for a known role, and User.phone is unique per (phone,
+  // role), not globally, so even the plain "does this number already
+  // have an account" question needs a role to be well-formed.
+  role: z.enum(STAFF_ROLES),
 });
 export type OtpRequestInput = z.infer<typeof otpRequestSchema>;
 
@@ -32,6 +41,20 @@ export const otpVerifySchema = z.object({
   role: z.enum(STAFF_ROLES),
 });
 export type OtpVerifyInput = z.infer<typeof otpVerifySchema>;
+
+export const staffRegisterSchema = z.object({
+  email: z.string().email(),
+  password: passwordSchema,
+  role: z.enum(STAFF_ROLES),
+});
+export type StaffRegisterInput = z.infer<typeof staffRegisterSchema>;
+
+export const staffLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+  role: z.enum(STAFF_ROLES),
+});
+export type StaffLoginInput = z.infer<typeof staffLoginSchema>;
 
 // ── Customer — email/password or Google/Apple (brief §3.1b) ───────────────
 

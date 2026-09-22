@@ -18,3 +18,10 @@ const client = createApiClient({ baseUrl, getAccessToken });
 export const authApi = createAuthApi(client);
 export const catalogApi = createCatalogApi(client);
 export const orderApi = createOrderApi(client);
+
+// Plain browser navigations, not fetch calls — the API redirects to
+// Google/Apple itself. `role=vendor` tells the shared OAuth callback
+// (apps/api's oauth-routes.ts) which app/account type this is and where
+// to redirect back to.
+export const googleSignInUrl = `${baseUrl}/auth/oauth/google?role=vendor`;
+export const appleSignInUrl = `${baseUrl}/auth/oauth/apple?role=vendor`;

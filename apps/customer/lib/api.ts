@@ -23,5 +23,7 @@ export const orderApi = createOrderApi(client);
 
 // Plain browser navigations, not fetch calls — the API redirects to
 // Google/Apple itself (brief §3.1b, api-contracts.md).
-export const googleSignInUrl = `${API_BASE_URL}/auth/oauth/google`;
-export const appleSignInUrl = `${API_BASE_URL}/auth/oauth/apple`;
+// `role=customer` is the API's own default when missing, but explicit
+// here for the same reason vendor/rider/admin's lib/api.ts now are.
+export const googleSignInUrl = `${API_BASE_URL}/auth/oauth/google?role=customer`;
+export const appleSignInUrl = `${API_BASE_URL}/auth/oauth/apple?role=customer`;
