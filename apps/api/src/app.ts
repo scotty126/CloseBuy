@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import sensible from "@fastify/sensible";
+import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import { envPlugin } from "./plugins/env.js";
 import { prismaPlugin } from "./plugins/prisma.js";
@@ -43,6 +44,16 @@ export async function buildApp() {
 
   await app.register(envPlugin);
   await app.register(sensible);
+  // Every browser-facing app (customer/vendor/rider/admin, local dev and
+  // Netlify) calls this API cross-origin — no shared parent domain, so
+  // without this the browser silently discards every response regardless
+  // of it succeeding server-side. app.env.CORS_ORIGINS (env.ts) is the
+  // allowlist; credentials stay false since auth is a bearer JWT in an
+  // Authorization header, not a cookie (nothing to send credentialed).
+  await app.register(cors, {
+    origin: app.env.CORS_ORIGINS.split(",").map((o) => o.trim()),
+    credentials: false,
+  });
   await app.register(rateLimit, { max: 100, timeWindow: "1 minute", global: true });
   await app.register(prismaPlugin);
   await app.register(redisPlugin);

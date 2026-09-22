@@ -53,6 +53,19 @@ const envSchema = z.object({
   API_PUBLIC_URL: z.string().default("http://localhost:4000"), // OAuth redirect base
   CUSTOMER_APP_URL: z.string().default("http://localhost:3000"), // where verify/reset/OAuth-complete links point
 
+  // Browser-facing origins allowed to call this API cross-origin (app.ts's
+  // CORS plugin) — comma-separated, additive to the four local dev ports
+  // and the current Netlify domains already baked into the default below,
+  // so a fresh custom domain just needs this env var set on Railway, no
+  // code change/redeploy. Doesn't affect server-to-server calls (Railway
+  // SSH scripts, curl, the mobile app someday) — CORS is a browser-only
+  // restriction to begin with.
+  CORS_ORIGINS: z
+    .string()
+    .default(
+      "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,https://closebuy1.netlify.app,https://closebuy-vendor.netlify.app,https://closebuy-rider.netlify.app,https://closebuy-admin.netlify.app",
+    ),
+
   // M1+ — not needed to run M0's auth flow, kept optional so the app boots
   // without them and fails loudly and specifically only when a checkout,
   // map, upload, or push-notification path actually runs.

@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@closebuy/types": "workspace:*",
+    "@fastify/cors": "^11.3.0",
     "@fastify/rate-limit": "^10.1.0",
     "@fastify/sensible": "^6.0.0",
     "@prisma/client": "^6.1.0",
