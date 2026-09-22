@@ -87,7 +87,11 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-6">
-      <h1 className="text-2xl font-bold text-primary">CloseBuy Admin</h1>
+      <div className="flex flex-col items-center gap-1">
+        {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, not vendor-supplied */}
+        <img src="/logo-wordmark.png" alt="CloseBuy" className="h-10 w-auto" />
+        <p className="text-sm font-medium text-muted">Admin</p>
+      </div>
 
       <div className="flex w-full max-w-xs flex-col gap-4">
         <OAuthButtons />
