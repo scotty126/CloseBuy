@@ -145,27 +145,23 @@ enum ActorType {
 
 // ── Identity ─────────────────────────────────────────────────────────────
 
-// Which field is the identity depends on role (brief §3.1b) — enforced at
-// the application layer: a customer row has email set, phone unused; a
-// vendor/rider/admin row has phone set, email unused. Never mixed.
+// Every identity method — phone+OTP, email/password, Google/Apple — is
+// available to every role now (brief §3.1b originally restricted staff to
+// phone only; relaxed once Termii turned out to be blocked for months).
+// The same real person's phone number, email, or Google/Apple account can
+// each independently hold a customer row AND a vendor row AND a rider row
+// AND an admin row — up to four distinct `User` rows, never one row
+// holding multiple roles (that stays a genuinely bigger change: RBAC, JWT
+// claims and every profile relation below all assume a single role per
+// row). Enforced by unique-per-role constraints below, not global ones.
 model User {
   id    String   @id @default(uuid())
   role  UserRole
 
-  // Customer identity — email/password or Google/Apple (brief §3.1b).
-  // Vendor/rider/admin now also accept email/password or Google/Apple as
-  // an alternative to phone+OTP, using these same fields — still globally
-  // unique, so one email is one account, whichever single role it holds.
-  email           String?   @unique
+  email           String?
   passwordHash    String?   // null for an OAuth-only account, any role
   emailVerifiedAt DateTime? // informational only — never blocks sign-in or ordering
 
-  // Vendor/rider/admin identity — phone+OTP. Unique per (phone, role)
-  // rather than globally: the same real phone number can independently be
-  // a vendor account AND a rider account AND an admin account — three
-  // distinct User rows, never one row holding multiple roles (that's a
-  // genuinely bigger change — RBAC, JWT claims and every profile relation
-  // below all assume a single role per row).
   phone           String?
   phoneVerifiedAt DateTime? // vendor/rider: null blocks selling/riding. Meaningless for a customer row.
 
@@ -179,22 +175,30 @@ model User {
   pushSubscriptions PushSubscription[]
   oauthAccounts   OAuthAccount[]
 
+  @@unique([email, role])
   @@unique([phone, role])
   @@map("users")
 }
 
-// Links a customer User to a Google/Apple identity — separate table, not
-// flat columns on User, so an account can have both a password and a
-// linked provider (or more than one provider) without a schema change.
+// Links a User to a Google/Apple identity — separate table, not flat
+// columns on User, so an account can have both a password and a linked
+// provider (or more than one provider) without a schema change. `role` is
+// denormalized from the linked User (never changes independently — a
+// User's role is fixed for its lifetime) specifically so the same real
+// Google/Apple account can link to a customer row AND a vendor row AND a
+// rider row AND an admin row at once, mirroring phone/email above —
+// without it, `provider`+`providerAccountId` alone would cap one physical
+// Google account at exactly one CloseBuy account platform-wide.
 model OAuthAccount {
   id                String       @id @default(uuid())
   userId            String
   user              User         @relation(fields: [userId], references: [id])
   provider          OAuthProvider
   providerAccountId String       // the provider's own stable subject/user id
+  role              UserRole
   createdAt         DateTime     @default(now())
 
-  @@unique([provider, providerAccountId])
+  @@unique([provider, providerAccountId, role])
   @@map("oauth_accounts")
 }
 

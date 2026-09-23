@@ -63,7 +63,10 @@ export function createCustomerAuthService(deps: CustomerAuthDeps) {
   return {
     /** US-C-01: email + password sign-up. Issues a session immediately — verification is a courtesy, not a gate. */
     async register(email: string, password: string) {
-      const existing = await deps.prisma.user.findUnique({ where: { email } });
+      // email is unique per (email, role) (schema.prisma) — this file is
+      // customer-only, so "customer" is hardcoded rather than threaded
+      // through as a param everywhere, unlike email.ts's staff version.
+      const existing = await deps.prisma.user.findUnique({ where: { email_role: { email, role: "customer" } } });
       if (existing) throw new EmailAlreadyRegisteredError();
 
       const passwordHash = await hashPassword(password, deps.passwordPepper);
@@ -98,7 +101,7 @@ export function createCustomerAuthService(deps: CustomerAuthDeps) {
         throw new LoginLockedError();
       }
 
-      const user = await deps.prisma.user.findUnique({ where: { email } });
+      const user = await deps.prisma.user.findUnique({ where: { email_role: { email, role: "customer" } } });
       const valid = user?.passwordHash
         ? await verifyPassword(user.passwordHash, password, deps.passwordPepper)
         : false;
@@ -118,7 +121,7 @@ export function createCustomerAuthService(deps: CustomerAuthDeps) {
 
     /** US-C-01: always succeeds from the caller's point of view — never reveals whether the email exists. */
     async requestPasswordReset(email: string): Promise<void> {
-      const user = await deps.prisma.user.findUnique({ where: { email } });
+      const user = await deps.prisma.user.findUnique({ where: { email_role: { email, role: "customer" } } });
       if (!user || !user.passwordHash) return; // no account, or an OAuth-only account with no password to reset
 
       const token = randomToken();

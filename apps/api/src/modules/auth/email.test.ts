@@ -43,20 +43,22 @@ function createFakeRedis(): Redis {
   return fake as unknown as Redis;
 }
 
-// email is globally unique (schema.prisma) — one row per email regardless
-// of role, exactly like the real DB constraint.
+// Keyed by (email, role) — schema.prisma's real composite unique, now
+// that the same email can hold a vendor row AND a rider row AND an admin
+// row at once.
 function createFakePrisma(seed?: Array<{ email: string; role: string; passwordHash?: string }>): PrismaClient {
   const users = new Map<string, any>();
+  const key = (email: string, role: string) => `${email}:${role}`;
   for (const u of seed ?? []) {
-    users.set(u.email, { id: `seed_${u.email}`, ...u });
+    users.set(key(u.email, u.role), { id: `seed_${u.email}_${u.role}`, ...u });
   }
 
   return {
     user: {
-      findUnique: vi.fn(async ({ where }: any) => users.get(where.email) ?? null),
+      findUnique: vi.fn(async ({ where }: any) => users.get(key(where.email_role.email, where.email_role.role)) ?? null),
       create: vi.fn(async ({ data }: any) => {
         const row = { id: `user_${users.size + 1}`, ...data };
-        users.set(data.email, row);
+        users.set(key(data.email, data.role), row);
         return row;
       }),
     },
@@ -86,13 +88,23 @@ describe("staff email/password — register", () => {
     expect(result.accessToken).toEqual(expect.any(String));
   });
 
-  it("rejects a second registration with the same email", async () => {
+  it("rejects a second registration with the same email AND role", async () => {
     const svc = createStaffEmailAuthService({ prisma, redis, ...DEPS_BASE });
     await svc.register("vendor@example.com", "password123", "vendor");
 
-    await expect(svc.register("vendor@example.com", "password456", "rider")).rejects.toThrow(
+    await expect(svc.register("vendor@example.com", "password456", "vendor")).rejects.toThrow(
       EmailAlreadyRegisteredError,
     );
+  });
+
+  it("the same email independently registers as a vendor account AND a rider account (unique per (email, role), not globally)", async () => {
+    const svc = createStaffEmailAuthService({ prisma, redis, ...DEPS_BASE });
+    const vendorResult = await svc.register("same@example.com", "password123", "vendor");
+    const riderResult = await svc.register("same@example.com", "password456", "rider");
+
+    expect(vendorResult.user.role).toBe("vendor");
+    expect(riderResult.user.role).toBe("rider");
+    expect(vendorResult.user.id).not.toBe(riderResult.user.id);
   });
 
   it("never creates an admin account via self-registration, whatever the caller claims", async () => {
@@ -133,7 +145,9 @@ describe("staff email/password — login", () => {
     const svc = createStaffEmailAuthService({ prisma, redis, ...DEPS_BASE });
     await svc.register("vendor@example.com", "password123", "vendor");
 
-    // Same email, same password, but attempted on the rider app's login.
+    // Same email, same password, but attempted on the rider app's login —
+    // there's no (email, "rider") row at all, so this can't resolve to
+    // the vendor row by accident.
     await expect(svc.login("vendor@example.com", "password123", "rider")).rejects.toThrow(InvalidCredentialsError);
   });
 

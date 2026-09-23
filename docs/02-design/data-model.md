@@ -48,7 +48,7 @@ The identity every role attaches to. Originally "which field is the identity dep
 |---|---|---|
 | id | uuid | |
 | role | enum: customer, vendor, rider, admin | One role per user — no dual-role accounts. The identity fields below can each independently belong to a customer row AND a vendor row AND a rider row AND an admin row for the same real person — that's four distinct `User` rows, not one row holding four roles |
-| email | string, **globally** unique, nullable | Email/password or Google/Apple, any role. One email is one account, whichever single role it holds — a vendor and a rider can't currently share an email (not asked for; phone below already covers "same identity, several staff roles") |
+| email | string, unique **per (email, role)**, nullable | Email/password or Google/Apple, any role. Same treatment as `phone` below now — the same email can hold a customer row AND a vendor row AND a rider row AND an admin row at once |
 | password_hash | string, nullable | Set for an email/password account, any role; null for an OAuth-only account |
 | email_verified_at | timestamp, nullable | Informational only — never blocks signing in or ordering (US-C-01) |
 | phone | string, unique **per (phone, role)**, nullable | Phone+OTP, vendor/rider/admin only (US-V-01/US-R-01's OTP verifies it) — not globally unique like email: the same phone number can hold a vendor row, a rider row and an admin row at once. Customers never populate this |
@@ -58,7 +58,7 @@ The identity every role attaches to. Originally "which field is the identity dep
 **Invariant:** a `vendor`/`rider`/`admin` row can be reached by phone, email/password, or Google/Apple — whichever it was created or later linked through — but a fresh sign-in on any of those three can never mint a new **admin** row; admin is provisioned out of band only (`findOrCreateStaffUser` in service.ts, `AdminSelfRegistrationDisabledError` in email.ts, `OAuthAdminNotProvisionedError` in oauth-account.ts all enforce the same rule independently). Enforced at the application layer (and worth a DB check constraint once the schema is otherwise stable — noted, not yet built).
 
 ### OAuthAccount
-Links a customer `User` to a Google or Apple identity — a separate table, not flat `google_id`/`apple_id` columns on `User`, specifically so a customer can have *both* a password and a linked provider (or more than one provider) against the same account without a schema change later.
+Links a `User` to a Google or Apple identity — a separate table, not flat `google_id`/`apple_id` columns on `User`, specifically so an account can have *both* a password and a linked provider (or more than one provider) against the same account without a schema change later. Any role now, not customer-only.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -66,6 +66,7 @@ Links a customer `User` to a Google or Apple identity — a separate table, not 
 | user_id | fk → User | |
 | provider | enum: google, apple | |
 | provider_account_id | string | The provider's own stable subject/user id |
+| role | enum: customer, vendor, rider, admin | Denormalized from the linked user — never changes independently, since a `User`'s role is fixed for its lifetime. Exists so `unique(provider, provider_account_id, role)` (not a global unique) lets the same physical Google/Apple account link to a customer row AND a vendor row AND a rider row AND an admin row at once |
 | created_at | timestamp | |
 
 `unique(provider, provider_account_id)` — the same Google account can never link to two different `User` rows.

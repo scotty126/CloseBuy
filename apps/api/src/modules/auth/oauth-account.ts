@@ -7,12 +7,6 @@ export class OAuthAdminNotProvisionedError extends Error {
   }
 }
 
-export class OAuthEmailRoleMismatchError extends Error {
-  constructor() {
-    super("This email is already registered under a different account type.");
-  }
-}
-
 export interface OAuthAccountDeps {
   prisma: PrismaClient;
   jwtAccessSecret: string;
@@ -23,12 +17,14 @@ export interface OAuthAccountDeps {
  * Google/Apple sign-in, any role — brief §3.1b originally scoped OAuth to
  * customer only; relaxed the same way phone/OTP (service.ts) and
  * email/password (email.ts) were, and for the same reason (Termii being
- * blocked shouldn't be the only door into the app). Links to an existing
- * account by verified email if one already exists (so someone who
- * registered with a password and later taps "Continue with Google" on the
- * same address gets one account, not two) — otherwise creates a fresh
- * one. `email` is still globally unique (schema.prisma), so one email is
- * one account regardless of how it signs in.
+ * blocked shouldn't be the only door into the app). `email` and
+ * `OAuthAccount`'s (provider, providerAccountId) are both unique per role
+ * now (schema.prisma), not globally — the same real Google/Apple account
+ * can independently become a customer row AND a vendor row AND a rider
+ * row AND an admin row. Every lookup below is keyed on the composite
+ * (…, role), which is also why a cross-role mismatch simply can't occur
+ * here anymore: the query for "this account, this role" either finds
+ * that exact row or finds nothing, never a different role's row.
  *
  * Admin is the one exception, matching findOrCreateStaffUser (service.ts)
  * and AdminSelfRegistrationDisabledError (email.ts): a fresh Google/Apple
@@ -47,26 +43,22 @@ export function createOAuthAccountService(deps: OAuthAccountDeps) {
   return {
     async findOrCreateFromOAuth(provider: "google" | "apple", providerAccountId: string, email: string, role: UserRole) {
       const existingLink = await deps.prisma.oAuthAccount.findUnique({
-        where: { provider_providerAccountId: { provider, providerAccountId } },
+        where: { provider_providerAccountId_role: { provider, providerAccountId, role } },
         include: { user: true },
       });
-      if (existingLink) {
-        if (existingLink.user.role !== role) throw new OAuthEmailRoleMismatchError();
-        return { user: existingLink.user, ...issueSession(existingLink.user) };
-      }
+      if (existingLink) return { user: existingLink.user, ...issueSession(existingLink.user) };
 
       if (role === "admin") {
-        const existingAdmin = await deps.prisma.user.findUnique({ where: { email } });
-        if (!existingAdmin || existingAdmin.role !== "admin") {
-          throw new OAuthAdminNotProvisionedError();
-        }
-        await deps.prisma.oAuthAccount.create({ data: { userId: existingAdmin.id, provider, providerAccountId } });
+        const existingAdmin = await deps.prisma.user.findUnique({ where: { email_role: { email, role: "admin" } } });
+        if (!existingAdmin) throw new OAuthAdminNotProvisionedError();
+
+        await deps.prisma.oAuthAccount.create({ data: { userId: existingAdmin.id, provider, providerAccountId, role } });
         return { user: existingAdmin, ...issueSession(existingAdmin) };
       }
 
       const user = await deps.prisma.user.upsert({
-        where: { email },
-        update: {}, // account already exists (password or another provider) — just link, below
+        where: { email_role: { email, role } },
+        update: {}, // account already exists for this (email, role) — just link, below
         create: {
           email,
           role,
@@ -74,14 +66,8 @@ export function createOAuthAccountService(deps: OAuthAccountDeps) {
           ...(role === "customer" ? { customerProfile: { create: {} } } : {}),
         },
       });
-      // The upsert's `update` branch leaves an existing row's role exactly
-      // as it was — if that role isn't the one this sign-in asked for
-      // (e.g. this is a vendor-app Google button hitting an email that's
-      // actually a customer account), fail rather than silently issuing a
-      // session for the wrong role.
-      if (user.role !== role) throw new OAuthEmailRoleMismatchError();
 
-      await deps.prisma.oAuthAccount.create({ data: { userId: user.id, provider, providerAccountId } });
+      await deps.prisma.oAuthAccount.create({ data: { userId: user.id, provider, providerAccountId, role } });
       return { user, ...issueSession(user) };
     },
   };

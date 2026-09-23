@@ -60,8 +60,12 @@ function createFakePrisma() {
 
   return {
     user: {
-      findUnique: vi.fn(async ({ where }: { where: { email?: string; id?: string } }) => {
-        if (where.email) return [...users.values()].find((u) => u.email === where.email) ?? null;
+      findUnique: vi.fn(async ({ where }: { where: { email_role?: { email: string; role: string }; id?: string } }) => {
+        // email is unique per (email, role) now (schema.prisma) — this
+        // file only ever registers "customer" rows, matching real usage.
+        if (where.email_role) {
+          return [...users.values()].find((u) => u.email === where.email_role!.email && u.role === where.email_role!.role) ?? null;
+        }
         if (where.id) return users.get(where.id) ?? null;
         return null;
       }),

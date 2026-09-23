@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import * as client from "openid-client";
 import type { UserRole } from "@prisma/client";
 import { getGoogleConfig, getAppleConfig } from "./customer/oauth.js";
-import { createOAuthAccountService, OAuthAdminNotProvisionedError, OAuthEmailRoleMismatchError } from "./oauth-account.js";
+import { createOAuthAccountService, OAuthAdminNotProvisionedError } from "./oauth-account.js";
 
 const OAUTH_STATE_TTL_SECONDS = 10 * 60;
 const OAUTH_ROLES = ["customer", "vendor", "rider", "admin"] as const;
@@ -40,9 +40,6 @@ export async function oauthRoutes(app: FastifyInstance) {
   function handleOAuthError(reply: FastifyReply, err: unknown) {
     if (err instanceof OAuthAdminNotProvisionedError) {
       return reply.code(403).send({ error: { code: "OAUTH_ADMIN_NOT_PROVISIONED", message: err.message } });
-    }
-    if (err instanceof OAuthEmailRoleMismatchError) {
-      return reply.code(409).send({ error: { code: "OAUTH_ROLE_MISMATCH", message: err.message } });
     }
     if (err instanceof client.ClientError) {
       return reply.code(400).send({ error: { code: "OAUTH_FAILED", message: "Sign-in failed." } });

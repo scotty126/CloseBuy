@@ -12,13 +12,12 @@ import { signAccessToken, signRefreshToken } from "../../lib/jwt.js";
  * methods should feel identical from a security standpoint, they just
  * end up on different User rows.
  *
- * `email` stays globally unique (schema.prisma — unlike `phone`, not
- * relaxed to per-role) so registering here can reuse the same
- * "does this email already exist" check customer's register() uses,
- * unchanged. One consequence: a real person can't use the exact same
- * email for both their vendor account and their rider account — not
- * asked for here, and phone+OTP already covers "same identity, several
- * staff roles" via the per-role phone key instead.
+ * `email` is unique per (email, role) (schema.prisma), not globally — the
+ * same real address can independently be a vendor account AND a rider
+ * account AND an admin account, mirroring phone+OTP's per-role key.
+ * Every lookup below is keyed on the composite, so "does this email
+ * already exist" and "is this the right account for this app" are both
+ * answered by the same query, not a query plus a separate role check.
  */
 
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -62,7 +61,10 @@ export interface StaffEmailAuthDeps {
   passwordPepper: string;
 }
 
-const loginAttemptsKey = (email: string) => `staff-login:attempts:${email}`;
+// Attempts are tracked per (email, role) too — a lockout on the vendor
+// app for this address doesn't also lock out the rider app for the same
+// address, since they're genuinely separate accounts now.
+const loginAttemptsKey = (email: string, role: StaffRole) => `staff-login:attempts:${role}:${email}`;
 
 export function createStaffEmailAuthService(deps: StaffEmailAuthDeps) {
   function issueSession(user: User) {
@@ -77,7 +79,7 @@ export function createStaffEmailAuthService(deps: StaffEmailAuthDeps) {
     async register(email: string, password: string, role: StaffRole) {
       if (role === "admin") throw new AdminSelfRegistrationDisabledError();
 
-      const existing = await deps.prisma.user.findUnique({ where: { email } });
+      const existing = await deps.prisma.user.findUnique({ where: { email_role: { email, role } } });
       if (existing) throw new EmailAlreadyRegisteredError();
 
       const passwordHash = await hashPassword(password, deps.passwordPepper);
@@ -86,35 +88,25 @@ export function createStaffEmailAuthService(deps: StaffEmailAuthDeps) {
       return { user, ...issueSession(user) };
     },
 
-    /**
-     * `role` is required, same reason otpVerifySchema's is (@closebuy/types):
-     * this app only ever means one role, and a valid password for a
-     * DIFFERENT role's account (or a customer's) must not work here even
-     * though email is globally unique and would otherwise resolve to a
-     * real row.
-     */
     async login(email: string, password: string, role: StaffRole) {
-      const attempts = Number((await deps.redis.get(loginAttemptsKey(email))) ?? 0);
+      const attempts = Number((await deps.redis.get(loginAttemptsKey(email, role))) ?? 0);
       if (attempts >= MAX_LOGIN_ATTEMPTS) {
         throw new LoginLockedError();
       }
 
-      const user = await deps.prisma.user.findUnique({ where: { email } });
-      const valid =
-        user?.passwordHash && user.role === role
-          ? await verifyPassword(user.passwordHash, password, deps.passwordPepper)
-          : false;
+      const user = await deps.prisma.user.findUnique({ where: { email_role: { email, role } } });
+      const valid = user?.passwordHash ? await verifyPassword(user.passwordHash, password, deps.passwordPepper) : false;
 
       if (!user || !valid) {
         await deps.redis
           .multi()
-          .incr(loginAttemptsKey(email))
-          .expire(loginAttemptsKey(email), LOGIN_LOCKOUT_WINDOW_SECONDS)
+          .incr(loginAttemptsKey(email, role))
+          .expire(loginAttemptsKey(email, role), LOGIN_LOCKOUT_WINDOW_SECONDS)
           .exec();
         throw new InvalidCredentialsError();
       }
 
-      await deps.redis.del(loginAttemptsKey(email));
+      await deps.redis.del(loginAttemptsKey(email, role));
       return { user, ...issueSession(user) };
     },
   };
