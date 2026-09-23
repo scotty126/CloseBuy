@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { ORDER_STATUSES, FULFILMENT_TYPES } from "./enums.js";
 import type { PayoutStatus } from "./enums.js";
+import type { OrderSummaryDto } from "./order.js";
 
 // US-A-01 — an "application" isn't its own database entity, it's a pending
 // VendorProfile or RiderProfile; `type` disambiguates the two id spaces
@@ -82,4 +84,57 @@ export interface PayoutDto {
 // vendor context to review without a second round trip.
 export interface PendingPayoutRequest extends PayoutDto {
   vendor: { id: string; businessName: string };
+}
+
+// ── Order oversight (US-A-03) ───────────────────────────────────────────
+
+// Query-string params, all optional — an empty filter is "everything,
+// newest first". Dates are ISO strings (URL-safe), parsed server-side.
+export const adminOrderFilterSchema = z.object({
+  status: z.enum(ORDER_STATUSES).optional(),
+  vendorId: z.string().uuid().optional(),
+  riderId: z.string().uuid().optional(),
+  fulfilmentType: z.enum(FULFILMENT_TYPES).optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+});
+export type AdminOrderFilterInput = z.infer<typeof adminOrderFilterSchema>;
+
+// Same mandatory-reason shape as applicationRejectSchema/payoutRejectSchema
+// — every US-A-03 intervention records why (its own acceptance criterion).
+export const adminOrderActionSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+export type AdminOrderActionInput = z.infer<typeof adminOrderActionSchema>;
+
+// GET /admin/orders — OrderSummaryDto (order.ts) plus just enough vendor/
+// rider context to scan the list without opening each row.
+export interface AdminOrderSummaryDto extends OrderSummaryDto {
+  vendor: { businessName: string };
+  rider: { fullName: string } | null;
+}
+
+// ── Audit log (US-A-08) ─────────────────────────────────────────────────
+
+export const auditLogFilterSchema = z.object({
+  actorId: z.string().uuid().optional(),
+  targetType: z.string().optional(),
+  targetId: z.string().uuid().optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type AuditLogFilterInput = z.infer<typeof auditLogFilterSchema>;
+
+export interface AuditLogEntryDto {
+  id: string;
+  actorId: string | null;
+  action: string;
+  targetType: string;
+  targetId: string;
+  reason: string | null;
+  createdAt: string;
 }

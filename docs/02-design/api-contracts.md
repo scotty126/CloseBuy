@@ -123,7 +123,7 @@ Push delivery itself needs `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` (optional, `.e
 
 ## Admin
 
-**Built (M1) — application vetting only (US-A-01), the piece nothing else could substitute for:** without it, an applied vendor/rider sits in `pending` forever, since no other module ever writes `VendorProfile.status`/`RiderProfile.status`. Everything else below this line is the real, planned rest of Admin (architecture.md's module boundary, the Prisma models already exist) but isn't built yet — M2/M3, not forgotten.
+**Built:** application vetting (US-A-01) — the piece nothing else could substitute for, since no other module ever writes `VendorProfile.status`/`RiderProfile.status`. Payouts (vendor-requested, admin-approved — see ../payouts/routes.js, a genuinely different shape than the `POST /admin/payouts/run` sketched below, see that module's own plan for why). Order oversight (US-A-03) and audit-log search (US-A-08) — both M-priority, both built directly against this doc's table below, plus one addition the table was missing: `force-cancel` (US-A-03's acceptance criteria lists it explicitly; this table originally didn't). Everything else below this line — disputes, config writes, reconciliation, metrics, suspension — is real, planned scope (architecture.md's module boundary, the Prisma models already exist) but isn't built yet — S-priority (M3), not forgotten.
 
 Admin sign-in reuses the vendor/rider/admin phone+OTP path (`POST /auth/otp/verify` with `role: "admin"`), but with one deliberate asymmetry: unlike vendor/rider, a fresh phone number can never create an admin account through that endpoint — it only logs an *already-provisioned* admin in. Admin accounts are provisioned out of band (`SEED_ADMIN_PHONE` in local dev, a one-off script in production). Otherwise anyone could mint themselves an admin session by hitting a public endpoint with a new number, which would make every `requireAuth(["admin"])` check below meaningless.
 
@@ -135,18 +135,21 @@ An "application" isn't its own database row — it's a `pending` `VendorProfile`
 | `POST /admin/applications/:type/:id/approve` | Approve | `:type` is `vendor` or `rider`. Sets `foundingVendorCommissionWaivedUntil` to now + the configured waiver duration (default 3 months) if `founding_vendor_program_active` is currently true (brief §3.2a) — vendor only, computed once at approval time |
 | `POST /admin/applications/:type/:id/reject` | Reject | `{ reason }` required (US-A-01's mandatory-reason acceptance criterion) |
 | Both actions write an `AuditLog` row (actor, action, target, reason) and 409 if the application was already decided. | | |
-| `GET /admin/orders` | Full order list | Filters: state, vendor, rider, date range, fulfilment type (US-A-03) |
-| `POST /admin/orders/:id/reassign-rider` | Force reassignment | |
-| `POST /admin/orders/:id/force-refund` | Force refund | Writes the same ledger-reversal pattern as a normal refund |
+| `GET /admin/orders` | Full order list — **built** | Filters: `status`, `vendorId`, `riderId`, `fulfilmentType`, `from`/`to` (US-A-03) |
+| `GET /admin/orders/:id` | Full detail, including complete transition history — **built** | No redaction (unlike customer/vendor/rider-facing reads) |
+| `POST /admin/orders/:id/reassign-rider` | Force reassignment — **built** | `{ reason }`. Doesn't hand the job to a specific replacement — clears the current rider and reverts to `READY_FOR_PICKUP`, re-entering the normal open-jobs pool any on-duty rider can claim |
+| `POST /admin/orders/:id/force-cancel` | Force-cancel — **built** | `{ reason }`. Not originally in this table despite US-A-03 listing it explicitly — added here to match. Stops the order (any non-terminal status → `CANCELLED`), refunds if anything was actually charged |
+| `POST /admin/orders/:id/force-refund` | Force refund — **built** | `{ reason }`. Writes the same ledger-reversal pattern as a normal refund — deliberately doesn't touch `Order.status`, a pure financial correction distinct from force-cancel (e.g. a goodwill refund on an order that should still complete normally) |
 | `GET /admin/disputes` | Dispute queue | US-A-04 |
 | `POST /admin/disputes/:id/resolve` | Resolve | `{ resolution: "full_refund"|"partial_refund"|"rejected", amount_minor?, reason }` |
 | `GET /admin/config` | Current live config | Categories, `commission_rate.pickup`/`.delivery`, founding-vendor program state, delivery fee rules, accept-window |
 | `PATCH /admin/config` | Update config | Writes a new versioned `Config` row (US-A-02) — never mutates the previous version |
-| `POST /admin/payouts/run` | Trigger a payout run | Lists every payee with a cleared balance, executes via Monnify Disbursement (US-A-05) |
 | `GET /admin/reconciliation` | Reconciliation report | Ledger totals vs. Monnify settlement report for a period |
 | `GET /admin/metrics` | Platform health | US-A-07 |
 | `POST /admin/vendors/:id/suspend` / `/riders/:id/suspend` | Suspend an actor | `{ reason }` (US-A-06) |
-| `GET /admin/audit-log` | Search the audit log | Filters: actor, target, date range (US-A-08) |
+| `GET /admin/audit-log` | Search the audit log — **built** | Filters: `actorId`, `targetType`, `targetId`, `from`/`to` (US-A-08) |
+
+**`POST /admin/payouts/run` above was superseded, not built as sketched:** payouts are vendor-requested, admin-approved instead (`GET/POST /vendors/me/payouts*`, `GET /admin/payouts/requests`, `POST /admin/payouts/:id/approve`/`reject` — see ../payouts/routes.js) — a deliberate product decision, not an oversight; admin never pushes money to a vendor unprompted.
 
 ## What's deliberately not here
 

@@ -41,8 +41,25 @@ function createFakePrisma() {
     },
     auditLog: {
       create: async ({ data }: any) => {
-        auditLog.push(data);
-        return { id: `log_${auditLog.length}`, createdAt: new Date(), ...data };
+        const entry = { id: `log_${auditLog.length + 1}`, createdAt: new Date(), ...data };
+        auditLog.push(entry);
+        return entry;
+      },
+      findMany: async ({ where, take, cursor, skip }: any) => {
+        let list = [...auditLog]
+          .filter((e) => {
+            if (where.actorId !== undefined && e.actorId !== where.actorId) return false;
+            if (where.targetType !== undefined && e.targetType !== where.targetType) return false;
+            if (where.targetId !== undefined && e.targetId !== where.targetId) return false;
+            return true;
+          })
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        if (cursor) {
+          const idx = list.findIndex((e) => e.id === cursor.id);
+          list = list.slice(idx + (skip ?? 0));
+        }
+        if (take) list = list.slice(0, take);
+        return list;
       },
     },
     __state: { vendors, riders, config, auditLog },
@@ -182,5 +199,59 @@ describe("admin service — application vetting (US-A-01)", () => {
 
     await expect(service().approveApplication(ADMIN_USER_ID, "vendor", VENDOR_ID)).rejects.toThrow(InvalidApplicationStateError);
     await expect(service().rejectApplication(ADMIN_USER_ID, "rider", RIDER_ID, "reason")).rejects.toThrow(InvalidApplicationStateError);
+  });
+});
+
+describe("admin service — audit log search (US-A-08)", () => {
+  it("finds everything this session's own actions already wrote, filtered by actor", async () => {
+    const prisma = createFakePrisma();
+    const notifications = createFakeNotifications();
+    setConfig(prisma, "founding_vendor_program_active", false);
+    setConfig(prisma, "founding_vendor_program_waiver_months", 3);
+    const admin = createAdminService({ prisma, notifications });
+
+    seedPendingVendor(prisma);
+    await admin.approveApplication(ADMIN_USER_ID, "vendor", VENDOR_ID);
+    seedPendingRider(prisma);
+    await admin.rejectApplication("someone_else", "rider", RIDER_ID, "Incomplete documents");
+
+    const { entries } = await admin.searchAuditLog({ actorId: ADMIN_USER_ID, limit: 50 } as any);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ action: "vendor_application_approved", targetId: VENDOR_ID });
+  });
+
+  it("filters by targetType and targetId", async () => {
+    const prisma = createFakePrisma();
+    const notifications = createFakeNotifications();
+    setConfig(prisma, "founding_vendor_program_active", false);
+    setConfig(prisma, "founding_vendor_program_waiver_months", 3);
+    const admin = createAdminService({ prisma, notifications });
+
+    seedPendingVendor(prisma);
+    await admin.approveApplication(ADMIN_USER_ID, "vendor", VENDOR_ID);
+    seedPendingRider(prisma);
+    await admin.approveApplication(ADMIN_USER_ID, "rider", RIDER_ID);
+
+    const { entries } = await admin.searchAuditLog({ targetType: "vendor_profile", targetId: VENDOR_ID, limit: 50 } as any);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ targetType: "vendor_profile", targetId: VENDOR_ID });
+  });
+
+  it("returns newest first", async () => {
+    const prisma = createFakePrisma();
+    const admin = createAdminService({ prisma, notifications: createFakeNotifications() });
+    // Seeded directly with explicit timestamps — going through two real
+    // service calls back to back can't guarantee distinct millisecond
+    // clock values, which is the only thing this ordering test cares about.
+    prisma.__state.auditLog.push(
+      { id: "log_1", actorId: ADMIN_USER_ID, action: "vendor_application_approved", targetType: "vendor_profile", targetId: VENDOR_ID, createdAt: new Date("2026-01-01T10:00:00Z") },
+      { id: "log_2", actorId: ADMIN_USER_ID, action: "rider_application_approved", targetType: "rider_profile", targetId: RIDER_ID, createdAt: new Date("2026-01-01T11:00:00Z") },
+    );
+
+    const { entries } = await admin.searchAuditLog({ limit: 50 } as any);
+
+    expect(entries.map((e: any) => e.action)).toEqual(["rider_application_approved", "vendor_application_approved"]);
   });
 });

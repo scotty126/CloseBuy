@@ -86,5 +86,8 @@ export const NOTIFICATION_TYPES = [
   "payout_paid", // → vendor
   "payout_failed", // → vendor, Monnify attempt didn't succeed
   "payout_rejected", // → vendor, admin declined before any money moved
+  "order_reassigned", // → the OLD rider, US-A-03 — an admin pulled this job back into the open pool
+  "order_force_cancelled", // → customer + vendor, US-A-03 — admin stopped this order outside the normal flow
+  "order_force_refunded", // → customer, US-A-03 — a financial correction, order's own fulfilment status is untouched
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

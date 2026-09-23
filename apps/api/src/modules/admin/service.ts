@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import type { ApplicationType } from "@closebuy/types";
+import type { ApplicationType, AuditLogFilterInput } from "@closebuy/types";
 import type { NotificationService } from "../notifications/service.js";
 import { ConfigKeys } from "../../lib/config.js";
 
@@ -27,12 +27,13 @@ function addMonths(date: Date, months: number): Date {
 }
 
 /**
- * Admin — vendor/rider application vetting (US-A-01). Everything else
- * api-contracts.md sketches for Admin (order oversight, disputes, config
- * writes, payouts, reconciliation, metrics, suspension, audit-log search)
- * is real scope but not built here — this is specifically the piece that
- * unblocks the pipeline: nothing else could move a VendorProfile or
- * RiderProfile out of `pending` at all.
+ * Admin — vendor/rider application vetting (US-A-01) plus the audit-log
+ * search that reads what every module's own writeAuditLog already
+ * produces (US-A-08). Order oversight (US-A-03) lives in ./orders.js
+ * instead, payouts in ../payouts/. Still real, still not built: disputes,
+ * config writes, reconciliation, metrics, suspension (S-priority, M3 —
+ * not forgotten, just genuinely lower priority than the M-tagged stories
+ * above them).
  */
 export function createAdminService({ prisma, notifications }: AdminServiceDeps) {
   async function writeAuditLog(actorId: string, action: string, targetType: string, targetId: string, reason?: string) {
@@ -117,6 +118,26 @@ export function createAdminService({ prisma, notifications }: AdminServiceDeps) 
       await writeAuditLog(adminUserId, "rider_application_rejected", "rider_profile", id, reason);
       await notifications.notify(updated.userId, "rider_application_rejected", { riderId: id, reason });
       return { type: "rider" as const, ...updated };
+    },
+
+    /** US-A-08 — append-only by DB grant (data-model.md), same as ledger_entries; this is the read side, search only, no write/delete ever offered. */
+    async searchAuditLog(filter: AuditLogFilterInput) {
+      const entries = await prisma.auditLog.findMany({
+        where: {
+          ...(filter.actorId ? { actorId: filter.actorId } : {}),
+          ...(filter.targetType ? { targetType: filter.targetType } : {}),
+          ...(filter.targetId ? { targetId: filter.targetId } : {}),
+          ...(filter.from || filter.to
+            ? { createdAt: { ...(filter.from ? { gte: new Date(filter.from) } : {}), ...(filter.to ? { lte: new Date(filter.to) } : {}) } }
+            : {}),
+        },
+        take: filter.limit,
+        ...(filter.cursor ? { cursor: { id: filter.cursor }, skip: 1 } : {}),
+        orderBy: { createdAt: "desc" },
+      });
+
+      const nextCursor = entries.length === filter.limit ? entries[entries.length - 1]?.id : undefined;
+      return { entries, nextCursor };
     },
   };
 }
