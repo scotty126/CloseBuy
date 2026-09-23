@@ -8,17 +8,20 @@ import { formatNaira, minor } from "@closebuy/types";
 import type { CheckoutInput } from "@closebuy/types";
 import { catalogApi, customerAuthApi, orderApi } from "@/lib/api";
 import { useCart } from "@/lib/cart";
+import { DeliveryLocationMap } from "@/components/DeliveryLocationMap";
 
 type PaymentChoice = "online" | "cash_on_delivery";
 
 /**
- * screens-navigation.md §1.6. Address is a real pin (browser geolocation,
- * no API key needed) + landmark — never a postal string (brief §3.4). No
- * Google Maps preview here: GOOGLE_MAPS_API_KEY isn't configured in this
- * environment, and geolocation-only is a real, working, zero-dependency
- * substitute rather than a broken map embed. Server-side service-area
- * validation (US-C-05) still runs regardless — an outside-Riverpark pin
- * is rejected with a clear reason, not silently accepted.
+ * screens-navigation.md §1.6. Address is a real pin (browser geolocation
+ * for the first fix, then fine-tuneable on the map, or entered manually)
+ * + landmark — never a postal string (brief §3.4). DeliveryLocationMap
+ * renders nothing if NEXT_PUBLIC_GOOGLE_MAPS_API_KEY isn't set in a given
+ * environment — geolocation + manual entry alone is still a real, working
+ * flow on its own, this is additive. Server-side service-area validation
+ * (US-C-05) still runs regardless of how the pin was set — an
+ * outside-Riverpark pin is rejected with a clear reason, not silently
+ * accepted.
  */
 export default function CheckoutPage() {
   const router = useRouter();
@@ -159,6 +162,10 @@ export default function CheckoutPage() {
             <p className="text-xs text-muted">
               {lat.toFixed(5)}, {lng.toFixed(5)}
             </p>
+          )}
+          <DeliveryLocationMap lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} />
+          {lat !== null && lng !== null && (
+            <p className="text-xs text-muted">Drag the pin or tap the map to fine-tune the exact spot.</p>
           )}
           <details className="text-xs text-muted">
             <summary className="cursor-pointer select-none">Enter coordinates manually instead</summary>
