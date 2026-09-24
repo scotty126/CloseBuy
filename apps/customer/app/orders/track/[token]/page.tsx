@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Button, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
 import { formatNaira, minor } from "@closebuy/types";
 import type { OrderDto, OrderStatus } from "@closebuy/types";
-import { orderApi } from "@/lib/api";
+import { orderApi, catalogApi } from "@/lib/api";
+import { useCart, type CartItem, type CartVendor } from "@/lib/cart";
 
 const PICKUP_STEPS: OrderStatus[] = ["PAID", "PREPARING", "READY_FOR_PICKUP", "DELIVERED"];
 const DELIVERY_STEPS: OrderStatus[] = ["PAID", "PREPARING", "READY_FOR_PICKUP", "RIDER_ASSIGNED", "IN_TRANSIT", "DELIVERED"];
@@ -33,12 +34,18 @@ function stepLabel(status: OrderStatus, isPickup: boolean): string {
  */
 export default function OrderTrackingPage() {
   const { token } = useParams<{ token: string }>();
+  const router = useRouter();
   const { session } = useAuthSession();
+  const { cart, replaceCartItems } = useCart();
 
   const [order, setOrder] = useState<OrderDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [isReordering, setIsReordering] = useState(false);
+  const [reorderError, setReorderError] = useState<string | null>(null);
+  const [reorderNotice, setReorderNotice] = useState<string | null>(null);
+  const [reorderConflict, setReorderConflict] = useState<{ vendor: CartVendor; items: CartItem[] } | null>(null);
 
   const load = useCallback(() => {
     orderApi
@@ -72,6 +79,77 @@ export default function OrderTrackingPage() {
     } finally {
       setIsCancelling(false);
     }
+  }
+
+  /**
+   * US-C-09 — "any past order can be reordered, subject to current stock
+   * and price": re-fetches the vendor's live catalogue (never trusts the
+   * order's own priceMinorSnapshot/nameSnapshot — those are a receipt of
+   * what happened then, not what's buyable now) and drops any item that's
+   * gone inactive or sold out, rather than failing the whole reorder.
+   */
+  async function buildReorderItems(): Promise<{ vendor: CartVendor; items: CartItem[]; skipped: number } | null> {
+    if (!order) return null;
+    const [{ vendor }, { products }] = await Promise.all([
+      catalogApi.getVendor(order.vendorId),
+      catalogApi.getVendorProducts(order.vendorId),
+    ]);
+
+    const items: CartItem[] = [];
+    for (const orderItem of order.items) {
+      const product = products.find((p) => p.id === orderItem.productId);
+      if (!product || product.stock <= 0) continue;
+      items.push({
+        productId: product.id,
+        name: product.name,
+        priceMinor: product.priceMinor,
+        stock: product.stock,
+        quantity: Math.min(orderItem.quantity, product.stock),
+      });
+    }
+
+    return {
+      vendor: { id: vendor.id, businessName: vendor.businessName, supportsPickup: vendor.supportsPickup },
+      items,
+      skipped: order.items.length - items.length,
+    };
+  }
+
+  async function handleReorder() {
+    setReorderError(null);
+    setReorderNotice(null);
+    setIsReordering(true);
+    try {
+      const result = await buildReorderItems();
+      if (!result) return;
+      if (result.items.length === 0) {
+        setReorderError("None of these items are available anymore.");
+        return;
+      }
+
+      if (cart.vendor && cart.vendor.id !== result.vendor.id) {
+        setReorderConflict({ vendor: result.vendor, items: result.items });
+        return;
+      }
+
+      replaceCartItems(result.vendor, result.items);
+      if (result.skipped > 0) {
+        setReorderNotice(`${result.skipped} item(s) are no longer available and were left out.`);
+      } else {
+        router.push("/cart");
+      }
+    } catch (err) {
+      setReorderError(err instanceof ApiClientError ? err.message : "Couldn't reorder this.");
+    } finally {
+      setIsReordering(false);
+    }
+  }
+
+  function confirmReorderReplace() {
+    if (!reorderConflict) return;
+    replaceCartItems(reorderConflict.vendor, reorderConflict.items);
+    setReorderConflict(null);
+    router.push("/cart");
   }
 
   if (error) {
@@ -204,6 +282,35 @@ export default function OrderTrackingPage() {
             {isCancelling ? "Cancelling…" : "Cancel order"}
           </Button>
           {cancelError && <p className="text-xs text-danger">{cancelError}</p>}
+        </div>
+      )}
+
+      {reorderConflict ? (
+        <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4">
+          <p className="text-sm text-ink">
+            Your cart has items from another vendor. Reordering replaces it with this order&apos;s items.
+          </p>
+          <div className="flex gap-2">
+            <Button onClick={confirmReorderReplace}>Replace cart</Button>
+            <Button variant="secondary" onClick={() => setReorderConflict(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1">
+          <Button variant="secondary" onClick={handleReorder} disabled={isReordering}>
+            {isReordering ? "Reordering…" : "Reorder"}
+          </Button>
+          {reorderError && <p className="text-xs text-danger">{reorderError}</p>}
+          {reorderNotice && (
+            <div className="flex flex-col gap-1">
+              <p className="text-xs text-muted">{reorderNotice}</p>
+              <Button variant="secondary" onClick={() => router.push("/cart")}>
+                Go to cart
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

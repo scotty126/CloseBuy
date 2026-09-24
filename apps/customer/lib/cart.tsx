@@ -42,6 +42,7 @@ interface CartContextValue {
   subtotalMinor: number;
   addItem: (vendor: CartVendor, item: Omit<CartItem, "quantity">, quantity?: number) => AddItemResult;
   replaceCart: (vendor: CartVendor, item: Omit<CartItem, "quantity">, quantity?: number) => void;
+  replaceCartItems: (vendor: CartVendor, items: CartItem[]) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   removeItem: (productId: string) => void;
   clearCart: () => void;
@@ -99,6 +100,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
+  // US-C-09 reorder — the multi-item analog of replaceCart, unconditional
+  // in the same way (the caller decides whether to confirm first, same as
+  // replaceCart's existing conflictWithVendor prompt on the vendor page).
+  const replaceCartItems = useCallback(
+    (vendor: CartVendor, items: CartItem[]) => {
+      persist({ vendor, items, fulfilmentType: "delivery", scheduledFor: null });
+    },
+    [persist],
+  );
+
   const updateQuantity = useCallback(
     (productId: string, quantity: number) => {
       if (quantity <= 0) {
@@ -133,13 +144,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
       subtotalMinor,
       addItem,
       replaceCart,
+      replaceCartItems,
       updateQuantity,
       removeItem,
       clearCart,
       setFulfilmentType,
       setScheduledFor,
     }),
-    [cart, isLoaded, itemCount, subtotalMinor, addItem, replaceCart, updateQuantity, removeItem, clearCart, setFulfilmentType, setScheduledFor],
+    [
+      cart,
+      isLoaded,
+      itemCount,
+      subtotalMinor,
+      addItem,
+      replaceCart,
+      replaceCartItems,
+      updateQuantity,
+      removeItem,
+      clearCart,
+      setFulfilmentType,
+      setScheduledFor,
+    ],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

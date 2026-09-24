@@ -78,16 +78,66 @@ Built and live:
   renders nothing without `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (not yet set).
 - CORS, security fixes (public vendor endpoints were leaking bank details —
   fixed), CI green.
+- Self-service cancellation (US-C-08, `Order.cancelOrder` + the Cancel
+  button on the tracking page), atomic per-item stock decrement on vendor
+  accept (US-V-04, data-model.md §6 invariant 4) — both already fully
+  built, contrary to an earlier stale "still to do" note in this file.
+  Verify against the actual code before trusting any "not built yet" claim
+  here, this file has been wrong about that before.
+- Order history + **reorder** (US-C-09) — history was already built;
+  reorder is new (2026-09-24, `apps/customer/lib/cart.tsx`'s
+  `replaceCartItems` + the Reorder button on the tracking page). Re-fetches
+  the vendor's *live* catalogue rather than trusting the order's own
+  price/name snapshot, silently drops anything gone inactive or sold out,
+  and reuses the existing single-vendor-cart conflict prompt if the cart
+  currently holds a different vendor's items. Verified against the live
+  API in a real browser, including the conflict path.
+
+**Fixed (2026-09-24) — a real, live bug, not hypothetical:** every
+body-less `POST` through the shared `packages/api-client/src/client.ts`
+(vendor accept-order, vendor mark-ready, rider accept/decline-offer,
+admin approve-application, customer cancel-order) sent
+`Content-Type: application/json` with no body. Fastify's default JSON
+parser rejects that outright (`FST_ERR_CTP_EMPTY_JSON_BODY`, a real 400) —
+reproduced live against the production API while testing reorder, not a
+theoretical bug. `client.ts`'s `request()` now only sets that header when
+`init.body` is actually present. One-line fix, fixes all six call sites at
+once (the whole point of the shared package). **If anything upstream of
+this still behaves like the old cancel/accept/ready buttons doing
+nothing silently, that's not fixed elsewhere — check this.**
 
 ## What's next
 
 In priority order, picking up from the admin buildout — every S/M-priority
 Admin story (US-A-01 through US-A-04, US-A-06, US-A-08) is now built;
-only reconciliation and metrics remain there:
-1. **M3 hardening** — self-service cancellation, order history/reorder,
-   ratings (both directions), real inventory-race handling, rider cash
-   remittance, platform metrics (US-A-07), reconciliation report (US-A-05's
-   other half).
+only reconciliation and metrics remain there. Self-service cancellation,
+inventory-race handling and order history/reorder are also done (see
+above) — an earlier version of this section listed them as still to do,
+which was wrong; verify against the code, not this list, before assuming
+something isn't built:
+1. **M3 hardening, real gaps confirmed by grepping the actual frontend
+   (not by trusting the backend existing):**
+   - **Ratings (US-C-10)** — the backend (`Order.rateOrder`,
+     `POST /orders/:id/rate` + guest tracking-link equivalent) has **no
+     uniqueness enforcement**: nothing stops a second `rate` call from
+     creating a duplicate row for the same order+target, and there's no
+     edit path at all despite the acceptance criterion "one rating per
+     order per party, editable for 24 hours" — that needs a real schema/
+     service change (a unique constraint + upsert-or-reject-past-24h
+     logic), not just a UI. There's also zero average-rating aggregation
+     anywhere (`VendorDto` has no rating field) and **zero frontend** —
+     no rate form exists in any app. Bigger than it looks; don't scope it
+     as "just add a button."
+   - **Disputes (US-C-11)** — backend fully built and working (customer
+     side, since before this session). **Zero frontend** — no "report a
+     problem" UI in the customer app at all. Straightforward once
+     scoped: follow the exact same "paste a hosted URL" pattern the
+     vendor product-image field already uses for evidence (R2 isn't
+     configured — ADR-0001 — so no real upload widget anywhere in this
+     codebase yet, don't build one just for this).
+   - Rider cash remittance (US-R-08), platform metrics (US-A-07),
+     reconciliation report (US-A-05's other half) — not yet audited this
+     closely; check the actual code before assuming scope.
 2. **Desktop-responsive layout** for customer/vendor/rider — explicitly
    deferred pre-launch, mobile-only for now by the user's own call.
 3. **ToS / Privacy Policy** — needed before real public launch and before
