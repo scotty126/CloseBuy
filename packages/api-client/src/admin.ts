@@ -14,6 +14,11 @@ import type {
   AdminRiderDto,
   SuspendVendorResult,
   SuspendRiderResult,
+  ConfigUpdateInput,
+  AdminConfigDto,
+  CategoryCreateInput,
+  CategoryUpdateInput,
+  CategoryDto,
   AuditLogFilterInput,
   AuditLogEntryDto,
 } from "@closebuy/types";
@@ -114,6 +119,19 @@ export function createAdminApi(client: ApiClient) {
         method: "POST",
         body: JSON.stringify(input),
       }),
+
+    // ── Config writes (US-A-02) ─────────────────────────────────────────
+
+    getConfig: () => client.request<AdminConfigDto>("/admin/config"),
+
+    updateConfig: (input: ConfigUpdateInput) =>
+      client.request<AdminConfigDto>("/admin/config", { method: "PATCH", body: JSON.stringify(input) }),
+
+    createCategory: (input: CategoryCreateInput) =>
+      client.request<{ category: CategoryDto }>("/admin/categories", { method: "POST", body: JSON.stringify(input) }),
+
+    updateCategory: (id: string, input: CategoryUpdateInput) =>
+      client.request<{ category: CategoryDto }>(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
 
     // ── Audit log (US-A-08) ────────────────────────────────────────────
 

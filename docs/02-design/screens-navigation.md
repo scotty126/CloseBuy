@@ -91,7 +91,7 @@ Full list, filterable by state/vendor/rider/date/fulfilment type, drill into any
 Queue with order history and customer evidence attached, resolution actions (full refund / partial refund / reject) (US-A-04).
 
 ### 4.4 Configuration
-Categories, **pickup and delivery commission rates** (brief §3.2a — not per-category), **Founding Vendor Program** toggle and waiver duration, delivery fee rules, vendor accept-window (US-A-02).
+Categories, **pickup and delivery commission rates** (brief §3.2a — not per-category), **Founding Vendor Program** toggle and waiver duration, delivery fee rules, vendor accept-window (US-A-02). Only the fields actually changed are sent on save — each becomes its own new versioned `Config` row, never an edit of the old one.
 
 ### 4.5 Payouts & reconciliation
 Payout run screen, ledger-vs-gateway-settlement reconciliation report (US-A-05) — note this may need to run against Monnify's multi-daily settlement cadence rather than once per day, per the open verification item in ADR-0001.

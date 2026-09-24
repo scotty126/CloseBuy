@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ORDER_STATUSES, FULFILMENT_TYPES, DISPUTE_RESOLUTIONS, DISPUTE_STATUSES } from "./enums.js";
 import type { PayoutStatus, DisputeStatus, DisputeResolution, VendorStatus, RiderStatus } from "./enums.js";
 import type { OrderSummaryDto } from "./order.js";
+import type { CategoryDto } from "./catalog.js";
 
 // US-A-01 — an "application" isn't its own database entity, it's a pending
 // VendorProfile or RiderProfile; `type` disambiguates the two id spaces
@@ -200,6 +201,39 @@ export interface SuspendVendorResult {
 export interface SuspendRiderResult {
   rider: AdminRiderDto;
   inFlightOrders: AdminOrderSummaryDto[];
+}
+
+// ── Config writes (US-A-02) ─────────────────────────────────────────────
+
+// Every field PATCH /admin/config accepts, each optional — PATCH
+// semantics, only the supplied keys get a new versioned Config row
+// (admin/config.ts never UPDATEs one, matching prisma/APPEND_ONLY.sql's
+// revoked grant). Category CRUD is separate (POST/PATCH /admin/categories,
+// catalog.js's categoryCreateSchema/categoryUpdateSchema) — a real table,
+// not a Config key.
+export const configUpdateSchema = z
+  .object({
+    commissionRatePickup: z.number().min(0).max(100).optional(), // percent, brief §3.2a
+    commissionRateDelivery: z.number().min(0).max(100).optional(),
+    vendorAcceptWindowMinutes: z.number().int().positive().optional(),
+    flatDeliveryFeeMinor: z.number().int().nonnegative().optional(),
+    foundingVendorProgramActive: z.boolean().optional(),
+    foundingVendorProgramWaiverMonths: z.number().int().positive().optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "At least one field is required" });
+export type ConfigUpdateInput = z.infer<typeof configUpdateSchema>;
+
+// GET /admin/config — every admin-configurable value, live, plus every
+// category (active or not, unlike catalog.js's public listCategories
+// which only returns isActive ones).
+export interface AdminConfigDto {
+  commissionRatePickup: number;
+  commissionRateDelivery: number;
+  vendorAcceptWindowMinutes: number;
+  flatDeliveryFeeMinor: number;
+  foundingVendorProgramActive: boolean;
+  foundingVendorProgramWaiverMonths: number;
+  categories: CategoryDto[];
 }
 
 // ── Audit log (US-A-08) ─────────────────────────────────────────────────

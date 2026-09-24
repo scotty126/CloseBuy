@@ -77,6 +77,17 @@ export const categoryCreateSchema = z.object({
 });
 export type CategoryCreateInput = z.infer<typeof categoryCreateSchema>;
 
+// Rename, re-time prep, and/or deactivate/reactivate — all optional, PATCH
+// semantics, same shape convention as vendorUpdateSchema/productUpdateSchema.
+export const categoryUpdateSchema = z
+  .object({
+    name: z.string().min(2).max(60).optional(),
+    defaultPrepMinutes: z.number().int().positive().optional(),
+    isActive: z.boolean().optional(), // deactivate, never hard-delete — same reasoning as Product
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "At least one field is required" });
+export type CategoryUpdateInput = z.infer<typeof categoryUpdateSchema>;
+
 // ── Response shapes ─────────────────────────────────────────────────────
 // Hand-written wire contracts, not re-exported from Prisma — see admin.ts
 // for why (a Date becomes a string once it round-trips through JSON, and

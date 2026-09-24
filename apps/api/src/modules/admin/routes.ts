@@ -7,6 +7,9 @@ import {
   adminDisputeFilterSchema,
   disputeResolveSchema,
   adminActorActionSchema,
+  configUpdateSchema,
+  categoryCreateSchema,
+  categoryUpdateSchema,
   auditLogFilterSchema,
 } from "@closebuy/types";
 import { requireAuth } from "../../lib/auth-guard.js";
@@ -35,15 +38,16 @@ import {
   ActorNotFoundError,
   InvalidActorStateError,
 } from "./actors.js";
+import { createAdminConfigService, CategoryNotFoundError } from "./config.js";
 
 /**
  * Admin — vendor/rider application vetting (US-A-01, service.ts), order
  * oversight (US-A-03, orders.ts), dispute resolution (US-A-04,
- * disputes.ts), actor suspension (US-A-06, actors.ts) and audit-log
- * search (US-A-08, service.ts). Payouts live in ../payouts/routes.js
- * instead (their own vendor-request/admin-approve flow). Still real,
- * still not built: config writes, reconciliation, metrics — S-priority
- * (M3), not forgotten.
+ * disputes.ts), config writes (US-A-02, config.ts), actor suspension
+ * (US-A-06, actors.ts) and audit-log search (US-A-08, service.ts). Payouts
+ * live in ../payouts/routes.js instead (their own vendor-request/
+ * admin-approve flow). Still real, still not built: reconciliation,
+ * metrics — M-priority (M3), not forgotten.
  */
 export async function adminRoutes(app: FastifyInstance) {
   const admin = createAdminService({ prisma: app.prisma, notifications: app.notifications });
@@ -57,6 +61,7 @@ export async function adminRoutes(app: FastifyInstance) {
   const adminOrders = createAdminOrderService({ prisma: app.prisma, monnify, notifications: app.notifications });
   const adminDisputes = createAdminDisputeService({ prisma: app.prisma, monnify, notifications: app.notifications });
   const adminActors = createAdminActorService({ prisma: app.prisma, notifications: app.notifications });
+  const adminConfig = createAdminConfigService({ prisma: app.prisma });
 
   app.get("/admin/applications", { preHandler: requireAuth(["admin"]) }, async (_req, reply) => {
     return reply.send({ applications: await admin.listPendingApplications() });
@@ -289,6 +294,37 @@ export async function adminRoutes(app: FastifyInstance) {
       }
       if (err instanceof InvalidActorStateError) {
         return reply.code(409).send({ error: { code: "INVALID_ACTOR_STATE", message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // ── Config writes (US-A-02) ─────────────────────────────────────────
+
+  app.get("/admin/config", { preHandler: requireAuth(["admin"]) }, async (_req, reply) => {
+    return reply.send(await adminConfig.getConfig());
+  });
+
+  app.patch("/admin/config", { preHandler: requireAuth(["admin"]) }, async (req, reply) => {
+    const body = configUpdateSchema.parse(req.body);
+    return reply.send(await adminConfig.updateConfig(req.authUser!.sub, body));
+  });
+
+  app.post("/admin/categories", { preHandler: requireAuth(["admin"]) }, async (req, reply) => {
+    const body = categoryCreateSchema.parse(req.body);
+    const category = await adminConfig.createCategory(req.authUser!.sub, body);
+    return reply.code(201).send({ category });
+  });
+
+  app.patch("/admin/categories/:id", { preHandler: requireAuth(["admin"]) }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = categoryUpdateSchema.parse(req.body);
+    try {
+      const category = await adminConfig.updateCategory(req.authUser!.sub, id, body);
+      return reply.send({ category });
+    } catch (err) {
+      if (err instanceof CategoryNotFoundError) {
+        return reply.code(404).send({ error: { code: "CATEGORY_NOT_FOUND", message: err.message } });
       }
       throw err;
     }
