@@ -20,6 +20,7 @@ import {
   InvalidOrderStateError,
   InvalidCollectionCodeError,
   VendorProfileNotFoundError,
+  DisputeAlreadyExistsError,
 } from "./service.js";
 
 /**
@@ -140,8 +141,18 @@ export async function orderRoutes(app: FastifyInstance) {
     const { trackingToken } = req.params as { trackingToken: string };
     const body = disputeOrderSchema.parse(req.body);
     const target = await order.getOrderByTrackingToken(trackingToken);
-    const dispute = await order.disputeOrder(target.id, body, target.customerId);
-    return reply.code(201).send({ dispute });
+    try {
+      const dispute = await order.disputeOrder(target.id, body, target.customerId);
+      return reply.code(201).send({ dispute });
+    } catch (err) {
+      if (err instanceof DisputeAlreadyExistsError) {
+        return reply.code(409).send({ error: { code: "DISPUTE_ALREADY_EXISTS", message: err.message } });
+      }
+      if (err instanceof InvalidOrderStateError) {
+        return reply.code(422).send({ error: { code: "INVALID_STATE", message: err.message } });
+      }
+      throw err;
+    }
   });
 
   app.get("/orders", { preHandler: requireAuth(["customer"]) }, async (req, reply) => {
@@ -179,8 +190,18 @@ export async function orderRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const body = disputeOrderSchema.parse(req.body);
     const customer = await app.prisma.customerProfile.findUnique({ where: { userId: req.authUser!.sub } });
-    const dispute = await order.disputeOrder(id, body, customer?.id ?? null);
-    return reply.code(201).send({ dispute });
+    try {
+      const dispute = await order.disputeOrder(id, body, customer?.id ?? null);
+      return reply.code(201).send({ dispute });
+    } catch (err) {
+      if (err instanceof DisputeAlreadyExistsError) {
+        return reply.code(409).send({ error: { code: "DISPUTE_ALREADY_EXISTS", message: err.message } });
+      }
+      if (err instanceof InvalidOrderStateError) {
+        return reply.code(422).send({ error: { code: "INVALID_STATE", message: err.message } });
+      }
+      throw err;
+    }
   });
 
   app.post("/orders/:id/cancel", { preHandler: requireAuth(["customer"]) }, async (req, reply) => {

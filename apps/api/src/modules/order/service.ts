@@ -50,6 +50,11 @@ export class VendorProfileNotFoundError extends Error {
     super("No vendor application found for this account.");
   }
 }
+export class DisputeAlreadyExistsError extends Error {
+  constructor() {
+    super("A dispute has already been opened for this order.");
+  }
+}
 
 export interface AuthContext {
   sub: string;
@@ -77,6 +82,10 @@ const trackingInclude = {
   transitions: { orderBy: { createdAt: "asc" as const } },
   vendor: { select: { businessName: true, pickupLandmark: true, pickupPhone: true, logoUrl: true } },
   rider: { select: { fullName: true, user: { select: { phone: true } } } },
+  // US-C-11 — lets the tracking screen show "dispute already open"/its
+  // resolution instead of the report-a-problem form once one exists
+  // (Dispute.orderId is @unique, so there's only ever 0 or 1).
+  dispute: true,
 };
 
 export function createOrderService(deps: OrderServiceDeps) {
@@ -487,6 +496,9 @@ export function createOrderService(deps: OrderServiceDeps) {
 
     async disputeOrder(orderId: string, input: DisputeOrderInput, customerId: string | null) {
       const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+      const existing = await prisma.dispute.findUnique({ where: { orderId } });
+      if (existing) throw new DisputeAlreadyExistsError();
+
       const deliveredAt = (await prisma.orderStateTransition.findFirst({ where: { orderId, toStatus: "DELIVERED" } }))?.createdAt;
       if (!deliveredAt || Date.now() - deliveredAt.getTime() > 48 * 60 * 60 * 1000) {
         throw new InvalidOrderStateError("Disputes must be opened within 48 hours of delivery.");

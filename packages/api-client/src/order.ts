@@ -7,6 +7,8 @@ import type {
   RejectOrderInput,
   ConfirmPickupInput,
   VendorEarningsDto,
+  DisputeOrderInput,
+  DisputeDto,
 } from "@closebuy/types";
 
 export function createOrderApi(client: ApiClient) {
@@ -33,6 +35,18 @@ export function createOrderApi(client: ApiClient) {
 
     /** US-C-08 — self-service, only while the order is still PAID (server-enforced). */
     cancelOrder: (id: string) => client.request<void>(`/orders/${id}/cancel`, { method: "POST" }),
+
+    /**
+     * US-C-11 — the trackingToken-based route, not the signed-in-only
+     * `/orders/:id/dispute`: works for a guest and a signed-in customer
+     * identically (server resolves the order's own customerId, not the
+     * caller's), matching how the whole tracking screen already reads.
+     */
+    disputeOrder: (trackingToken: string, input: DisputeOrderInput) =>
+      client.request<{ dispute: DisputeDto }>(`/orders/track/${trackingToken}/dispute`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
 
     // ── Vendor (US-V-05/06/07) ────────────────────────────────────────────
 

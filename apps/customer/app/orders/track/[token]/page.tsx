@@ -47,6 +47,12 @@ export default function OrderTrackingPage() {
   const [reorderNotice, setReorderNotice] = useState<string | null>(null);
   const [reorderConflict, setReorderConflict] = useState<{ vendor: CartVendor; items: CartItem[] } | null>(null);
 
+  const [showDisputeForm, setShowDisputeForm] = useState(false);
+  const [disputeReason, setDisputeReason] = useState("");
+  const [disputeEvidenceText, setDisputeEvidenceText] = useState("");
+  const [isSubmittingDispute, setIsSubmittingDispute] = useState(false);
+  const [disputeError, setDisputeError] = useState<string | null>(null);
+
   const load = useCallback(() => {
     orderApi
       .getOrderByTrackingToken(token)
@@ -152,6 +158,30 @@ export default function OrderTrackingPage() {
     router.push("/cart");
   }
 
+  /** US-C-11 — same trackingToken-based route for a guest and a signed-in customer alike (US-C-06a). */
+  async function handleSubmitDispute() {
+    if (!order || disputeReason.trim().length < 10) return;
+    const evidence = disputeEvidenceText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, 5);
+
+    setIsSubmittingDispute(true);
+    setDisputeError(null);
+    try {
+      await orderApi.disputeOrder(token, { reason: disputeReason.trim(), evidence: evidence.length > 0 ? evidence : undefined });
+      setShowDisputeForm(false);
+      setDisputeReason("");
+      setDisputeEvidenceText("");
+      load();
+    } catch (err) {
+      setDisputeError(err instanceof ApiClientError ? err.message : "Couldn't submit that.");
+    } finally {
+      setIsSubmittingDispute(false);
+    }
+  }
+
   if (error) {
     return (
       <div className="p-4">
@@ -174,6 +204,12 @@ export default function OrderTrackingPage() {
   const isException = TERMINAL_EXCEPTIONS.includes(order.status);
   const exceptionTransition = isException ? [...order.transitions].reverse().find((t) => t.toStatus === order.status) : undefined;
   const canCancel = Boolean(session) && order.status === "PAID";
+
+  // US-C-11 — mirrors the server's own window check (order/service.ts's
+  // disputeOrder): within 48h of the DELIVERED transition, and not
+  // already disputed. The server re-checks both authoritatively regardless.
+  const deliveredAt = order.transitions.find((t) => t.toStatus === "DELIVERED")?.createdAt;
+  const canDispute = !order.dispute && Boolean(deliveredAt) && Date.now() - new Date(deliveredAt!).getTime() < 48 * 60 * 60 * 1000;
 
   return (
     <div className="flex flex-col gap-5 p-4 pb-8">
@@ -312,6 +348,65 @@ export default function OrderTrackingPage() {
             </div>
           )}
         </div>
+      )}
+
+      {order.dispute ? (
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <p className="text-sm font-semibold text-ink">
+            {order.dispute.status === "open" ? "Dispute under review" : "Dispute resolved"}
+          </p>
+          <p className="mt-1 text-sm text-ink">{order.dispute.reason}</p>
+          {order.dispute.status === "resolved" && (
+            <p className="mt-1 text-xs text-muted">
+              Outcome: {order.dispute.resolution === "full_refund" && "Full refund issued"}
+              {order.dispute.resolution === "partial_refund" && "Partial refund issued"}
+              {order.dispute.resolution === "rejected" && "Not upheld — no refund"}
+            </p>
+          )}
+        </div>
+      ) : canDispute && (
+        showDisputeForm ? (
+          <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4">
+            <p className="text-sm font-medium text-ink">What went wrong?</p>
+            {disputeError && <p className="text-sm text-danger">{disputeError}</p>}
+            <textarea
+              value={disputeReason}
+              onChange={(e) => setDisputeReason(e.target.value)}
+              rows={3}
+              placeholder="e.g. Two items were missing when it arrived"
+              minLength={10}
+              maxLength={1000}
+              className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-ink">Photos (optional, one URL per line)</label>
+              <p className="text-xs text-muted">No photo upload yet — paste hosted image URLs directly.</p>
+              <textarea
+                value={disputeEvidenceText}
+                onChange={(e) => setDisputeEvidenceText(e.target.value)}
+                rows={2}
+                placeholder="https://…"
+                className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="danger"
+                onClick={handleSubmitDispute}
+                disabled={isSubmittingDispute || disputeReason.trim().length < 10}
+              >
+                {isSubmittingDispute ? "Submitting…" : "Submit"}
+              </Button>
+              <Button variant="secondary" onClick={() => setShowDisputeForm(false)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button variant="secondary" onClick={() => setShowDisputeForm(true)}>
+            Report a problem
+          </Button>
+        )
       )}
     </div>
   );

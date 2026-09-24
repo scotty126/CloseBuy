@@ -9,6 +9,7 @@ import {
   InvalidOrderStateError,
   InvalidCollectionCodeError,
   VendorProfileNotFoundError,
+  DisputeAlreadyExistsError,
 } from "./service.js";
 import type { MonnifyClient } from "../payments/monnify.js";
 import type { OrderQueue } from "./jobs.js";
@@ -621,6 +622,72 @@ describe("order service — vendor actions (US-V-05/06)", () => {
     const orders = await svc.listVendorOrders(VENDOR_USER_ID);
     expect(orders[0]!.collectionCode).toEqual(expect.any(String));
     expect(orders[0]).not.toHaveProperty("deliveryCode");
+  });
+});
+
+describe("order service — disputeOrder (US-C-11)", () => {
+  let prisma: ReturnType<typeof createFakePrisma>;
+  let monnify: MonnifyClient;
+  let queue: OrderQueue;
+  let notifications: NotificationService;
+
+  beforeEach(() => {
+    prisma = createFakePrisma();
+    monnify = createFakeMonnify();
+    queue = createFakeQueue();
+    notifications = createFakeNotifications();
+    seed(prisma);
+  });
+
+  function service() {
+    return createOrderService({ prisma, monnify, queue, notifications, customerAppUrl: "http://localhost:3000" });
+  }
+
+  async function deliveredOrder(deliveredAt = new Date()) {
+    const svc = service();
+    const { order } = await svc.checkout(
+      { vendorId: VENDOR_ID, items: [{ productId: PRODUCT_ID, quantity: 1 }], fulfilmentType: "pickup", paymentMethod: "cash_on_delivery", contactPhone: "+2348012345678" },
+      null,
+      `idem-${Math.random()}`,
+    );
+    prisma.__state.transitions.push({ id: "t_delivered", orderId: order.id, toStatus: "DELIVERED", createdAt: deliveredAt });
+    return { svc, order };
+  }
+
+  it("opens a dispute within 48 hours of delivery and holds the pending escrow release", async () => {
+    const { svc, order } = await deliveredOrder();
+    const dispute = await svc.disputeOrder(order.id, { reason: "Half the order was missing on arrival" }, CUSTOMER_ID);
+
+    expect((dispute as any).status).toBe("open");
+    expect(queue.cancelEscrowRelease).toHaveBeenCalledWith(order.id);
+  });
+
+  it("rejects a second dispute on the same order", async () => {
+    const { svc, order } = await deliveredOrder();
+    await svc.disputeOrder(order.id, { reason: "Half the order was missing on arrival" }, CUSTOMER_ID);
+
+    await expect(
+      svc.disputeOrder(order.id, { reason: "Trying again" }, CUSTOMER_ID),
+    ).rejects.toThrow(DisputeAlreadyExistsError);
+  });
+
+  it("rejects a dispute opened more than 48 hours after delivery", async () => {
+    const { svc, order } = await deliveredOrder(new Date(Date.now() - 49 * 60 * 60 * 1000));
+    await expect(
+      svc.disputeOrder(order.id, { reason: "Too late to matter" }, CUSTOMER_ID),
+    ).rejects.toThrow(InvalidOrderStateError);
+  });
+
+  it("rejects a dispute on an order that was never delivered", async () => {
+    const svc = service();
+    const { order } = await svc.checkout(
+      { vendorId: VENDOR_ID, items: [{ productId: PRODUCT_ID, quantity: 1 }], fulfilmentType: "pickup", paymentMethod: "cash_on_delivery", contactPhone: "+2348012345678" },
+      null,
+      `idem-${Math.random()}`,
+    );
+    await expect(
+      svc.disputeOrder(order.id, { reason: "Never even arrived" }, CUSTOMER_ID),
+    ).rejects.toThrow(InvalidOrderStateError);
   });
 });
 

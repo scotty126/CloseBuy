@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { phoneSchema } from "./auth.js";
 import { FULFILMENT_TYPES, PAYMENT_METHODS } from "./enums.js";
-import type { OrderStatus, FulfilmentType, PaymentMethod } from "./enums.js";
+import type { OrderStatus, FulfilmentType, PaymentMethod, DisputeStatus, DisputeResolution } from "./enums.js";
 
 const cartItemSchema = z.object({
   productId: z.string().uuid(),
@@ -72,6 +72,22 @@ export const disputeOrderSchema = z.object({
 });
 export type DisputeOrderInput = z.infer<typeof disputeOrderSchema>;
 
+// POST /orders/track/:token/dispute and /orders/:id/dispute both return
+// this — the raw Dispute row, JSON-serialized (see admin.ts's note on why
+// Prisma types aren't reused directly for a wire contract).
+export interface DisputeDto {
+  id: string;
+  orderId: string;
+  customerId: string | null;
+  reason: string;
+  evidence: string[];
+  status: DisputeStatus;
+  resolution: DisputeResolution | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
 // ── Response shapes ─────────────────────────────────────────────────────
 // Hand-written wire contracts, not re-exported from Prisma — see admin.ts
 // for why.
@@ -129,10 +145,15 @@ export interface OrderDto {
   transitions: OrderTransitionDto[];
   vendor?: { businessName: string; pickupLandmark: string; pickupPhone: string; logoUrl: string | null };
   rider?: { fullName: string; user: { phone: string } } | null;
+  // US-C-11 — present (0 or 1, Dispute.orderId is @unique) so the tracking
+  // screen can show "already disputed"/its resolution instead of the
+  // report-a-problem form once one exists, rather than only finding out
+  // on a second POST's 409.
+  dispute?: DisputeDto | null;
 }
 
 // GET /orders (US-C-09 history) — the raw Order row, no relations joined.
-export type OrderSummaryDto = Omit<OrderDto, "items" | "transitions" | "vendor" | "rider">;
+export type OrderSummaryDto = Omit<OrderDto, "items" | "transitions" | "vendor" | "rider" | "dispute">;
 
 export interface CheckoutResponse {
   order: OrderDto;

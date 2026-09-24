@@ -92,6 +92,24 @@ Built and live:
   and reuses the existing single-vendor-cart conflict prompt if the cart
   currently holds a different vendor's items. Verified against the live
   API in a real browser, including the conflict path.
+- **Report a problem** (US-C-11, 2026-09-24) — "Report a problem" on the
+  tracking page (`apps/customer/app/orders/track/[token]/page.tsx`),
+  reason + optional evidence (same "paste hosted URLs, one per line"
+  pattern the vendor product form already used — R2 still isn't
+  configured, ADR-0001). Uses the trackingToken route for both guest and
+  signed-in customers alike (US-C-06a), matching how the rest of this
+  screen already works. Fixed two real gaps found while wiring it up:
+  `Order.disputeOrder` had no guard against a second dispute on the same
+  order (would have hit the DB's `@unique` constraint as an unhandled
+  500), and `trackingInclude` didn't join `dispute` at all, so the
+  frontend had no way to know one already existed — both fixed
+  (`DisputeAlreadyExistsError`, `OrderDto.dispute`). Verified against the
+  live API for the negative path (button correctly hidden pre-delivery);
+  the positive path (an actual DELIVERED order) is covered by new unit
+  tests in `order/service.test.ts` but **not yet exercised live** — doing
+  so needs a vendor (and for delivery orders, a rider) account to walk an
+  order through accept → ready → confirm, and this session had no
+  vendor/rider/admin credentials to do that with.
 
 **Fixed (2026-09-24) — a real, live bug, not hypothetical:** every
 body-less `POST` through the shared `packages/api-client/src/client.ts`
@@ -111,10 +129,10 @@ nothing silently, that's not fixed elsewhere — check this.**
 In priority order, picking up from the admin buildout — every S/M-priority
 Admin story (US-A-01 through US-A-04, US-A-06, US-A-08) is now built;
 only reconciliation and metrics remain there. Self-service cancellation,
-inventory-race handling and order history/reorder are also done (see
-above) — an earlier version of this section listed them as still to do,
-which was wrong; verify against the code, not this list, before assuming
-something isn't built:
+inventory-race handling, order history/reorder and disputes are also
+done end to end (see above) — an earlier version of this section listed
+some of these as still to do, which was wrong; verify against the code,
+not this list, before assuming something isn't built:
 1. **M3 hardening, real gaps confirmed by grepping the actual frontend
    (not by trusting the backend existing):**
    - **Ratings (US-C-10)** — the backend (`Order.rateOrder`,
@@ -127,14 +145,7 @@ something isn't built:
      logic), not just a UI. There's also zero average-rating aggregation
      anywhere (`VendorDto` has no rating field) and **zero frontend** —
      no rate form exists in any app. Bigger than it looks; don't scope it
-     as "just add a button."
-   - **Disputes (US-C-11)** — backend fully built and working (customer
-     side, since before this session). **Zero frontend** — no "report a
-     problem" UI in the customer app at all. Straightforward once
-     scoped: follow the exact same "paste a hosted URL" pattern the
-     vendor product-image field already uses for evidence (R2 isn't
-     configured — ADR-0001 — so no real upload widget anywhere in this
-     codebase yet, don't build one just for this).
+     as "just add a button." **Next up.**
    - Rider cash remittance (US-R-08), platform metrics (US-A-07),
      reconciliation report (US-A-05's other half) — not yet audited this
      closely; check the actual code before assuming scope.
