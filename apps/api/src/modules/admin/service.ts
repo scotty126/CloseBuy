@@ -29,10 +29,11 @@ function addMonths(date: Date, months: number): Date {
 /**
  * Admin — vendor/rider application vetting (US-A-01) plus the audit-log
  * search that reads what every module's own writeAuditLog already
- * produces (US-A-08). Order oversight (US-A-03) lives in ./orders.js
- * instead, payouts in ../payouts/. Still real, still not built: disputes,
- * config writes, reconciliation, metrics, suspension (S-priority, M3 —
- * not forgotten, just genuinely lower priority than the M-tagged stories
+ * produces (US-A-08). Order oversight (US-A-03) lives in ./orders.js,
+ * disputes (US-A-04) in ./disputes.js, actor suspension (US-A-06) in
+ * ./actors.js, payouts in ../payouts/. Still real, still not built:
+ * config writes, reconciliation, metrics (S-priority, M3 — not
+ * forgotten, just genuinely lower priority than the M-tagged stories
  * above them).
  */
 export function createAdminService({ prisma, notifications }: AdminServiceDeps) {

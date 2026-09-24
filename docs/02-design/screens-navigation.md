@@ -81,6 +81,9 @@ Sidebar, desktop-first — this one genuinely is an internal tool, used only by 
 ### 4.1 Applications
 Vendor and rider vetting queue, documents visible inline, approve/reject with mandatory reason on rejection (US-A-01). Approving a vendor during the launch window shows the founding-vendor waiver being applied, not a silent side effect.
 
+### 4.1a Vendors & riders
+Not in the original sketch — added because US-A-06 needs somewhere to suspend *from*, and Applications (§4.1) is deliberately pending-only. Every vendor/rider, any status; suspend requires a reason and immediately surfaces that actor's in-flight (non-terminal) orders so the operator handles them deliberately rather than losing track of them — orders are never auto-cancelled by a suspension. Unsuspend reverses it (US-A-06's "fully reversible").
+
 ### 4.2 Orders
 Full list, filterable by state/vendor/rider/date/fulfilment type, drill into any order's complete append-only transition history (US-A-03).
 

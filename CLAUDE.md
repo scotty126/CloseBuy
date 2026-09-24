@@ -62,10 +62,13 @@ Built and live:
   (Wikimedia/Unsplash/Pexels).
 - Admin: application vetting (US-A-01), order oversight (US-A-03, full
   list/detail/transition-history/reassign-rider/force-cancel/force-refund),
-  audit-log search (US-A-08). Not yet: disputes (US-A-04), config writes
-  (US-A-02), reconciliation (US-A-05's other half), metrics (US-A-07),
-  suspend-an-actor (US-A-06) — all S-priority (M3), real placeholders exist
-  in `apps/admin/app/*`.
+  dispute resolution (US-A-04 — queue + full/partial refund/reject, see
+  `apps/api/src/modules/admin/disputes.ts`), suspend-an-actor (US-A-06 —
+  `apps/api/src/modules/admin/actors.ts` + admin `/vendors`/`/riders`
+  screens, not in the original screens-navigation.md sketch), audit-log
+  search (US-A-08). Not yet: config writes (US-A-02), reconciliation
+  (US-A-05's other half), metrics (US-A-07) — all S/M-priority (M3), real
+  placeholders exist in `apps/admin/app/*`.
 - Customer UI restyled toward the DoorDash reference kit (structural/layout
   only — brand green/orange stays, deliberately not DoorDash's red).
 - Delivery-pin map on checkout (`@vis.gl/react-google-maps`) — additive,
@@ -76,20 +79,29 @@ Built and live:
 ## What's next
 
 In priority order, picking up from the admin buildout:
-1. **Disputes (US-A-04)** and **suspend-an-actor (US-A-06)** — next two
-   S-priority Admin pieces, same shape as order oversight (real
-   placeholders already exist at `apps/admin/app/disputes`,
-   need a suspend action added to vendor/rider profile views).
-2. **Config writes (US-A-02)** — categories, commission rates, Founding
+1. **Config writes (US-A-02)** — categories, commission rates, Founding
    Vendor Program toggle, delivery fee rules, accept-window. `Config` model
    already exists and is read everywhere (`lib/config.ts`); no write path yet.
-3. **M3 hardening** — self-service cancellation, order history/reorder,
+   Next admin piece up — disputes/suspension are now built (see below).
+2. **M3 hardening** — self-service cancellation, order history/reorder,
    ratings (both directions), real inventory-race handling, rider cash
-   remittance, platform metrics (US-A-07).
-4. **Desktop-responsive layout** for customer/vendor/rider — explicitly
+   remittance, platform metrics (US-A-07), reconciliation report (US-A-05's
+   other half).
+3. **Desktop-responsive layout** for customer/vendor/rider — explicitly
    deferred pre-launch, mobile-only for now by the user's own call.
-5. **ToS / Privacy Policy** — needed before real public launch and before
+4. **ToS / Privacy Policy** — needed before real public launch and before
    Google OAuth can leave "Testing" mode.
+
+**Just built (2026-09-24), not yet migrated onto the live DB** — disputes
+(US-A-04, `apps/api/src/modules/admin/disputes.ts` + admin `/disputes`
+list/detail) and suspend-an-actor (US-A-06,
+`apps/api/src/modules/admin/actors.ts` + admin `/vendors`/`/riders`, new
+screens not in the original screens-navigation.md sketch). Adds
+`PaymentStatus.partially_refunded` and an index on `disputes.status` —
+migration `20260924120000_dispute_resolution_and_suspension` is written
+but **not yet applied to Railway's Postgres** (see Conventions below for
+how). Apply it, then smoke-test both flows against the live API before
+considering this fully done.
 
 ## Known issues / external blockers
 

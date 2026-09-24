@@ -140,13 +140,16 @@ An "application" isn't its own database row — it's a `pending` `VendorProfile`
 | `POST /admin/orders/:id/reassign-rider` | Force reassignment — **built** | `{ reason }`. Doesn't hand the job to a specific replacement — clears the current rider and reverts to `READY_FOR_PICKUP`, re-entering the normal open-jobs pool any on-duty rider can claim |
 | `POST /admin/orders/:id/force-cancel` | Force-cancel — **built** | `{ reason }`. Not originally in this table despite US-A-03 listing it explicitly — added here to match. Stops the order (any non-terminal status → `CANCELLED`), refunds if anything was actually charged |
 | `POST /admin/orders/:id/force-refund` | Force refund — **built** | `{ reason }`. Writes the same ledger-reversal pattern as a normal refund — deliberately doesn't touch `Order.status`, a pure financial correction distinct from force-cancel (e.g. a goodwill refund on an order that should still complete normally) |
-| `GET /admin/disputes` | Dispute queue | US-A-04 |
-| `POST /admin/disputes/:id/resolve` | Resolve | `{ resolution: "full_refund"|"partial_refund"|"rejected", amount_minor?, reason }` |
+| `GET /admin/disputes` | Dispute queue, oldest first — **built** | Filter: `status` (US-A-04) |
+| `GET /admin/disputes/:id` | Dispute detail — **built** | Full order context (vendor, total, contact) joined in |
+| `POST /admin/disputes/:id/resolve` | Resolve — **built** | `{ resolution: "full_refund"\|"partial_refund"\|"rejected", amountMinor?, reason }`. `full_refund` reverses the whole order; `partial_refund` reverses `amountMinor` and releases the remainder to vendor/rider/platform via the normal split, scaled to what's left (`ledger.ts`'s `partialRefundEntries`); `rejected` releases escrow in full, same as if no dispute had been opened. Every branch resolves the order to a real terminal status itself — the dispute already cancelled the order's own escrow-release timer |
 | `GET /admin/config` | Current live config | Categories, `commission_rate.pickup`/`.delivery`, founding-vendor program state, delivery fee rules, accept-window |
 | `PATCH /admin/config` | Update config | Writes a new versioned `Config` row (US-A-02) — never mutates the previous version |
 | `GET /admin/reconciliation` | Reconciliation report | Ledger totals vs. Monnify settlement report for a period |
 | `GET /admin/metrics` | Platform health | US-A-07 |
-| `POST /admin/vendors/:id/suspend` / `/riders/:id/suspend` | Suspend an actor | `{ reason }` (US-A-06) |
+| `GET /admin/vendors` / `GET /admin/riders` | Every vendor/rider, any status — **built** | Not in the original sketch — added so US-A-06 has something to suspend from; Applications (`GET /admin/applications`) stays pending-only |
+| `POST /admin/vendors/:id/suspend` / `/riders/:id/suspend` — **built** | Suspend an actor | `{ reason }` (US-A-06). `status` already gates new orders/job offers — this is the whole enforcement mechanism. Response includes `inFlightOrders` (that actor's non-terminal orders) so an operator sees what's in flight without them being auto-cancelled — the story's own acceptance criterion. Suspending a rider also flips `onDuty` off |
+| `POST /admin/vendors/:id/unsuspend` / `/riders/:id/unsuspend` — **built** | Reverse a suspension | `{ reason }`. Not in the original sketch — added because US-A-06 requires suspension be "fully reversible" |
 | `GET /admin/audit-log` | Search the audit log — **built** | Filters: `actorId`, `targetType`, `targetId`, `from`/`to` (US-A-08) |
 
 **`POST /admin/payouts/run` above was superseded, not built as sketched:** payouts are vendor-requested, admin-approved instead (`GET/POST /vendors/me/payouts*`, `GET /admin/payouts/requests`, `POST /admin/payouts/:id/approve`/`reject` — see ../payouts/routes.js) — a deliberate product decision, not an oversight; admin never pushes money to a vendor unprompted.

@@ -32,10 +32,11 @@ import { serializeUser } from "./lib/serialize-user.js";
  * applies no matter which of these three a sign-in comes through.
  * Catalog, Order/Checkout and
  * Dispatch are real, M1 (roadmap.md). Admin is real for application
- * vetting (US-A-01) and payouts — the rest of api-contracts.md's Admin
- * section (order oversight, disputes, config writes, metrics, audit-log
- * search) is a real module boundary already but its routes aren't built
- * yet.
+ * vetting (US-A-01), payouts, order oversight (US-A-03), dispute
+ * resolution (US-A-04), actor suspension (US-A-06) and audit-log search
+ * (US-A-08) — the rest of api-contracts.md's Admin section (config
+ * writes, reconciliation, metrics) is a real module boundary already but
+ * its routes aren't built yet.
  *
  * notificationsPlugin registers before order/dispatch/admin routes
  * specifically so their service factories can take `app.notifications` as

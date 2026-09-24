@@ -6,15 +6,14 @@ import type { AdminOrderFilterInput } from "@closebuy/types";
 import type { NotificationType } from "@closebuy/types";
 
 /**
- * US-A-03 — order oversight, the one M-priority slice of api-contracts.md's
- * Admin section (order oversight, disputes, config writes, metrics,
- * audit-log search) that was still unbuilt as of this file. Deliberately
- * its own module, not added to order/service.ts's `createOrderService` or
- * grafted onto admin/service.ts's application-vetting concern — this
- * mirrors dispatch/service.ts's existing precedent (its own local
+ * US-A-03 — order oversight. Deliberately its own module, not added to
+ * order/service.ts's `createOrderService` or grafted onto
+ * admin/service.ts's application-vetting concern — this mirrors
+ * dispatch/service.ts's existing precedent (its own local
  * `writeTransition`/`notifyCustomer`, touching `prisma.order` directly
  * rather than reaching into order/service.ts's private closures) rather
  * than introducing a new cross-module sharing pattern for this one case.
+ * ./disputes.js and ./actors.js repeat the same shape for US-A-04/US-A-06.
  */
 
 export class OrderNotFoundError extends Error {

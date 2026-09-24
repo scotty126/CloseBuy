@@ -135,7 +135,7 @@ export default function AdminOrderDetailPage() {
             </div>
           ))}
           {order.transitions.map((t) => t.reason && (
-            <p key={`${t.id}-reason`} className="text-xs italic text-muted">"{t.reason}"</p>
+            <p key={`${t.id}-reason`} className="text-xs italic text-muted">&quot;{t.reason}&quot;</p>
           ))}
         </div>
       </Card>

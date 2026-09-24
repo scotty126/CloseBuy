@@ -85,6 +85,35 @@ export function refundEntries(orderId: string, totalMinor: number): LedgerRow[] 
   return rows;
 }
 
+/**
+ * US-A-04 partial refund — the original escrow hold (`totalMinor`, posted
+ * at PAID time) has to leave `customer_escrow` in exactly two pieces so
+ * the books stay balanced against that same hold: `refundAmountMinor`
+ * reverses back to the customer, and `releaseAmountMinor` (whatever's
+ * left) pays out normally via `releaseSplit` — computed by the caller
+ * from `computeEscrowSplit(releaseAmountMinor, ...)`, not the order's
+ * original total, since only what's actually released should be split.
+ */
+export function partialRefundEntries(
+  orderId: string,
+  refundAmountMinor: number,
+  releaseAmountMinor: number,
+  releaseSplit: EscrowSplit,
+): LedgerRow[] {
+  const rows: LedgerRow[] = [
+    { orderId, account: "customer_escrow", direction: "debit", amountMinor: refundAmountMinor },
+    { orderId, account: "platform_clearing", direction: "credit", amountMinor: refundAmountMinor },
+    { orderId, account: "customer_escrow", direction: "debit", amountMinor: releaseAmountMinor },
+    { orderId, account: "vendor_payable", direction: "credit", amountMinor: releaseSplit.vendorNetMinor },
+    { orderId, account: "platform_commission", direction: "credit", amountMinor: releaseSplit.commissionMinor },
+  ];
+  if (releaseSplit.deliveryFeeMinor > 0) {
+    rows.push({ orderId, account: "rider_payable", direction: "credit", amountMinor: releaseSplit.deliveryFeeMinor });
+  }
+  assertBalanced(rows);
+  return rows;
+}
+
 export async function postLedgerEntries(
   tx: Prisma.TransactionClient | PrismaClient,
   rows: LedgerRow[],

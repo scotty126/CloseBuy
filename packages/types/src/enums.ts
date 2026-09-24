@@ -49,6 +49,9 @@ export type LedgerAccount = (typeof LEDGER_ACCOUNTS)[number];
 export const LEDGER_DIRECTIONS = ["debit", "credit"] as const;
 export type LedgerDirection = (typeof LEDGER_DIRECTIONS)[number];
 
+export const DISPUTE_STATUSES = ["open", "resolved"] as const;
+export type DisputeStatus = (typeof DISPUTE_STATUSES)[number];
+
 export const DISPUTE_RESOLUTIONS = ["full_refund", "partial_refund", "rejected"] as const;
 export type DisputeResolution = (typeof DISPUTE_RESOLUTIONS)[number];
 
@@ -89,5 +92,10 @@ export const NOTIFICATION_TYPES = [
   "order_reassigned", // → the OLD rider, US-A-03 — an admin pulled this job back into the open pool
   "order_force_cancelled", // → customer + vendor, US-A-03 — admin stopped this order outside the normal flow
   "order_force_refunded", // → customer, US-A-03 — a financial correction, order's own fulfilment status is untouched
+  "dispute_resolved", // → customer + vendor, US-A-04
+  "vendor_suspended", // → vendor, US-A-06
+  "vendor_unsuspended", // → vendor, US-A-06 — reversal
+  "rider_suspended", // → rider, US-A-06
+  "rider_unsuspended", // → rider, US-A-06 — reversal
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

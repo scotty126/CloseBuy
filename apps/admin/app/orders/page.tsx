@@ -59,7 +59,7 @@ export default function OrdersPage() {
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-xl font-bold text-ink">Orders</h1>
-        <p className="text-sm text-muted">Every order on the platform. Open one to see its full history and step in if something's stalled (US-A-03).</p>
+        <p className="text-sm text-muted">Every order on the platform. Open one to see its full history and step in if something&apos;s stalled (US-A-03).</p>
       </div>
 
       <div className="flex gap-3">

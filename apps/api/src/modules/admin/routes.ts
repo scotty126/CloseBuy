@@ -4,6 +4,9 @@ import {
   applicationRejectSchema,
   adminOrderFilterSchema,
   adminOrderActionSchema,
+  adminDisputeFilterSchema,
+  disputeResolveSchema,
+  adminActorActionSchema,
   auditLogFilterSchema,
 } from "@closebuy/types";
 import { requireAuth } from "../../lib/auth-guard.js";
@@ -20,14 +23,27 @@ import {
   NoRiderAssignedError,
   NothingToRefundError,
 } from "./orders.js";
+import {
+  createAdminDisputeService,
+  DisputeNotFoundError,
+  DisputeAlreadyResolvedError,
+  InvalidResolutionError,
+  NothingToRefundError as DisputeNothingToRefundError,
+} from "./disputes.js";
+import {
+  createAdminActorService,
+  ActorNotFoundError,
+  InvalidActorStateError,
+} from "./actors.js";
 
 /**
  * Admin — vendor/rider application vetting (US-A-01, service.ts), order
- * oversight (US-A-03, orders.ts) and audit-log search (US-A-08,
- * service.ts). Payouts live in ../payouts/routes.js instead (their own
- * vendor-request/admin-approve flow). Still real, still not built:
- * disputes, config writes, reconciliation, metrics, suspension —
- * S-priority (M3), not forgotten.
+ * oversight (US-A-03, orders.ts), dispute resolution (US-A-04,
+ * disputes.ts), actor suspension (US-A-06, actors.ts) and audit-log
+ * search (US-A-08, service.ts). Payouts live in ../payouts/routes.js
+ * instead (their own vendor-request/admin-approve flow). Still real,
+ * still not built: config writes, reconciliation, metrics — S-priority
+ * (M3), not forgotten.
  */
 export async function adminRoutes(app: FastifyInstance) {
   const admin = createAdminService({ prisma: app.prisma, notifications: app.notifications });
@@ -39,6 +55,8 @@ export async function adminRoutes(app: FastifyInstance) {
     app.env.MONNIFY_DISBURSEMENT_SOURCE_ACCOUNT_NUMBER,
   );
   const adminOrders = createAdminOrderService({ prisma: app.prisma, monnify, notifications: app.notifications });
+  const adminDisputes = createAdminDisputeService({ prisma: app.prisma, monnify, notifications: app.notifications });
+  const adminActors = createAdminActorService({ prisma: app.prisma, notifications: app.notifications });
 
   app.get("/admin/applications", { preHandler: requireAuth(["admin"]) }, async (_req, reply) => {
     return reply.send({ applications: await admin.listPendingApplications() });
@@ -149,6 +167,128 @@ export async function adminRoutes(app: FastifyInstance) {
       }
       if (err instanceof NothingToRefundError) {
         return reply.code(409).send({ error: { code: "NOTHING_TO_REFUND", message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // ── Disputes (US-A-04) ───────────────────────────────────────────────
+
+  app.get("/admin/disputes", { preHandler: requireAuth(["admin"]) }, async (req, reply) => {
+    const filter = adminDisputeFilterSchema.parse(req.query);
+    const { disputes, nextCursor } = await adminDisputes.listDisputes(filter);
+    return reply.send({ disputes, nextCursor });
+  });
+
+  app.get("/admin/disputes/:id", { preHandler: requireAuth(["admin"]) }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    try {
+      const dispute = await adminDisputes.getDispute(id);
+      return reply.send({ dispute });
+    } catch (err) {
+      if (err instanceof DisputeNotFoundError) {
+        return reply.code(404).send({ error: { code: "DISPUTE_NOT_FOUND", message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/admin/disputes/:id/resolve", { preHandler: requireAuth(["admin"]) }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = disputeResolveSchema.parse(req.body);
+    try {
+      const dispute = await adminDisputes.resolveDispute(req.authUser!.sub, id, body);
+      return reply.send({ dispute });
+    } catch (err) {
+      if (err instanceof DisputeNotFoundError) {
+        return reply.code(404).send({ error: { code: "DISPUTE_NOT_FOUND", message: err.message } });
+      }
+      if (err instanceof DisputeAlreadyResolvedError) {
+        return reply.code(409).send({ error: { code: "DISPUTE_ALREADY_RESOLVED", message: err.message } });
+      }
+      if (err instanceof InvalidResolutionError) {
+        return reply.code(422).send({ error: { code: "INVALID_RESOLUTION", message: err.message } });
+      }
+      if (err instanceof DisputeNothingToRefundError) {
+        return reply.code(409).send({ error: { code: "NOTHING_TO_REFUND", message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // ── Suspend an actor (US-A-06) ──────────────────────────────────────
+
+  app.get("/admin/vendors", { preHandler: requireAuth(["admin"]) }, async (_req, reply) => {
+    return reply.send({ vendors: await adminActors.listVendors() });
+  });
+
+  app.post("/admin/vendors/:id/suspend", { preHandler: requireAuth(["admin"]) }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = adminActorActionSchema.parse(req.body);
+    try {
+      const result = await adminActors.suspendVendor(req.authUser!.sub, id, body.reason);
+      return reply.send(result);
+    } catch (err) {
+      if (err instanceof ActorNotFoundError) {
+        return reply.code(404).send({ error: { code: "VENDOR_NOT_FOUND", message: err.message } });
+      }
+      if (err instanceof InvalidActorStateError) {
+        return reply.code(409).send({ error: { code: "INVALID_ACTOR_STATE", message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/admin/vendors/:id/unsuspend", { preHandler: requireAuth(["admin"]) }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = adminActorActionSchema.parse(req.body);
+    try {
+      const vendor = await adminActors.unsuspendVendor(req.authUser!.sub, id, body.reason);
+      return reply.send({ vendor });
+    } catch (err) {
+      if (err instanceof ActorNotFoundError) {
+        return reply.code(404).send({ error: { code: "VENDOR_NOT_FOUND", message: err.message } });
+      }
+      if (err instanceof InvalidActorStateError) {
+        return reply.code(409).send({ error: { code: "INVALID_ACTOR_STATE", message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.get("/admin/riders", { preHandler: requireAuth(["admin"]) }, async (_req, reply) => {
+    return reply.send({ riders: await adminActors.listRiders() });
+  });
+
+  app.post("/admin/riders/:id/suspend", { preHandler: requireAuth(["admin"]) }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = adminActorActionSchema.parse(req.body);
+    try {
+      const result = await adminActors.suspendRider(req.authUser!.sub, id, body.reason);
+      return reply.send(result);
+    } catch (err) {
+      if (err instanceof ActorNotFoundError) {
+        return reply.code(404).send({ error: { code: "RIDER_NOT_FOUND", message: err.message } });
+      }
+      if (err instanceof InvalidActorStateError) {
+        return reply.code(409).send({ error: { code: "INVALID_ACTOR_STATE", message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/admin/riders/:id/unsuspend", { preHandler: requireAuth(["admin"]) }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = adminActorActionSchema.parse(req.body);
+    try {
+      const rider = await adminActors.unsuspendRider(req.authUser!.sub, id, body.reason);
+      return reply.send({ rider });
+    } catch (err) {
+      if (err instanceof ActorNotFoundError) {
+        return reply.code(404).send({ error: { code: "RIDER_NOT_FOUND", message: err.message } });
+      }
+      if (err instanceof InvalidActorStateError) {
+        return reply.code(409).send({ error: { code: "INVALID_ACTOR_STATE", message: err.message } });
       }
       throw err;
     }

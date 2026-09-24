@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { ORDER_STATUSES, FULFILMENT_TYPES } from "./enums.js";
-import type { PayoutStatus } from "./enums.js";
+import { ORDER_STATUSES, FULFILMENT_TYPES, DISPUTE_RESOLUTIONS, DISPUTE_STATUSES } from "./enums.js";
+import type { PayoutStatus, DisputeStatus, DisputeResolution, VendorStatus, RiderStatus } from "./enums.js";
 import type { OrderSummaryDto } from "./order.js";
 
 // US-A-01 — an "application" isn't its own database entity, it's a pending
@@ -114,6 +114,92 @@ export type AdminOrderActionInput = z.infer<typeof adminOrderActionSchema>;
 export interface AdminOrderSummaryDto extends OrderSummaryDto {
   vendor: { businessName: string };
   rider: { fullName: string } | null;
+}
+
+// ── Disputes (US-A-04) ───────────────────────────────────────────────────
+
+export const adminDisputeFilterSchema = z.object({
+  status: z.enum(DISPUTE_STATUSES).optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+});
+export type AdminDisputeFilterInput = z.infer<typeof adminDisputeFilterSchema>;
+
+// api-contracts.md: `{ resolution, amount_minor?, reason }` — amountMinor
+// is only meaningful (and required) for partial_refund; full_refund and
+// rejected act on the whole order/nothing respectively.
+export const disputeResolveSchema = z
+  .object({
+    resolution: z.enum(DISPUTE_RESOLUTIONS),
+    amountMinor: z.number().int().positive().optional(),
+    reason: z.string().min(1).max(500),
+  })
+  .refine((v) => v.resolution !== "partial_refund" || v.amountMinor !== undefined, {
+    message: "amountMinor is required when resolution is partial_refund",
+    path: ["amountMinor"],
+  });
+export type DisputeResolveInput = z.infer<typeof disputeResolveSchema>;
+
+export interface AdminDisputeDto {
+  id: string;
+  orderId: string;
+  customerId: string | null;
+  reason: string;
+  evidence: string[];
+  status: DisputeStatus;
+  resolution: DisputeResolution | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  order: {
+    id: string;
+    vendorId: string;
+    vendor: { businessName: string };
+    status: (typeof ORDER_STATUSES)[number];
+    totalMinor: number;
+    contactPhone: string;
+  };
+}
+
+// ── Suspend an actor (US-A-06) ──────────────────────────────────────────
+
+// Same mandatory-reason shape as adminOrderActionSchema — every
+// suspension/unsuspension is written to the audit log with why.
+export const adminActorActionSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+export type AdminActorActionInput = z.infer<typeof adminActorActionSchema>;
+
+export interface AdminVendorDto {
+  id: string;
+  businessName: string;
+  category: { id: string; name: string };
+  status: VendorStatus;
+  isOpen: boolean;
+  createdAt: string;
+}
+
+export interface AdminRiderDto {
+  id: string;
+  fullName: string;
+  vehicleType: string;
+  status: RiderStatus;
+  onDuty: boolean;
+  createdAt: string;
+}
+
+// A suspension response includes every non-terminal order this actor is
+// still on, so an operator can see what's in flight before deciding what
+// to do about it (US-A-06's "orders already in flight are listed" —
+// deliberately listed, not auto-cancelled).
+export interface SuspendVendorResult {
+  vendor: AdminVendorDto;
+  inFlightOrders: AdminOrderSummaryDto[];
+}
+
+export interface SuspendRiderResult {
+  rider: AdminRiderDto;
+  inFlightOrders: AdminOrderSummaryDto[];
 }
 
 // ── Audit log (US-A-08) ─────────────────────────────────────────────────

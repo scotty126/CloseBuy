@@ -6,6 +6,14 @@ import type {
   AdminOrderFilterInput,
   AdminOrderSummaryDto,
   AdminOrderActionInput,
+  AdminDisputeFilterInput,
+  AdminDisputeDto,
+  DisputeResolveInput,
+  AdminActorActionInput,
+  AdminVendorDto,
+  AdminRiderDto,
+  SuspendVendorResult,
+  SuspendRiderResult,
   AuditLogFilterInput,
   AuditLogEntryDto,
 } from "@closebuy/types";
@@ -60,6 +68,49 @@ export function createAdminApi(client: ApiClient) {
 
     forceRefundOrder: (id: string, input: AdminOrderActionInput) =>
       client.request<{ order: OrderDto }>(`/admin/orders/${id}/force-refund`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    // ── Disputes (US-A-04) ─────────────────────────────────────────────
+
+    listDisputes: (filter: Partial<AdminDisputeFilterInput> = {}) =>
+      client.request<{ disputes: AdminDisputeDto[]; nextCursor?: string }>(`/admin/disputes${toQueryString(filter)}`),
+
+    getDispute: (id: string) => client.request<{ dispute: AdminDisputeDto }>(`/admin/disputes/${id}`),
+
+    resolveDispute: (id: string, input: DisputeResolveInput) =>
+      client.request<{ dispute: AdminDisputeDto }>(`/admin/disputes/${id}/resolve`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    // ── Suspend an actor (US-A-06) ──────────────────────────────────────
+
+    listVendors: () => client.request<{ vendors: AdminVendorDto[] }>("/admin/vendors"),
+
+    suspendVendor: (id: string, input: AdminActorActionInput) =>
+      client.request<SuspendVendorResult>(`/admin/vendors/${id}/suspend`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    unsuspendVendor: (id: string, input: AdminActorActionInput) =>
+      client.request<{ vendor: AdminVendorDto }>(`/admin/vendors/${id}/unsuspend`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    listRiders: () => client.request<{ riders: AdminRiderDto[] }>("/admin/riders"),
+
+    suspendRider: (id: string, input: AdminActorActionInput) =>
+      client.request<SuspendRiderResult>(`/admin/riders/${id}/suspend`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    unsuspendRider: (id: string, input: AdminActorActionInput) =>
+      client.request<{ rider: AdminRiderDto }>(`/admin/riders/${id}/unsuspend`, {
         method: "POST",
         body: JSON.stringify(input),
       }),

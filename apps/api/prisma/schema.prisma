@@ -84,6 +84,11 @@ enum PaymentStatus {
   succeeded
   failed
   refunded
+  // US-A-04 — a dispute resolved as partial_refund: distinct from `refunded`
+  // (which means the full amount reversed) so a later reconciliation report
+  // can tell the two apart instead of reading "refunded" and assuming zero
+  // settlement ever reached the vendor/rider for this order.
+  partially_refunded
 }
 
 // data-model.md §4a
@@ -539,6 +544,7 @@ model Dispute {
   resolvedAt DateTime?
   createdAt  DateTime              @default(now())
 
+  @@index([status])
   @@map("disputes")
 }
 

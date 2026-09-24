@@ -180,7 +180,7 @@ This is the part that cannot be sloppy (NFR-07, R-01).
 | gateway | enum: monnify, paystack, cash | `cash` isn't a real gateway — cash on delivery still gets a real row here (for the same idempotency mechanism), it just never touches Monnify. Money moves at delivery instead, tracked via `rider_cash_float` (Dispatch, M1 — `confirm-delivery` posts the entries) |
 | gateway_reference | string, unique | The client's `Idempotency-Key` header, reused as Monnify's `paymentReference` — one value serves both purposes, and a repeated request or webhook with the same reference is a no-op (US-C-06) |
 | amount_minor | int | |
-| status | enum: pending, succeeded, failed, refunded | |
+| status | enum: pending, succeeded, failed, refunded, partially_refunded | `partially_refunded` is set only by a dispute resolved as `partial_refund` (US-A-04) — distinct from `refunded` so reconciliation (US-A-05) can tell a full reversal from a partial one |
 
 ### LedgerEntry
 Double-entry, append-only. Every money movement is (at least) two rows that net to zero.

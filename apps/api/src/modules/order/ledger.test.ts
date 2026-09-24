@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { escrowHoldEntries, computeEscrowSplit, escrowReleaseEntries, refundEntries, codCollectionEntries } from "./ledger.js";
+import {
+  escrowHoldEntries,
+  computeEscrowSplit,
+  escrowReleaseEntries,
+  refundEntries,
+  codCollectionEntries,
+  partialRefundEntries,
+} from "./ledger.js";
 
 function sumByDirection(rows: { direction: string; amountMinor: number }[]) {
   return {
@@ -83,5 +90,17 @@ describe("ledger — data-model.md §6 invariant: every entry set balances", () 
     // Exact reverse of escrowHoldEntries's directions.
     expect(rows.find((r) => r.account === "customer_escrow")?.direction).toBe("debit");
     expect(rows.find((r) => r.account === "platform_clearing")?.direction).toBe("credit");
+  });
+
+  it("partialRefundEntries: refund + release together account for exactly the original hold, and it all balances", () => {
+    // ₦5,000 order, refund ₦2,000, release the remaining ₦3,000 (₦500 delivery fee + ₦2,500 goods at 10%).
+    const releaseSplit = computeEscrowSplit(300000, 50000, 10);
+    const rows = partialRefundEntries("order_1", 200000, 300000, releaseSplit);
+    const { debits, credits } = sumByDirection(rows);
+
+    expect(debits).toBe(500000);
+    expect(credits).toBe(500000);
+    expect(rows.filter((r) => r.account === "customer_escrow" && r.direction === "debit").reduce((s, r) => s + r.amountMinor, 0)).toBe(500000);
+    expect(rows.find((r) => r.account === "platform_clearing")?.amountMinor).toBe(200000);
   });
 });
