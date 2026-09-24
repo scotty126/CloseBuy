@@ -30,7 +30,13 @@ export function createApiClient({ baseUrl, getAccessToken }: CreateApiClientOpti
     const res = await fetch(`${baseUrl}${path}`, {
       ...init,
       headers: {
-        "Content-Type": "application/json",
+        // Only set when there's actually a body — a bodyless POST (order
+        // accept/ready/cancel, rider offer accept/decline, application
+        // approve) sent with this header anyway hits Fastify's default
+        // JSON parser as an empty body under an application/json
+        // content-type, which it rejects outright (FST_ERR_CTP_EMPTY_JSON_BODY,
+        // a real 400 against the live API, not hypothetical).
+        ...(init?.body ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...init?.headers,
       },
