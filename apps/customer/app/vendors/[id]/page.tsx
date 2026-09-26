@@ -78,7 +78,6 @@ export default function VendorPage() {
 
   const canToggleFulfilment = vendor.supportsPickup && (!cart.vendor || cart.vendor.id === vendor.id);
   const quickBuyProducts = products.filter((p) => p.isQuickBuy && p.stock > 0);
-  const score = Number(vendor.reliabilityScore);
 
   return (
     <div className="flex flex-col pb-28">
@@ -113,8 +112,8 @@ export default function VendorPage() {
 
           <div className="mt-1.5 flex items-center gap-3 text-xs text-muted">
             <span className="flex items-center gap-1">
-              <Star size={13} className={score > 0 ? "fill-accent text-accent" : ""} />
-              {score > 0 ? score.toFixed(1) : "New"}
+              <Star size={13} className={vendor.ratingAverage != null ? "fill-accent text-accent" : ""} />
+              {vendor.ratingAverage != null ? `${vendor.ratingAverage.toFixed(1)} (${vendor.ratingCount})` : "New"}
             </span>
             {vendor.avgDeliveryMinutes != null && (
               <span className="flex items-center gap-1">

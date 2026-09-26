@@ -76,7 +76,7 @@ One-to-one with `User`, role-specific fields.
 
 **CustomerProfile**: default_phone (string, nullable — the delivery number preset at checkout, brief §3.1b; editable in account settings, never verified), created_at.
 
-**VendorProfile**: business_name, category_id, description, logo_url, pickup_address (embedded: lat, lng, landmark, phone — per brief §3.4), bank_account_ref, status (enum: pending, approved, suspended, rejected), is_open (bool), supports_pickup (bool — brief §3.1a, independent of is_open), opening_hours, reliability_score (decimal), **founding_vendor_commission_waived_until (timestamp, nullable — brief §3.2a; set to approved_at + 3 months on approval during the launch promotion window, null once expired or if the vendor joined outside it)**, created_at.
+**VendorProfile**: business_name, category_id, description, logo_url, pickup_address (embedded: lat, lng, landmark, phone — per brief §3.4), bank_account_ref, status (enum: pending, approved, suspended, rejected), is_open (bool), supports_pickup (bool — brief §3.1a, independent of is_open), opening_hours, reliability_score (decimal — an internal ops metric, only ever decremented on the vendor's own auto-reject/reject; **never customer-facing**, not to be confused with the real customer rating average/count computed from `Rating` at read time, US-C-10), **founding_vendor_commission_waived_until (timestamp, nullable — brief §3.2a; set to approved_at + 3 months on approval during the launch promotion window, null once expired or if the vendor joined outside it)**, created_at.
 
 **RiderProfile**: full_name, vehicle_type, id_document_url, bank_account_ref, status (pending, approved, suspended, rejected), on_duty (bool), cash_balance_minor (int — brief R-03/US-R-08), created_at.
 
@@ -231,7 +231,7 @@ At order completion, the ledger computation is: commission = 0 if the founding-v
 
 **Dispute** — order_id, customer_id (**nullable — null for a guest's order**, matching `Order.customer_id`; access is proving possession of the order's `tracking_token`, not an account, US-C-11), reason, evidence (string[] of R2 keys), status (open, resolved), resolution (enum: full_refund, partial_refund, rejected), resolved_by (admin id), resolved_at.
 
-**Rating** — order_id, customer_id (**nullable, same reasoning as Dispute — a guest rates via `tracking_token`**, US-C-10), target_type (vendor, rider), target_id, score (1–5), comment, created_at, edited_until (created_at + 24h, per US-C-10).
+**Rating** — order_id, customer_id (**nullable, same reasoning as Dispute — a guest rates via `tracking_token`**, US-C-10), target_type (vendor, rider), target_id, score (1–5), comment, created_at, edited_until (created_at + 24h, per US-C-10). **Unique on (order_id, target_type)** — "one rating per order per party" is a DB constraint, not just a service-layer check; a second `rate` call within the `edited_until` window upserts the same row instead of creating a duplicate.
 
 **Notification** — user_id, type, payload (jsonb), sent_at, read_at. `type` is a plain string (NOTIFICATION_TYPES in packages/types), not a DB enum, so a new event type never needs a migration.
 

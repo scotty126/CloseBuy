@@ -123,7 +123,14 @@ export interface VendorDto {
   category: { id: string; name: string };
   isOpen: boolean;
   supportsPickup: boolean;
-  reliabilityScore: string; // Prisma Decimal serializes as a string over JSON
+  // US-C-10 — the real thing, not VendorProfile.reliabilityScore (an
+  // internal ops metric that only ever decreases on a vendor's own
+  // auto-reject/reject — never shown to customers, see OwnVendorProfileDto
+  // and admin/actors.ts for where that still lives). null until the first
+  // real rating exists for this vendor, not 0 — a customer should see
+  // "New" rather than a fake zero-star average.
+  ratingAverage: number | null;
+  ratingCount: number;
   pickupLandmark: string;
   avgDeliveryMinutes: number | null;
   foundingVendorCommissionWaivedUntil: string | null;

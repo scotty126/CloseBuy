@@ -34,7 +34,7 @@ internal tool).
 
 CI: GitHub Actions, postgres/redis service containers, `prisma migrate deploy`.
 
-## Current state (2026-09-24)
+## Current state (2026-09-26)
 
 **M1 (walking skeleton) is functionally complete and verified end to end**
 against real infra — real order loop, real escrow ledger, real vendor
@@ -110,6 +110,34 @@ Built and live:
   so needs a vendor (and for delivery orders, a rider) account to walk an
   order through accept → ready → confirm, and this session had no
   vendor/rider/admin credentials to do that with.
+- **Ratings** (US-C-10, 2026-09-26) — rate form on the tracking page once
+  an order is `COMPLETED` (vendor always, rider on a delivery order),
+  pre-filled/editable inside the original 24h window, read-only stars
+  after. Backend gaps fixed along the way: `Rating` is now
+  `@@unique([orderId, targetType])` (was nothing — a second POST made a
+  duplicate row) and `Order.rateOrder` upserts against it, rejecting past
+  `editedUntil` with `RatingLockedError` (409). `trackingInclude` joins
+  `ratings` so the screen can pre-fill. **The star badge on vendor cards
+  and the storefront page was showing `reliabilityScore` — an internal ops
+  metric that only ever decreases on a vendor's own auto-reject/reject —
+  not a customer rating.** Replaced (user's call, 2026-09-26) with the
+  real average + count from `Rating` (`VendorDto.ratingAverage`/
+  `ratingCount`, `catalog/service.ts`'s `vendorRatingSummaries` — one
+  `groupBy` per search page, not N+1), showing "New" until a first real
+  rating exists. `reliabilityScore` is no longer on the public
+  `VendorDto` at all; it stays on `OwnVendorProfileDto` (the vendor's own
+  view) and admin. So every seeded demo vendor now shows "New", not a
+  polished "4.4" — that's deliberate, not a regression. The customer
+  frontend uses `!= null` (not `!== null`) on `ratingAverage` so a
+  frontend running against a not-yet-redeployed API degrades to "New"
+  instead of crashing — that exact mismatch crashed the home page locally
+  (`toFixed` on `undefined`) because local dev points at the live Railway
+  API, which doesn't have the new field until this is pushed and deployed.
+  Positive path (an actual `COMPLETED` order being rated) is covered by
+  new unit tests in `order/service.test.ts`/`catalog/service.test.ts` but
+  **not exercised live** — reaching `COMPLETED` needs a real delivery plus
+  the escrow-release timer (or an admin dispute resolution), and this
+  session had no vendor/rider/admin credentials.
 
 **Fixed (2026-09-24) — a real, live bug, not hypothetical:** every
 body-less `POST` through the shared `packages/api-client/src/client.ts`
@@ -129,45 +157,59 @@ nothing silently, that's not fixed elsewhere — check this.**
 In priority order, picking up from the admin buildout — every S/M-priority
 Admin story (US-A-01 through US-A-04, US-A-06, US-A-08) is now built;
 only reconciliation and metrics remain there. Self-service cancellation,
-inventory-race handling, order history/reorder and disputes are also
-done end to end (see above) — an earlier version of this section listed
-some of these as still to do, which was wrong; verify against the code,
-not this list, before assuming something isn't built:
-1. **M3 hardening, real gaps confirmed by grepping the actual frontend
-   (not by trusting the backend existing):**
-   - **Ratings (US-C-10)** — the backend (`Order.rateOrder`,
-     `POST /orders/:id/rate` + guest tracking-link equivalent) has **no
-     uniqueness enforcement**: nothing stops a second `rate` call from
-     creating a duplicate row for the same order+target, and there's no
-     edit path at all despite the acceptance criterion "one rating per
-     order per party, editable for 24 hours" — that needs a real schema/
-     service change (a unique constraint + upsert-or-reject-past-24h
-     logic), not just a UI. There's also zero average-rating aggregation
-     anywhere (`VendorDto` has no rating field) and **zero frontend** —
-     no rate form exists in any app. Bigger than it looks; don't scope it
-     as "just add a button." **Next up.**
-   - Rider cash remittance (US-R-08), platform metrics (US-A-07),
-     reconciliation report (US-A-05's other half) — not yet audited this
-     closely; check the actual code before assuming scope.
+inventory-race handling, order history/reorder, disputes and ratings are
+also done end to end (see above) — an earlier version of this section
+listed some of these as still to do, which was wrong; verify against the
+code, not this list, before assuming something isn't built:
+1. **M3 hardening — what's genuinely left.** The customer-facing S-priority
+   stories (US-C-08 through US-C-11) are all built now. Still to do, none
+   of it audited closely yet — grep the actual frontend, don't trust that a
+   backend endpoint existing means the feature does (that's exactly how
+   disputes and ratings turned out to have working-looking backends and
+   zero UI, plus real gaps under them):
+   - Rider cash remittance (US-R-08) — check whether the rider app has
+     any remit UI at all, and what `RiderProfile.cashBalanceMinor` is
+     actually wired to.
+   - Platform metrics (US-A-07) and the reconciliation report (US-A-05's
+     other half) — both still admin placeholders.
+   - US-R-06 (failed delivery) and the other rider/vendor S-stories —
+     unchecked.
 2. **Desktop-responsive layout** for customer/vendor/rider — explicitly
    deferred pre-launch, mobile-only for now by the user's own call.
 3. **ToS / Privacy Policy** — needed before real public launch and before
    Google OAuth can leave "Testing" mode.
 
-**Just built (2026-09-24), not yet migrated onto the live DB** — disputes
-(US-A-04, `apps/api/src/modules/admin/disputes.ts` + admin `/disputes`
-list/detail), suspend-an-actor (US-A-06,
-`apps/api/src/modules/admin/actors.ts` + admin `/vendors`/`/riders`, new
-screens not in the original screens-navigation.md sketch), and config
-writes (US-A-02, `apps/api/src/modules/admin/config.ts` + admin
-`/config`, categories reusing `catalog.ts`'s existing-but-previously-unused
-`categoryCreateSchema`/`CategoryDto` types). Adds
-`PaymentStatus.partially_refunded` and an index on `disputes.status` —
-migration `20260924120000_dispute_resolution_and_suspension` is written
-but **not yet applied to Railway's Postgres** (see Conventions below for
-how; a production-deploy action was blocked by the auto-mode classifier
-mid-session, so it's still pending). Apply it, then smoke-test all three
-flows against the live API before considering this fully done.
+**Nothing from 2026-09-24 onward is pushed or deployed — everything below
+is committed locally only, and two migrations are unapplied.** Disputes
+(US-A-04), suspend-an-actor (US-A-06), config writes (US-A-02), reorder,
+report-a-problem, ratings, and the `client.ts` bodyless-POST fix all sit
+in local commits on `main`. The two migrations, both hand-written and both
+**not applied to Railway's Postgres** (see Conventions below for how; a
+production-deploy action was blocked by the auto-mode classifier
+mid-session, so applying them is a step the owner has to run or explicitly
+allow):
+- `20260924120000_dispute_resolution_and_suspension` — adds
+  `PaymentStatus.partially_refunded` and an index on `disputes.status`.
+  Disputes/suspend/config-writes need it.
+- `20260926090000_rating_unique_per_order_target` — a unique index on
+  `ratings(orderId, targetType)`. It would fail to apply if any duplicate
+  rating rows exist; that's very unlikely (no rating UI ever existed, so
+  the table should be empty) but unchecked — if it errors, look for
+  duplicates first rather than dropping the constraint.
+
+**Deploy order matters for ratings.** The customer frontend now reads
+`VendorDto.ratingAverage`/`ratingCount` and the API no longer sends
+`reliabilityScore` on public vendor endpoints. New frontend + old API
+degrades gracefully (`!= null` → "New", verified locally — that mismatch is
+what crashed the home page before the guard was added). New API + old
+frontend is the worse direction: the old `VendorCard` calls
+`Number(vendor.reliabilityScore)` on a field that's gone → `NaN` → every
+card shows "New" (no crash, but the badge is wrong until the frontend
+catches up). Since it's one monorepo and one push, both platforms rebuild
+from the same commit; just expect a short window. Apply the migrations,
+then smoke-test disputes, suspension, config, cancel/accept/ready buttons
+(the `client.ts` fix) and the vendor-card badge against the live API
+before considering any of it done.
 
 ## Known issues / external blockers
 

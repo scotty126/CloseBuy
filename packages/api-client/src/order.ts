@@ -9,6 +9,8 @@ import type {
   VendorEarningsDto,
   DisputeOrderInput,
   DisputeDto,
+  RateOrderInput,
+  RatingDto,
 } from "@closebuy/types";
 
 export function createOrderApi(client: ApiClient) {
@@ -44,6 +46,13 @@ export function createOrderApi(client: ApiClient) {
      */
     disputeOrder: (trackingToken: string, input: DisputeOrderInput) =>
       client.request<{ dispute: DisputeDto }>(`/orders/track/${trackingToken}/dispute`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    /** US-C-10 — same trackingToken-based reasoning as disputeOrder above. An upsert: edits the existing rating in place while still inside its 24h window. */
+    rateOrder: (trackingToken: string, input: RateOrderInput) =>
+      client.request<{ rating: RatingDto }>(`/orders/track/${trackingToken}/rate`, {
         method: "POST",
         body: JSON.stringify(input),
       }),

@@ -562,6 +562,11 @@ model Rating {
   createdAt  DateTime         @default(now())
   editedUntil DateTime        // createdAt + 24h, US-C-10
 
+  // US-C-10 — "one rating per order per party": the DB enforces it, not
+  // just the service layer. Also what rateOrder upserts against — a
+  // second POST within the 24h window edits this same row instead of
+  // creating a duplicate.
+  @@unique([orderId, targetType])
   @@index([targetType, targetId])
   @@map("ratings")
 }

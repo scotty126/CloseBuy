@@ -10,8 +10,6 @@ import type { VendorDto } from "@closebuy/types";
  * so a card and its own detail page never look like two different vendors.
  */
 export function VendorCard({ vendor }: { vendor: VendorDto }) {
-  const score = Number(vendor.reliabilityScore);
-
   return (
     <Link
       href={`/vendors/${vendor.id}`}
@@ -37,8 +35,8 @@ export function VendorCard({ vendor }: { vendor: VendorDto }) {
 
         <div className="flex items-center gap-3 text-xs text-muted">
           <span className="flex items-center gap-1">
-            <Star size={13} className={score > 0 ? "fill-accent text-accent" : ""} />
-            {score > 0 ? score.toFixed(1) : "New"}
+            <Star size={13} className={vendor.ratingAverage != null ? "fill-accent text-accent" : ""} />
+            {vendor.ratingAverage != null ? `${vendor.ratingAverage.toFixed(1)} (${vendor.ratingCount})` : "New"}
           </span>
           {vendor.avgDeliveryMinutes != null && (
             <span className="flex items-center gap-1">

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { phoneSchema } from "./auth.js";
 import { FULFILMENT_TYPES, PAYMENT_METHODS } from "./enums.js";
-import type { OrderStatus, FulfilmentType, PaymentMethod, DisputeStatus, DisputeResolution } from "./enums.js";
+import type { OrderStatus, FulfilmentType, PaymentMethod, DisputeStatus, DisputeResolution, RatingTargetType } from "./enums.js";
 
 const cartItemSchema = z.object({
   productId: z.string().uuid(),
@@ -65,6 +65,17 @@ export const rateOrderSchema = z.object({
   comment: z.string().max(500).optional(),
 });
 export type RateOrderInput = z.infer<typeof rateOrderSchema>;
+
+// POST /orders/track/:token/rate and /orders/:id/rate both return this —
+// the raw (possibly just-upserted) Rating row.
+export interface RatingDto {
+  id: string;
+  targetType: RatingTargetType;
+  score: number;
+  comment: string | null;
+  createdAt: string;
+  editedUntil: string; // still-editable while now < this
+}
 
 export const disputeOrderSchema = z.object({
   reason: z.string().min(10).max(1000),
@@ -150,10 +161,14 @@ export interface OrderDto {
   // report-a-problem form once one exists, rather than only finding out
   // on a second POST's 409.
   dispute?: DisputeDto | null;
+  // US-C-10 — 0, 1 (vendor only) or 2 (vendor + rider) entries, never more
+  // per target (`Rating` is `@@unique([orderId, targetType])`). Lets the
+  // tracking screen pre-fill an edit form instead of a blank one.
+  ratings: RatingDto[];
 }
 
 // GET /orders (US-C-09 history) — the raw Order row, no relations joined.
-export type OrderSummaryDto = Omit<OrderDto, "items" | "transitions" | "vendor" | "rider" | "dispute">;
+export type OrderSummaryDto = Omit<OrderDto, "items" | "transitions" | "vendor" | "rider" | "dispute" | "ratings">;
 
 export interface CheckoutResponse {
   order: OrderDto;

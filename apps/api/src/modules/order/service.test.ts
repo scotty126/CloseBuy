@@ -10,6 +10,7 @@ import {
   InvalidCollectionCodeError,
   VendorProfileNotFoundError,
   DisputeAlreadyExistsError,
+  RatingLockedError,
 } from "./service.js";
 import type { MonnifyClient } from "../payments/monnify.js";
 import type { OrderQueue } from "./jobs.js";
@@ -33,6 +34,7 @@ function createFakePrisma() {
   const ledgerEntries: any[] = [];
   const payouts: any[] = [];
   const disputes = new Map<string, any>();
+  const ratings = new Map<string, any>(); // keyed by `${orderId}:${targetType}`, same shape as Rating's real @@unique
   // Same defaults as prisma/seed.ts — the order service reads these
   // through lib/config.ts exactly the way it would read real seeded rows.
   const config = new Map<string, any>([
@@ -174,14 +176,25 @@ function createFakePrisma() {
       findUnique: async ({ where }: any) => disputes.get(where.orderId) ?? null,
     },
     rating: {
-      create: async ({ data }: any) => ({ id: id(), createdAt: new Date(), ...data }),
+      create: async ({ data }: any) => {
+        const r = { id: id(), createdAt: new Date(), ...data };
+        ratings.set(`${r.orderId}:${r.targetType}`, r);
+        return r;
+      },
+      findUnique: async ({ where }: any) => ratings.get(`${where.orderId_targetType.orderId}:${where.orderId_targetType.targetType}`) ?? null,
+      update: async ({ where, data }: any) => {
+        const existing = [...ratings.values()].find((r) => r.id === where.id)!;
+        const updated = { ...existing, ...data };
+        ratings.set(`${updated.orderId}:${updated.targetType}`, updated);
+        return updated;
+      },
     },
     config: {
       findFirst: async ({ where }: any) => (config.has(where.key) ? { key: where.key, value: config.get(where.key) } : null),
     },
     $transaction: async (fn: any) => fn(db),
     // Exposed for assertions, not part of the real Prisma surface.
-    __state: { vendors, products, customers, riders, orders, orderItems, transitions, payments, ledgerEntries, payouts, disputes },
+    __state: { vendors, products, customers, riders, orders, orderItems, transitions, payments, ledgerEntries, payouts, disputes, ratings },
   };
 
   function applyOps(existing: any, data: any) {
@@ -688,6 +701,92 @@ describe("order service — disputeOrder (US-C-11)", () => {
     await expect(
       svc.disputeOrder(order.id, { reason: "Never even arrived" }, CUSTOMER_ID),
     ).rejects.toThrow(InvalidOrderStateError);
+  });
+});
+
+describe("order service — rateOrder (US-C-10)", () => {
+  let prisma: ReturnType<typeof createFakePrisma>;
+  let monnify: MonnifyClient;
+  let queue: OrderQueue;
+  let notifications: NotificationService;
+
+  beforeEach(() => {
+    prisma = createFakePrisma();
+    monnify = createFakeMonnify();
+    queue = createFakeQueue();
+    notifications = createFakeNotifications();
+    seed(prisma);
+    prisma.__state.riders.set(RIDER_ID, { id: RIDER_ID, userId: RIDER_USER_ID });
+  });
+
+  function service() {
+    return createOrderService({ prisma, monnify, queue, notifications, customerAppUrl: "http://localhost:3000" });
+  }
+
+  function completedOrder(overrides: Record<string, unknown> = {}) {
+    const orderId = "order_completed";
+    prisma.__state.orders.set(orderId, {
+      id: orderId,
+      vendorId: VENDOR_ID,
+      riderId: RIDER_ID,
+      customerId: CUSTOMER_ID,
+      status: "COMPLETED",
+      fulfilmentType: "delivery",
+      ...overrides,
+    });
+    return orderId;
+  }
+
+  it("creates a new rating for a completed order", async () => {
+    const orderId = completedOrder();
+    const rating = await service().rateOrder(orderId, { targetType: "vendor", score: 5, comment: "Great!" }, CUSTOMER_ID);
+
+    expect((rating as any).score).toBe(5);
+    expect((rating as any).targetId).toBe(VENDOR_ID);
+  });
+
+  it("rejects rating an order that isn't COMPLETED", async () => {
+    const orderId = completedOrder({ status: "DELIVERED" });
+    await expect(service().rateOrder(orderId, { targetType: "vendor", score: 5 }, CUSTOMER_ID)).rejects.toThrow(InvalidOrderStateError);
+  });
+
+  it("rejects rating a rider on an order with no rider assigned", async () => {
+    const orderId = completedOrder({ riderId: null, fulfilmentType: "pickup" });
+    await expect(service().rateOrder(orderId, { targetType: "rider", score: 5 }, CUSTOMER_ID)).rejects.toThrow(InvalidOrderStateError);
+  });
+
+  it("edits the same rating in place within the 24h window instead of creating a duplicate", async () => {
+    const orderId = completedOrder();
+    const svc = service();
+    await svc.rateOrder(orderId, { targetType: "vendor", score: 3, comment: "OK" }, CUSTOMER_ID);
+    const updated = await svc.rateOrder(orderId, { targetType: "vendor", score: 5, comment: "Actually great" }, CUSTOMER_ID);
+
+    expect((updated as any).score).toBe(5);
+    expect(
+      [...prisma.__state.ratings.values()].filter((r: any) => r.orderId === orderId && r.targetType === "vendor"),
+    ).toHaveLength(1); // edited in place, not a second row
+  });
+
+  it("rejects editing a rating once its 24h window has passed", async () => {
+    const orderId = completedOrder();
+    const svc = service();
+    await svc.rateOrder(orderId, { targetType: "vendor", score: 3 }, CUSTOMER_ID);
+
+    const key = `${orderId}:vendor`;
+    const existing = prisma.__state.ratings.get(key);
+    prisma.__state.ratings.set(key, { ...existing, editedUntil: new Date(Date.now() - 1000) });
+
+    await expect(svc.rateOrder(orderId, { targetType: "vendor", score: 5 }, CUSTOMER_ID)).rejects.toThrow(RatingLockedError);
+  });
+
+  it("lets vendor and rider be rated independently on the same order", async () => {
+    const orderId = completedOrder();
+    const svc = service();
+    await svc.rateOrder(orderId, { targetType: "vendor", score: 4 }, CUSTOMER_ID);
+    await svc.rateOrder(orderId, { targetType: "rider", score: 2 }, CUSTOMER_ID);
+
+    expect(prisma.__state.ratings.get(`${orderId}:vendor`).score).toBe(4);
+    expect(prisma.__state.ratings.get(`${orderId}:rider`).score).toBe(2);
   });
 });
 

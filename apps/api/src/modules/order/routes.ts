@@ -21,6 +21,7 @@ import {
   InvalidCollectionCodeError,
   VendorProfileNotFoundError,
   DisputeAlreadyExistsError,
+  RatingLockedError,
 } from "./service.js";
 
 /**
@@ -133,8 +134,18 @@ export async function orderRoutes(app: FastifyInstance) {
     const { trackingToken } = req.params as { trackingToken: string };
     const body = rateOrderSchema.parse(req.body);
     const target = await order.getOrderByTrackingToken(trackingToken);
-    const rating = await order.rateOrder(target.id, body, target.customerId);
-    return reply.code(201).send({ rating });
+    try {
+      const rating = await order.rateOrder(target.id, body, target.customerId);
+      return reply.code(200).send({ rating }); // upsert — 200 whether this created or edited
+    } catch (err) {
+      if (err instanceof RatingLockedError) {
+        return reply.code(409).send({ error: { code: "RATING_LOCKED", message: err.message } });
+      }
+      if (err instanceof InvalidOrderStateError) {
+        return reply.code(422).send({ error: { code: "INVALID_STATE", message: err.message } });
+      }
+      throw err;
+    }
   });
 
   app.post("/orders/track/:trackingToken/dispute", async (req, reply) => {
@@ -182,8 +193,18 @@ export async function orderRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const body = rateOrderSchema.parse(req.body);
     const customer = await app.prisma.customerProfile.findUnique({ where: { userId: req.authUser!.sub } });
-    const rating = await order.rateOrder(id, body, customer?.id ?? null);
-    return reply.code(201).send({ rating });
+    try {
+      const rating = await order.rateOrder(id, body, customer?.id ?? null);
+      return reply.code(200).send({ rating });
+    } catch (err) {
+      if (err instanceof RatingLockedError) {
+        return reply.code(409).send({ error: { code: "RATING_LOCKED", message: err.message } });
+      }
+      if (err instanceof InvalidOrderStateError) {
+        return reply.code(422).send({ error: { code: "INVALID_STATE", message: err.message } });
+      }
+      throw err;
+    }
   });
 
   app.post("/orders/:id/dispute", { preHandler: requireAuth(["customer"]) }, async (req, reply) => {

@@ -27,7 +27,34 @@ const PUBLIC_VENDOR_OMIT = [
   "status",
   "openingHours",
   "createdAt",
+  // US-C-10 — an internal ops metric (only ever decremented on a vendor's
+  // own auto-reject/reject, order/service.ts), never a customer rating.
+  // Was being shown to customers as if it were one before real ratings
+  // existed anywhere; ratingAverage/ratingCount below are the real thing.
+  // Still exposed on OwnVendorProfileDto (the vendor's own view) and to
+  // admin — just not here.
+  "reliabilityScore",
 ] as const;
+
+/** US-C-10 — "vendor rating is displayed as an average with a count." One groupBy for the whole search-result page rather than one query per vendor. */
+async function vendorRatingSummaries(prisma: PrismaClient, vendorIds: string[]) {
+  if (vendorIds.length === 0) return new Map<string, { average: number; count: number }>();
+  const grouped = await prisma.rating.groupBy({
+    by: ["targetId"],
+    where: { targetType: "vendor", targetId: { in: vendorIds } },
+    _avg: { score: true },
+    _count: { targetId: true },
+  });
+  return new Map(grouped.map((g) => [g.targetId, { average: g._avg.score ?? 0, count: g._count.targetId }]));
+}
+
+function withRatingSummary<T extends { id: string }>(vendor: T, summary: { average: number; count: number } | undefined) {
+  return {
+    ...vendor,
+    ratingAverage: summary ? Math.round(summary.average * 10) / 10 : null,
+    ratingCount: summary?.count ?? 0,
+  };
+}
 
 export class VendorAlreadyExistsError extends Error {
   constructor() {
@@ -85,7 +112,11 @@ export function createCatalogService(prisma: PrismaClient) {
       });
 
       const nextCursor = vendors.length === query.limit ? vendors[vendors.length - 1]?.id : undefined;
-      return { vendors: vendors.map((v) => omitFields(v, [...PUBLIC_VENDOR_OMIT])), nextCursor };
+      const summaries = await vendorRatingSummaries(prisma, vendors.map((v) => v.id));
+      return {
+        vendors: vendors.map((v) => withRatingSummary(omitFields(v, [...PUBLIC_VENDOR_OMIT]), summaries.get(v.id))),
+        nextCursor,
+      };
     },
 
     async getVendor(vendorId: string) {
@@ -94,7 +125,8 @@ export function createCatalogService(prisma: PrismaClient) {
         include: { category: true },
       });
       if (!vendor || vendor.status !== "approved") throw new VendorNotFoundError();
-      return omitFields(vendor, [...PUBLIC_VENDOR_OMIT]);
+      const summaries = await vendorRatingSummaries(prisma, [vendorId]);
+      return withRatingSummary(omitFields(vendor, [...PUBLIC_VENDOR_OMIT]), summaries.get(vendorId));
     },
 
     async getVendorProducts(vendorId: string) {

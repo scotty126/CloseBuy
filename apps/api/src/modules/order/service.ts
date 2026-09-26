@@ -55,6 +55,11 @@ export class DisputeAlreadyExistsError extends Error {
     super("A dispute has already been opened for this order.");
   }
 }
+export class RatingLockedError extends Error {
+  constructor() {
+    super("This rating can no longer be edited — the 24-hour window has passed.");
+  }
+}
 
 export interface AuthContext {
   sub: string;
@@ -86,6 +91,10 @@ const trackingInclude = {
   // resolution instead of the report-a-problem form once one exists
   // (Dispute.orderId is @unique, so there's only ever 0 or 1).
   dispute: true,
+  // US-C-10 — same reasoning: lets the tracking screen show "already
+  // rated"/pre-fill the edit form instead of a blank one. 0, 1 (vendor
+  // only) or 2 (vendor + rider) rows, never more per target (@@unique).
+  ratings: true,
 };
 
 export function createOrderService(deps: OrderServiceDeps) {
@@ -474,12 +483,32 @@ export function createOrderService(deps: OrderServiceDeps) {
       await scheduleTimer("escrow-release", orderId, () => queue.scheduleEscrowRelease(orderId, escrowReleaseWindowHours));
     },
 
+    /**
+     * US-C-10 — "one rating per order per party, editable for 24 hours":
+     * `Rating` is now `@@unique([orderId, targetType])`, so a second call
+     * for the same order+target upserts against that same row (score/
+     * comment only) rather than ever creating a duplicate, and only while
+     * still inside the original `editedUntil` window computed at first
+     * submission — editing never extends it.
+     */
     async rateOrder(orderId: string, input: RateOrderInput, customerId: string | null) {
       const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
       if (order.status !== "COMPLETED") throw new InvalidOrderStateError("Can only rate a completed order.");
 
       const targetId = input.targetType === "vendor" ? order.vendorId : order.riderId;
       if (!targetId) throw new InvalidOrderStateError(`This order has no ${input.targetType} to rate.`);
+
+      const existing = await prisma.rating.findUnique({
+        where: { orderId_targetType: { orderId, targetType: input.targetType } },
+      });
+
+      if (existing) {
+        if (Date.now() > existing.editedUntil.getTime()) throw new RatingLockedError();
+        return prisma.rating.update({
+          where: { id: existing.id },
+          data: { score: input.score, comment: input.comment },
+        });
+      }
 
       return prisma.rating.create({
         data: {

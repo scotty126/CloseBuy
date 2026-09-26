@@ -28,10 +28,11 @@ const TEST_SERVICE_AREA = [
 function createFakePrisma() {
   const vendors = new Map<string, any>();
   const products = new Map<string, any>();
+  const ratings: any[] = [];
   let nextId = 1;
   const id = () => `id_${nextId++}`;
 
-  return {
+  const db = {
     vendorProfile: {
       findUnique: async ({ where }: { where: { id?: string; userId?: string } }) => {
         if (where.id) return vendors.get(where.id) ?? null;
@@ -70,11 +71,28 @@ function createFakePrisma() {
         return updated;
       },
     },
+    rating: {
+      groupBy: async ({ where }: any) => {
+        const targetIds: string[] = where.targetId.in;
+        const filtered = ratings.filter((r) => r.targetType === where.targetType && targetIds.includes(r.targetId));
+        const byTarget = new Map<string, number[]>();
+        for (const r of filtered) byTarget.set(r.targetId, [...(byTarget.get(r.targetId) ?? []), r.score]);
+        return [...byTarget.entries()].map(([targetId, scores]) => ({
+          targetId,
+          _avg: { score: scores.reduce((s, x) => s + x, 0) / scores.length },
+          _count: { targetId: scores.length },
+        }));
+      },
+    },
     config: {
       findFirst: async ({ where }: { where: { key: string } }) =>
         where.key === "service_area_polygon" ? { key: where.key, value: TEST_SERVICE_AREA } : null,
     },
-  } as unknown as PrismaClient;
+    // Exposed for assertions/seeding, not part of the real Prisma surface.
+    __state: { vendors, products, ratings },
+  };
+
+  return db as unknown as PrismaClient & { __state: typeof db.__state };
 }
 
 const USER_A = "user_vendor_a";
@@ -90,7 +108,7 @@ const APPLICATION = {
 };
 
 describe("catalog service", () => {
-  let prisma: PrismaClient;
+  let prisma: PrismaClient & { __state: { vendors: Map<string, any>; products: Map<string, any>; ratings: any[] } };
 
   beforeEach(() => {
     prisma = createFakePrisma();
@@ -155,6 +173,41 @@ describe("catalog service", () => {
       bankAccountNumber: "0123456789",
       bankCode: "058",
     });
+  });
+
+  it("US-C-10 — never exposes reliabilityScore (an internal ops metric) on the public browse/detail endpoints", async () => {
+    const svc = createCatalogService(prisma);
+    const vendor = await svc.submitApplication(USER_A, APPLICATION);
+    await prisma.vendorProfile.update({ where: { userId: USER_A }, data: { status: "approved", reliabilityScore: 5 } });
+
+    const fetched = await svc.getVendor(vendor.id);
+    const { vendors: searched } = await svc.searchVendors({ limit: 20 } as any);
+
+    expect(fetched).not.toHaveProperty("reliabilityScore");
+    expect(searched[0]).not.toHaveProperty("reliabilityScore");
+  });
+
+  it("US-C-10 — shows the real rating average and count, null/0 until the first real rating exists", async () => {
+    const svc = createCatalogService(prisma);
+    const vendor = await svc.submitApplication(USER_A, APPLICATION);
+    await prisma.vendorProfile.update({ where: { userId: USER_A }, data: { status: "approved" } });
+
+    const beforeAnyRatings = await svc.getVendor(vendor.id);
+    expect(beforeAnyRatings.ratingAverage).toBeNull();
+    expect(beforeAnyRatings.ratingCount).toBe(0);
+
+    prisma.__state.ratings.push(
+      { targetType: "vendor", targetId: vendor.id, score: 5 },
+      { targetType: "vendor", targetId: vendor.id, score: 3 },
+    );
+
+    const afterRatings = await svc.getVendor(vendor.id);
+    expect(afterRatings.ratingAverage).toBe(4);
+    expect(afterRatings.ratingCount).toBe(2);
+
+    const { vendors: searched } = await svc.searchVendors({ limit: 20 } as any);
+    expect(searched[0]!.ratingAverage).toBe(4);
+    expect(searched[0]!.ratingCount).toBe(2);
   });
 
   it("a vendor cannot edit another vendor's product (cross-tenant access control)", async () => {

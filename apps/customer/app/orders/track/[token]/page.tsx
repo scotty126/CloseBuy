@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { Star } from "lucide-react";
 import { Button, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
 import { formatNaira, minor } from "@closebuy/types";
-import type { OrderDto, OrderStatus } from "@closebuy/types";
+import type { OrderDto, OrderStatus, RatingDto } from "@closebuy/types";
 import { orderApi, catalogApi } from "@/lib/api";
 import { useCart, type CartItem, type CartVendor } from "@/lib/cart";
 
@@ -24,6 +25,82 @@ function stepLabel(status: OrderStatus, isPickup: boolean): string {
     IN_TRANSIT: "On the way",
   };
   return labels[status] ?? status;
+}
+
+/**
+ * US-C-10 — one of these per rateable target (vendor always, rider only
+ * on a delivery order once assigned). Self-contained: manages its own
+ * score/comment/submit state rather than the parent juggling up to two
+ * copies of the same form state. Locks to a read-only view once
+ * `existing.editedUntil` has passed — the server enforces this
+ * authoritatively regardless (RatingLockedError, order/service.ts).
+ */
+function RatingForm({
+  label,
+  existing,
+  onSubmit,
+}: {
+  label: string;
+  existing: RatingDto | undefined;
+  onSubmit: (score: number, comment: string) => Promise<void>;
+}) {
+  const isLocked = Boolean(existing) && Date.now() > new Date(existing!.editedUntil).getTime();
+  const [score, setScore] = useState(existing?.score ?? 0);
+  const [comment, setComment] = useState(existing?.comment ?? "");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (isLocked) {
+    return (
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <p className="text-sm font-medium text-ink">{label}</p>
+        <div className="mt-1 flex gap-0.5">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <Star key={n} size={16} className={n <= existing!.score ? "fill-accent text-accent" : "text-gray-300"} />
+          ))}
+        </div>
+        {existing!.comment && <p className="mt-1 text-sm text-muted">{existing!.comment}</p>}
+      </div>
+    );
+  }
+
+  async function handleSubmit() {
+    if (score < 1) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit(score, comment.trim());
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Couldn't save that rating.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <p className="text-sm font-medium text-ink">{label}</p>
+      {error && <p className="mt-1 text-sm text-danger">{error}</p>}
+      <div className="mt-2 flex gap-1">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button key={n} type="button" onClick={() => setScore(n)} aria-label={`${n} star${n > 1 ? "s" : ""}`}>
+            <Star size={22} className={n <= score ? "fill-accent text-accent" : "text-gray-300"} />
+          </button>
+        ))}
+      </div>
+      <textarea
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        rows={2}
+        placeholder="Optional comment"
+        maxLength={500}
+        className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+      />
+      <Button className="mt-2" disabled={isSubmitting || score < 1} onClick={handleSubmit}>
+        {isSubmitting ? "Saving…" : existing ? "Update rating" : "Submit rating"}
+      </Button>
+    </div>
+  );
 }
 
 /**
@@ -407,6 +484,29 @@ export default function OrderTrackingPage() {
             Report a problem
           </Button>
         )
+      )}
+
+      {order.status === "COMPLETED" && (
+        <div className="flex flex-col gap-3">
+          <RatingForm
+            label={`Rate ${order.vendor?.businessName ?? "the vendor"}`}
+            existing={order.ratings.find((r) => r.targetType === "vendor")}
+            onSubmit={async (score, comment) => {
+              await orderApi.rateOrder(token, { targetType: "vendor", score, comment: comment || undefined });
+              load();
+            }}
+          />
+          {!isPickup && order.rider && (
+            <RatingForm
+              label={`Rate ${order.rider.fullName}, your rider`}
+              existing={order.ratings.find((r) => r.targetType === "rider")}
+              onSubmit={async (score, comment) => {
+                await orderApi.rateOrder(token, { targetType: "rider", score, comment: comment || undefined });
+                load();
+              }}
+            />
+          )}
+        </div>
       )}
     </div>
   );
