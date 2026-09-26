@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Input, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
-import { formatNaira, minor } from "@closebuy/types";
+import { formatNaira, minor, normalizePhone } from "@closebuy/types";
 import type { CheckoutInput } from "@closebuy/types";
 import { catalogApi, customerAuthApi, orderApi } from "@/lib/api";
 import { useCart } from "@/lib/cart";
@@ -28,7 +28,10 @@ export default function CheckoutPage() {
   const { session, isLoaded: sessionLoaded } = useAuthSession();
   const { cart, isLoaded: cartLoaded, subtotalMinor, clearCart } = useCart();
 
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  // Reused across a network-level retry (so a double-tap can't place two orders), but replaced once the
+  // server has answered with an error: that order wasn't placed, and replaying the key would just hand back
+  // the same failed attempt.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [deliveryFeeMinor, setDeliveryFeeMinor] = useState<number | null>(null);
 
   const [contactPhone, setContactPhone] = useState("");
@@ -47,6 +50,12 @@ export default function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isDelivery = cart.fulfilmentType === "delivery";
+
+  // A failed submit must be *seen* — on a phone the message can sit below the fold of a long form.
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [error]);
 
   useEffect(() => {
     if (!cartLoaded) return;
@@ -122,8 +131,8 @@ export default function CheckoutPage() {
         deliveryLng: isDelivery ? lng! : undefined,
         deliveryLandmark: isDelivery ? landmark.trim() : undefined,
         paymentMethod: paymentChoice === "cash_on_delivery" ? "cash_on_delivery" : "card",
-        contactPhone: contactPhone.trim(),
-        alternateContactPhone: alternateContactPhone.trim() || undefined,
+        contactPhone: normalizePhone(contactPhone),
+        alternateContactPhone: normalizePhone(alternateContactPhone) || undefined,
         email: !session && paymentChoice === "online" ? email.trim() || undefined : undefined,
       };
 
@@ -131,7 +140,7 @@ export default function CheckoutPage() {
 
       if (session && saveAsDefault) {
         // Best-effort — never blocks a successful order on a profile-save failing.
-        customerAuthApi.updateProfile({ defaultPhone: contactPhone.trim() }).catch(() => {});
+        customerAuthApi.updateProfile({ defaultPhone: normalizePhone(contactPhone) }).catch(() => {});
       }
 
       clearCart();
@@ -142,7 +151,8 @@ export default function CheckoutPage() {
         router.push(`/orders/track/${result.trackingToken}`);
       }
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Couldn't place your order. Try again.");
+      if (err instanceof ApiClientError) setIdempotencyKey(crypto.randomUUID());
+      setError(err instanceof ApiClientError ? err.message : "Couldn't reach CloseBuy. Check your connection and try again.");
       setIsSubmitting(false);
     }
   }
@@ -169,7 +179,7 @@ export default function CheckoutPage() {
           )}
           <details className="text-xs text-muted">
             <summary className="cursor-pointer select-none">Enter coordinates manually instead</summary>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 grid grid-cols-2 gap-2">
               <Input
                 placeholder="Latitude"
                 inputMode="decimal"
@@ -270,7 +280,11 @@ export default function CheckoutPage() {
           : `${isDelivery ? "Delivery" : "Pickup"} as soon as possible`}
       </p>
 
-      {error && <p className="text-sm text-danger">{error}</p>}
+      {error && (
+        <p ref={errorRef} role="alert" className="rounded-lg bg-danger/10 p-3 text-sm font-medium text-danger">
+          {error}
+        </p>
+      )}
 
       <Button type="submit" disabled={isSubmitting}>
         {isSubmitting ? "Placing order…" : `Place order · ${formatNaira(minor(totalMinor))}`}

@@ -11,9 +11,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <div className="flex min-h-screen">
+        {/* Below `lg` the sidebar is a top bar + drawer (block flow); from `lg` it sits beside the page.
+            min-w-0 lets wide content (tables) scroll inside itself instead of stretching the page. */}
+        <div className="min-h-screen lg:flex">
           <AdminSidebar />
-          <main className="flex-1 overflow-y-auto p-6">{children}</main>
+          <main className="min-w-0 flex-1 p-4 sm:p-6">{children}</main>
         </div>
       </body>
     </html>

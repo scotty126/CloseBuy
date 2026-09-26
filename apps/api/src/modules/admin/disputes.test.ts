@@ -102,6 +102,7 @@ function createFakePrisma() {
 
 function createFakeMonnify(overrides?: Partial<MonnifyClient>): MonnifyClient {
   return {
+    isConfigured: true,
     initializeTransaction: vi.fn().mockResolvedValue({ checkoutUrl: "https://x", transactionReference: "t" }),
     verifyWebhookSignature: vi.fn().mockReturnValue(true),
     refund: vi.fn().mockResolvedValue(undefined),

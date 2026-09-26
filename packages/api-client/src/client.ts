@@ -12,6 +12,27 @@ export class ApiClientError extends Error {
   }
 }
 
+/**
+ * Pulls a code and message out of an error body without assuming its shape.
+ * The API's own shape is `{ error: { code, message } }`, but a proxy, a
+ * framework default (`{ statusCode, error: "Bad Request", message }`) or a
+ * non-JSON body can arrive instead — and reading `.message` off the string
+ * in `error` quietly yields undefined. Callers used to fall back to
+ * `res.statusText`, which is empty over HTTP/2, so the form showed no error
+ * at all and "Place order" appeared to do nothing.
+ */
+function readError(body: unknown): { code: string; message: string } {
+  const b = body as { error?: unknown; message?: unknown } | undefined;
+  if (b && typeof b.error === "object" && b.error !== null) {
+    const e = b.error as { code?: unknown; message?: unknown };
+    return {
+      code: typeof e.code === "string" ? e.code : "UNKNOWN",
+      message: typeof e.message === "string" ? e.message : "",
+    };
+  }
+  return { code: "UNKNOWN", message: typeof b?.message === "string" ? b.message : "" };
+}
+
 export interface CreateApiClientOptions {
   baseUrl: string;
   getAccessToken?: () => string | null;
@@ -49,8 +70,8 @@ export function createApiClient({ baseUrl, getAccessToken }: CreateApiClientOpti
     const body = await res.json().catch(() => undefined);
 
     if (!res.ok) {
-      const err = body as ApiError | undefined;
-      throw new ApiClientError(res.status, err?.error.code ?? "UNKNOWN", err?.error.message ?? res.statusText);
+      const { code, message } = readError(body);
+      throw new ApiClientError(res.status, code, message || res.statusText || `Something went wrong (HTTP ${res.status}). Please try again.`);
     }
 
     return body as T;

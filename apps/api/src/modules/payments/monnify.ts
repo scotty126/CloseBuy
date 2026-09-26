@@ -79,7 +79,21 @@ export interface TransferResult {
   providerReference: string; // Monnify's own reference for this transfer, for later lookup/reconciliation
 }
 
+/**
+ * Thrown whenever something needs the gateway and Monnify credentials aren't
+ * set (or, for checkout, the gateway couldn't be reached). The API's error
+ * handler turns it into a 503 `PAYMENTS_UNAVAILABLE` — the message is written
+ * for the customer, so keep env-var detail out of it (it's logged separately).
+ */
+export class PaymentsUnavailableError extends Error {
+  constructor(message = "Online payment isn't available right now. Please choose cash on delivery.", options?: ErrorOptions) {
+    super(message, options);
+  }
+}
+
 export interface MonnifyClient {
+  /** False when MONNIFY_* credentials are missing — callers refuse online payment up front rather than half-creating an order. */
+  isConfigured: boolean;
   initializeTransaction(input: InitializeTransactionInput): Promise<{ checkoutUrl: string; transactionReference: string }>;
   verifyWebhookSignature(rawBody: string, signatureHeader: string | undefined): boolean;
   refund(input: RefundInput): Promise<void>;
@@ -99,12 +113,13 @@ export function createMonnifyClient(
   disbursementSourceAccountNumber?: string,
 ): MonnifyClient {
   if (!apiKey || !secretKey || !contractCode) {
+    // MONNIFY_API_KEY / MONNIFY_SECRET_KEY / MONNIFY_CONTRACT_CODE are not set — see .env.example.
+    // Cash on delivery is unaffected; anything that needs the gateway gets a 503, not a crash.
     const missingCredentialsError = () => {
-      throw new Error(
-        "MONNIFY_API_KEY / MONNIFY_SECRET_KEY / MONNIFY_CONTRACT_CODE are not set — see .env.example. Checkout cannot charge a card/transfer without them (cash on delivery is unaffected).",
-      );
+      throw new PaymentsUnavailableError();
     };
     return {
+      isConfigured: false,
       initializeTransaction: async () => missingCredentialsError(),
       // Signature verification with no secret configured must fail closed,
       // not throw past the caller — an unconfigured gateway should reject
@@ -141,6 +156,7 @@ export function createMonnifyClient(
   }
 
   return {
+    isConfigured: true,
     async initializeTransaction(input) {
       const accessToken = await getAccessToken();
 

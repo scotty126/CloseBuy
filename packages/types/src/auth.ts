@@ -12,6 +12,22 @@ export const phoneSchema = z
   .string()
   .regex(/^\+[1-9]\d{7,14}$/, "Phone number must be in E.164 format, e.g. +2348012345678");
 
+/**
+ * Turns the way people actually type a Nigerian number — `0801 234 5678`,
+ * `234 801…`, `(0801)-234-5678` — into the E.164 the API requires. Anything
+ * already starting with `+` is only stripped of separators, and anything it
+ * doesn't recognise is returned as typed (so the API's own validation gets to
+ * say what's wrong, rather than this guessing). Used by forms before submit;
+ * the API still validates strictly.
+ */
+export function normalizePhone(input: string): string {
+  const compact = input.trim().replace(/[\s\-().]/g, "");
+  if (compact.startsWith("+")) return compact;
+  if (/^0\d{10}$/.test(compact)) return `+234${compact.slice(1)}`;
+  if (/^234\d{10}$/.test(compact)) return `+${compact}`;
+  return compact;
+}
+
 export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters");

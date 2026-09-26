@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button, Input } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
-import type { CategoryDto } from "@closebuy/types";
+import { normalizePhone, type CategoryDto } from "@closebuy/types";
 import { catalogApi } from "@/lib/api";
 
 /**
@@ -82,7 +82,7 @@ export function VendorApplicationForm({ onSubmitted }: { onSubmitted: () => void
         pickupLat: lat,
         pickupLng: lng,
         pickupLandmark: landmark.trim(),
-        pickupPhone: pickupPhone.trim(),
+        pickupPhone: normalizePhone(pickupPhone),
         bankAccountNumber: bankAccountNumber.trim() || undefined,
         bankCode: bankCode.trim() || undefined,
         bankAccountName: bankAccountName.trim() || undefined,

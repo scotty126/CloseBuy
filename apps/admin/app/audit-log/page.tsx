@@ -93,8 +93,9 @@ export default function AuditLogPage() {
       ) : entries && entries.length === 0 ? (
         <Card><p className="text-sm text-muted">No entries match this filter.</p></Card>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-          <table className="w-full text-left text-sm">
+        // Scrolls sideways inside its own card on a phone rather than clipping columns (or stretching the page).
+        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+          <table className="w-full min-w-[44rem] text-left text-sm">
             <thead className="border-b border-gray-200 bg-surface text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-2">When</th>

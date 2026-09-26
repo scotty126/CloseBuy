@@ -234,6 +234,64 @@ deleted now** (the fixed API has been live since the 2026-09-26 deploy).
 Found because the owner tried to sign into the local admin app to approve
 test accounts.
 
+**Fixed (2026-09-26) — "Place order does nothing", and it was systemic.**
+The API had **no error handler at all**, so every uncaught error went out in
+Fastify's default `{ statusCode, error: "Internal Server Error", message }`
+shape — not the `{ error: { code, message } }` the client parses. The client
+read `err.error.message` off that (a string → `undefined`), fell back to
+`res.statusText`, which is **empty over HTTP/2**, and put `""` in the error
+slot, which renders nothing. And every `schema.parse()` failure in the whole
+API is a thrown ZodError, so *every validation error was a 500 with an
+invisible message* — the trigger here was a customer typing their number as
+`0801…` (the normal Nigerian way; the schema wants E.164 `+234…`). Fixed at
+four layers, because any one alone leaves a hole:
+`apps/api/src/lib/error-handler.ts` (registered first in `app.ts` — children
+copy their parent's handler at creation, so order matters): ZodError → 400
+`VALIDATION_ERROR` naming the field, `PaymentsUnavailableError` → 503
+`PAYMENTS_UNAVAILABLE`, Fastify/rate-limit 4xx passed through, anything else
+a generic 500 that **no longer leaks internal messages** (the Monnify one
+used to name env vars); `packages/api-client/src/client.ts` `readError` accepts
+either shape and never yields an empty message; `normalizePhone` in
+`packages/types/src/auth.ts` (`0801…`/`234801…` → `+234801…`) applied at every
+phone submit (checkout, account, vendor application, all three staff logins);
+and the checkout form shows a `role="alert"` box, scrolled into view, with a
+fresh idempotency key after a server error.
+**Related, same root:** checkout with online payment while Monnify is
+unconfigured used to create the order and its `Payment` row *first*, then
+throw. That left a dead `PENDING_PAYMENT` order, and because the payment is
+keyed on the idempotency key, a retry replayed it (no `checkoutUrl`) and
+sent the customer to its tracking page. Now `MonnifyClient.isConfigured` is
+checked before anything is written, and a gateway failure *after* the order
+exists cancels it and fails the payment. There is still no expiry job for
+abandoned `PENDING_PAYMENT` orders — one orphan from testing exists on the
+first demo vendor (2026-09-26, a `card` order made while probing this bug).
+Tests: `lib/error-handler.test.ts` (new), three new checkout cases in
+`order/service.test.ts`. **Not deployed at the time of writing** — the local
+apps already show the error (raw, until the API ships the new handler).
+**Mobile layout.** The vendor and admin dashboards shared one `Sidebar`
+(`packages/ui`) that was a permanent 224px column with no way to dismiss it —
+on a phone that left ~160px for the page. It is now a top bar + drawer below
+`lg` (closes on link tap, backdrop, Escape, ✕) and the same column as before
+from `lg` up. Admin's wide tables (`orders`, `disputes`, `audit-log`) scroll
+sideways inside their card instead of clipping; the config "Add category" row
+wraps; the checkout coordinate inputs are a grid. Verified by rendering
+**every page of all four apps at 390px and 320px in headless Edge** and
+asserting no element extends past the viewport (`scrollWidth` alone misses
+clipped content), plus looking at the screenshots. The admin pages were
+rendered against canned API responses (no admin credentials here), so their
+*content* is fixture data — the layout is what was checked. Harness technique
+worth reusing: drive `msedge --headless=new --remote-debugging-port` over CDP
+from a plain Node script (Node 24 has a global `WebSocket`), inject the
+session as `localStorage["closebuy.session"]`, answer CORS preflights yourself
+if you intercept with `Fetch.enable`, and in Git Bash set `MSYS_NO_PATHCONV=1`
+or a bare `/` route argument becomes `C:/Program Files/Git/`.
+**Dev-server gotcha:** `@closebuy/types` is consumed from `dist/`, not `src/`.
+After editing it, `pnpm --filter @closebuy/types build`, and **restart any
+running `next dev`** — a hot-reloading server keeps the old chunk map and
+starts 500ing with `Cannot find module './vendor-chunks/zod@…'`. Killing the
+background task isn't enough on Windows; the Next child keeps the port, so
+find it with `netstat -ano | grep :300x` and stop that PID.
+
 **Fixed (2026-09-24) — a real, live bug, not hypothetical:** every
 body-less `POST` through the shared `packages/api-client/src/client.ts`
 (vendor accept-order, vendor mark-ready, rider accept/decline-offer,

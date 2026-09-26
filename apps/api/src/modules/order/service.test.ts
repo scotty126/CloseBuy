@@ -12,7 +12,7 @@ import {
   DisputeAlreadyExistsError,
   RatingLockedError,
 } from "./service.js";
-import type { MonnifyClient } from "../payments/monnify.js";
+import { PaymentsUnavailableError, type MonnifyClient } from "../payments/monnify.js";
 import type { OrderQueue } from "./jobs.js";
 import type { NotificationService } from "../notifications/service.js";
 
@@ -211,6 +211,7 @@ function createFakePrisma() {
 
 function createFakeMonnify(overrides?: Partial<MonnifyClient>): MonnifyClient {
   return {
+    isConfigured: true,
     initializeTransaction: vi.fn().mockResolvedValue({ checkoutUrl: "https://sandbox.monnify.com/pay/abc", transactionReference: "txn_1" }),
     verifyWebhookSignature: vi.fn().mockReturnValue(true),
     refund: vi.fn().mockResolvedValue(undefined),
@@ -352,6 +353,31 @@ describe("order service — checkout (US-C-06)", () => {
     expect(monnify.initializeTransaction).toHaveBeenCalledOnce();
     expect((result as any).checkoutUrl).toBeDefined();
     expect(result.order.status).toBe("PENDING_PAYMENT");
+  });
+
+  it("refuses online payment up front when the gateway isn't configured, without creating any order", async () => {
+    monnify = createFakeMonnify({ isConfigured: false });
+    const result = service().checkout({ ...baseInput(), paymentMethod: "card" as const }, null, "idem-unconfigured");
+
+    await expect(result).rejects.toThrow(PaymentsUnavailableError);
+    expect(prisma.__state.orders.size).toBe(0);
+    expect(monnify.initializeTransaction).not.toHaveBeenCalled();
+  });
+
+  it("cash on delivery still works when the gateway isn't configured", async () => {
+    monnify = createFakeMonnify({ isConfigured: false });
+    const result = await service().checkout({ ...baseInput(), fulfilmentType: "delivery" as const, deliveryLat: 5, deliveryLng: 5, deliveryLandmark: "Blue gate", paymentMethod: "cash_on_delivery" as const }, null, "idem-cod-unconfigured");
+    expect(result.order.status).toBe("PAID");
+  });
+
+  it("cancels the order and fails its payment when the gateway can't start the charge, so a retry isn't a replay of a dead order", async () => {
+    monnify = createFakeMonnify({ initializeTransaction: vi.fn().mockRejectedValue(new Error("Monnify auth failed: 401")) });
+    const result = service().checkout({ ...baseInput(), paymentMethod: "card" as const }, null, "idem-gateway-down");
+
+    await expect(result).rejects.toThrow(PaymentsUnavailableError);
+    const [order] = [...prisma.__state.orders.values()];
+    expect(order.status).toBe("CANCELLED");
+    expect(prisma.__state.payments.get("idem-gateway-down")?.status).toBe("failed");
   });
 
   it("cash on delivery is rejected for a pickup order at the schema level (brief §3.1a — no delivery to pay on)", () => {

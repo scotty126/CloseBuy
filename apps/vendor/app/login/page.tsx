@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Input, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
+import { normalizePhone } from "@closebuy/types";
 import { authApi } from "@/lib/api";
 import { OAuthButtons } from "@/components/OAuthButtons";
 
@@ -39,7 +40,7 @@ export default function LoginPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      const res = await authApi.requestOtp({ phone, role: ROLE });
+      const res = await authApi.requestOtp({ phone: normalizePhone(phone), role: ROLE });
       if (res.session) {
         // Dev auto-signin (DEV_AUTO_SIGNIN_PHONES) — skips the code step
         // entirely, straight to a real session.
@@ -60,7 +61,7 @@ export default function LoginPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      const session = await authApi.verifyOtp({ phone, code, role: ROLE });
+      const session = await authApi.verifyOtp({ phone: normalizePhone(phone), code, role: ROLE });
       save(session);
       router.push("/");
     } catch (err) {

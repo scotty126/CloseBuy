@@ -17,6 +17,7 @@ import { payoutRoutes } from "./modules/payouts/routes.js";
 import { notificationRoutes } from "./modules/notifications/routes.js";
 import { requireAuth } from "./lib/auth-guard.js";
 import { serializeUser } from "./lib/serialize-user.js";
+import { apiErrorHandler, apiNotFoundHandler } from "./lib/error-handler.js";
 
 /**
  * Module registration order matters: env must load before anything that
@@ -49,6 +50,11 @@ export async function buildApp() {
       transport: process.env.NODE_ENV !== "production" ? { target: "pino-pretty" } : undefined,
     },
   });
+
+  // Before any plugin registers: an encapsulated child copies its parent's
+  // handlers at creation, so setting these afterwards would miss every route.
+  app.setErrorHandler(apiErrorHandler);
+  app.setNotFoundHandler(apiNotFoundHandler);
 
   await app.register(envPlugin);
   await app.register(sensible);

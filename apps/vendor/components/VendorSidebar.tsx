@@ -14,7 +14,11 @@ const NAV = [
 
 export function VendorSidebar() {
   const pathname = usePathname();
-  const items = NAV.map((item) => ({ ...item, active: pathname === item.href }));
+  // A detail page (/orders/abc) still belongs to its section; "/" only matches itself.
+  const items = NAV.map((item) => ({
+    ...item,
+    active: item.href === "/" ? pathname === "/" : pathname === item.href || pathname.startsWith(`${item.href}/`),
+  }));
 
   return (
     <Sidebar

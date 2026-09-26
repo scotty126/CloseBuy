@@ -303,8 +303,8 @@ export default function ConfigPage() {
           ))}
         </div>
 
-        <div className="flex items-end gap-2 border-t border-gray-200 pt-3">
-          <div className="flex-1">
+        <div className="flex flex-wrap items-end gap-2 border-t border-gray-200 pt-3">
+          <div className="min-w-[12rem] flex-1">
             <Input label="New category name" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} />
           </div>
           <div className="w-32">

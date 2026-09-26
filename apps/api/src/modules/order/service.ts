@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import type { PrismaClient, Order } from "@prisma/client";
-import type { MonnifyClient, WebhookEvent } from "../payments/monnify.js";
+import { PaymentsUnavailableError, type MonnifyClient, type WebhookEvent } from "../payments/monnify.js";
 import { type OrderQueue, scheduleTimer } from "./jobs.js";
 import type { NotificationService } from "../notifications/service.js";
 import { ConfigKeys } from "../../lib/config.js";
@@ -144,6 +144,12 @@ export function createOrderService(deps: OrderServiceDeps) {
      * vendor availability against the database, never the client's copy.
      */
     async checkout(input: CheckoutInput, auth: AuthContext | null, idempotencyKey: string) {
+      // Refuse online payment before writing anything. Checking after the
+      // order exists left a dead PENDING_PAYMENT order behind, and its Payment
+      // row (keyed on the idempotency key) made every retry replay that order
+      // instead of trying again.
+      if (input.paymentMethod !== "cash_on_delivery" && !monnify.isConfigured) throw new PaymentsUnavailableError();
+
       // Idempotent replay — the same key returns the same order rather
       // than creating a second one (api-contracts.md's Idempotency-Key).
       const existingPayment = await prisma.payment.findUnique({ where: { gatewayReference: idempotencyKey } });
@@ -240,20 +246,30 @@ export function createOrderService(deps: OrderServiceDeps) {
         return { order: paid, trackingToken: order.trackingToken, replay: false as const };
       }
 
-      await prisma.payment.create({
+      const payment = await prisma.payment.create({
         data: { orderId: order.id, gateway: "monnify", gatewayReference: idempotencyKey, amountMinor: totalMinor, status: "pending" },
       });
 
       const email = input.email ?? (auth ? (await prisma.user.findUnique({ where: { id: auth.sub } }))?.email : undefined) ?? `guest-${order.id}@closebuy.app`;
 
-      const { checkoutUrl } = await monnify.initializeTransaction({
-        amountMinor: totalMinor,
-        customerName: "CloseBuy customer",
-        customerEmail: email,
-        paymentReference: idempotencyKey,
-        paymentDescription: `CloseBuy order ${order.id}`,
-        redirectUrl: `${deps.customerAppUrl}/orders/track/${order.trackingToken}`,
-      });
+      let checkoutUrl: string;
+      try {
+        ({ checkoutUrl } = await monnify.initializeTransaction({
+          amountMinor: totalMinor,
+          customerName: "CloseBuy customer",
+          customerEmail: email,
+          paymentReference: idempotencyKey,
+          paymentDescription: `CloseBuy order ${order.id}`,
+          redirectUrl: `${deps.customerAppUrl}/orders/track/${order.trackingToken}`,
+        }));
+      } catch (err) {
+        // The gateway was configured but the charge couldn't be started (down, bad credentials). Nothing was
+        // charged, so close the order out rather than leave it PENDING_PAYMENT forever — nothing else would.
+        await prisma.payment.update({ where: { id: payment.id }, data: { status: "failed" } });
+        await prisma.order.update({ where: { id: order.id }, data: { status: "CANCELLED" } });
+        await transition(order.id, "PENDING_PAYMENT", "CANCELLED", "system", null, "Online payment could not be started");
+        throw new PaymentsUnavailableError("We couldn't start your online payment. Please try again, or choose cash on delivery.", { cause: err });
+      }
 
       return { order, checkoutUrl, trackingToken: order.trackingToken, replay: false as const };
     },

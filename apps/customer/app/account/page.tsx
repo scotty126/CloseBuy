@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, Card, Input, Placeholder, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
+import { normalizePhone } from "@closebuy/types";
 import { customerAuthApi } from "@/lib/api";
 
 /**
@@ -56,7 +57,7 @@ export default function AccountPage() {
     setSaved(false);
     setIsSaving(true);
     try {
-      const res = await customerAuthApi.updateProfile({ defaultPhone: defaultPhone.trim() || null });
+      const res = await customerAuthApi.updateProfile({ defaultPhone: normalizePhone(defaultPhone) || null });
       setSavedPhone(res.profile.defaultPhone);
       setSaved(true);
     } catch (err) {
