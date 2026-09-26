@@ -8,6 +8,7 @@ import {
   InvalidCollectionCodeError,
   InvalidDeliveryCodeError,
   CashAmountMismatchError,
+  CashFloatLimitError,
 } from "./service.js";
 import type { OrderQueue } from "../order/jobs.js";
 import type { NotificationService } from "../notifications/service.js";
@@ -18,6 +19,11 @@ function createFakePrisma() {
   const customers = new Map<string, any>();
   const transitions: any[] = [];
   const ledgerEntries: any[] = [];
+  const remittances: any[] = [];
+  // Only what this module reads. rider_cash_float_limit_minor is deliberately
+  // absent by default — the accessor falls back to its own default when no
+  // row exists, and tests that care set one.
+  const config = new Map<string, any>([["escrow_release_window_hours", 48]]);
   let nextId = 1;
   const id = () => `id_${nextId++}`;
 
@@ -52,6 +58,7 @@ function createFakePrisma() {
           if (where.riderId !== undefined && o.riderId !== where.riderId) return false;
           if (where.status && o.status !== where.status) return false;
           if (where.fulfilmentType && o.fulfilmentType !== where.fulfilmentType) return false;
+          if (where.paymentMethod?.not && o.paymentMethod === where.paymentMethod.not) return false;
           return true;
         }),
       findFirst: async ({ where }: any) =>
@@ -72,6 +79,7 @@ function createFakePrisma() {
         if (!o || o.riderId !== where.riderId || o.status !== where.status || o.fulfilmentType !== where.fulfilmentType) {
           return { count: 0 };
         }
+        if (where.paymentMethod?.not && o.paymentMethod === where.paymentMethod.not) return { count: 0 };
         orders.set(where.id, { ...o, ...data });
         return { count: 1 };
       },
@@ -90,10 +98,13 @@ function createFakePrisma() {
       },
     },
     config: {
-      // Same default as prisma/seed.ts — the only Config key this module reads.
-      findFirst: async ({ where }: any) => (where.key === "escrow_release_window_hours" ? { key: where.key, value: 48 } : null),
+      findFirst: async ({ where }: any) => (config.has(where.key) ? { key: where.key, value: config.get(where.key) } : null),
     },
-    __state: { riders, orders, customers, transitions, ledgerEntries },
+    riderCashRemittance: {
+      findMany: async ({ where }: any) =>
+        remittances.filter((r) => r.riderId === where.riderId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+    },
+    __state: { riders, orders, customers, transitions, ledgerEntries, remittances, config },
   };
 
   function applyOps(existing: any, data: any) {
@@ -356,5 +367,102 @@ describe("dispatch service", () => {
 
     prisma.__state.orders.set(ORDER_ID, { ...prisma.__state.orders.get(ORDER_ID), status: "DELIVERED" });
     expect(await service().getActiveJob(RIDER_USER_ID)).toBeNull();
+  });
+});
+
+describe("dispatch service — cash float limit & remittance history (US-R-08)", () => {
+  let prisma: ReturnType<typeof createFakePrisma>;
+  let queue: OrderQueue;
+  let notifications: NotificationService;
+
+  const LIMIT = 100000; // ₦1,000 — small on purpose so a single order crosses it
+
+  beforeEach(() => {
+    prisma = createFakePrisma();
+    queue = createFakeQueue();
+    notifications = createFakeNotifications();
+    prisma.__state.config.set("rider_cash_float_limit_minor", LIMIT);
+  });
+
+  function service() {
+    return createDispatchService({ prisma, queue, notifications });
+  }
+
+  function riderWithBalance(cashBalanceMinor: number) {
+    prisma.__state.riders.set(RIDER_ID, { id: RIDER_ID, userId: RIDER_USER_ID, status: "approved", onDuty: true, cashBalanceMinor, fullName: "Musa" });
+  }
+
+  it("over the limit: cash-on-delivery jobs stop being offered, prepaid ones still are", async () => {
+    riderWithBalance(LIMIT + 1);
+    seedOpenOrder(prisma, { id: "cod_order", paymentMethod: "cash_on_delivery" });
+    seedOpenOrder(prisma, { id: "card_order", paymentMethod: "card" });
+
+    const jobs = await service().listOpenJobs(RIDER_USER_ID);
+    expect(jobs.map((j) => j.id)).toEqual(["card_order"]);
+  });
+
+  it("at exactly the limit is still fine — the story says *exceeding* it stops offers", async () => {
+    riderWithBalance(LIMIT);
+    seedOpenOrder(prisma, { paymentMethod: "cash_on_delivery" });
+
+    expect(await service().listOpenJobs(RIDER_USER_ID)).toHaveLength(1);
+  });
+
+  it("under the limit sees cash-on-delivery jobs normally", async () => {
+    riderWithBalance(0);
+    seedOpenOrder(prisma, { paymentMethod: "cash_on_delivery" });
+
+    expect(await service().listOpenJobs(RIDER_USER_ID)).toHaveLength(1);
+  });
+
+  it("claiming a cash-on-delivery job while over the limit is refused with its own error, even if the client skips the offers list", async () => {
+    riderWithBalance(LIMIT + 1);
+    seedOpenOrder(prisma, { paymentMethod: "cash_on_delivery" });
+
+    await expect(service().claimJob(RIDER_USER_ID, ORDER_ID)).rejects.toThrow(CashFloatLimitError);
+    expect(prisma.__state.orders.get(ORDER_ID).riderId).toBeNull(); // not claimed
+  });
+
+  it("claiming a prepaid job while over the limit still works", async () => {
+    riderWithBalance(LIMIT + 1);
+    seedOpenOrder(prisma, { paymentMethod: "card" });
+
+    const order = await service().claimJob(RIDER_USER_ID, ORDER_ID);
+    expect(order.status).toBe("RIDER_ASSIGNED");
+  });
+
+  it("an over-limit rider losing a race for a job that isn't cash gets the ordinary 'unavailable', not a misleading cash-limit error", async () => {
+    riderWithBalance(LIMIT + 1);
+    seedOpenOrder(prisma, { paymentMethod: "card", riderId: "someone_else", status: "RIDER_ASSIGNED" });
+
+    await expect(service().claimJob(RIDER_USER_ID, ORDER_ID)).rejects.toThrow(JobUnavailableError);
+  });
+
+  it("falls back to a default limit when none has ever been configured, instead of failing", async () => {
+    prisma.__state.config.delete("rider_cash_float_limit_minor");
+    riderWithBalance(0);
+
+    const earnings = await service().getEarnings(RIDER_USER_ID);
+    expect(earnings.cashFloatLimitMinor).toBe(10_000_000);
+  });
+
+  it("earnings expose the configured limit alongside the balance", async () => {
+    riderWithBalance(30000);
+
+    const earnings = await service().getEarnings(RIDER_USER_ID);
+    expect(earnings.cashBalanceMinor).toBe(30000);
+    expect(earnings.cashFloatLimitMinor).toBe(LIMIT);
+  });
+
+  it("remittance history: only this rider's own, newest first", async () => {
+    riderWithBalance(0);
+    prisma.__state.remittances.push(
+      { id: "r_old", riderId: RIDER_ID, amountMinor: 20000, note: null, createdAt: new Date("2026-09-01") },
+      { id: "r_new", riderId: RIDER_ID, amountMinor: 50000, note: "Handed to Ada", createdAt: new Date("2026-09-10") },
+      { id: "r_other", riderId: "some_other_rider", amountMinor: 999, note: null, createdAt: new Date("2026-09-05") },
+    );
+
+    const history = await service().listRemittances(RIDER_USER_ID);
+    expect(history.map((r) => r.id)).toEqual(["r_new", "r_old"]);
   });
 });

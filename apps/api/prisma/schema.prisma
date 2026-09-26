@@ -282,9 +282,30 @@ model RiderProfile {
   cashBalanceMinor Int       @default(0) // brief R-03 / US-R-08 — owed back to the platform
   createdAt      DateTime    @default(now())
 
-  orders Order[]
+  orders      Order[]
+  remittances RiderCashRemittance[]
 
   @@map("rider_profiles")
+}
+
+// US-R-08 — a rider handing collected cash back to the platform, recorded
+// by an admin (the story says so explicitly: "a remittance is recorded by
+// admin and immediately reduces the balance"). Its own table rather than a
+// LedgerEntry: ledger_entries.orderId is NOT NULL and a remittance belongs
+// to no order — same reason Payout is its own table. RiderProfile
+// .cashBalanceMinor is decremented in the same transaction, guarded so it
+// can never go negative. Append-only by DB grant, see prisma/APPEND_ONLY.sql.
+model RiderCashRemittance {
+  id          String       @id @default(uuid())
+  riderId     String
+  rider       RiderProfile @relation(fields: [riderId], references: [id])
+  amountMinor Int
+  recordedBy  String       // admin user id
+  note        String?
+  createdAt   DateTime     @default(now())
+
+  @@index([riderId])
+  @@map("rider_cash_remittances")
 }
 
 model AdminProfile {

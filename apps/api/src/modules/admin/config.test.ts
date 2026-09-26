@@ -160,3 +160,25 @@ describe("admin config — categories", () => {
     await expect(svc.updateCategory(ADMIN_ID, "nope", { name: "x" })).rejects.toThrow(CategoryNotFoundError);
   });
 });
+
+describe("admin config — rider cash float limit (US-R-08)", () => {
+  it("shows the enforced default when no limit has ever been set, rather than a blank", async () => {
+    const prisma = createFakePrisma();
+    const svc = createAdminConfigService({ prisma });
+
+    const config = await svc.getConfig();
+    expect(config.riderCashFloatLimitMinor).toBe(10_000_000);
+  });
+
+  it("writes a new versioned row when an admin sets it, and reads it back", async () => {
+    const prisma = createFakePrisma();
+    const svc = createAdminConfigService({ prisma });
+
+    const updated = await svc.updateConfig(ADMIN_ID, { riderCashFloatLimitMinor: 5_000_000 });
+
+    expect(updated.riderCashFloatLimitMinor).toBe(5_000_000);
+    const rows = prisma.__state.configRows.filter((r) => r.key === "rider_cash_float_limit_minor");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].version).toBe(1); // first ever row for this key — none was seeded
+  });
+});

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Button, Input } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
 import { formatNaira, minor } from "@closebuy/types";
-import type { RiderProfileDto, RiderJobDto } from "@closebuy/types";
+import type { RiderProfileDto, RiderJobDto, RiderEarningsDto } from "@closebuy/types";
 import { dispatchApi } from "@/lib/api";
 import { RiderGate } from "@/components/RiderGate";
 import { LinkButton } from "@/components/LinkButton";
@@ -92,10 +93,41 @@ function DutyScreen({ rider, refetchRider }: { rider: RiderProfileDto; refetchRi
     <div className="flex min-h-[80vh] flex-col items-center justify-center gap-4 p-6 text-center">
       <p className="text-lg font-semibold text-ink">On duty — waiting for a job</p>
       <p className="text-sm text-muted">You&apos;ll see an offer here as soon as one opens up nearby.</p>
+      <CashPausedNotice />
       {error && <p className="text-sm text-danger">{error}</p>}
       <Button variant="secondary" onClick={handleToggleDuty} disabled={togglingDuty}>
         {togglingDuty ? "Going off duty…" : "Go off duty"}
       </Button>
+    </div>
+  );
+}
+
+/**
+ * US-R-08 — over the cash limit, the API stops offering cash-on-delivery
+ * jobs (dispatch/service.ts), so a rider would just see fewer jobs with no
+ * explanation. Fetched fresh each time this waiting screen mounts, which
+ * includes right after finishing a delivery — exactly when a COD balance
+ * can have just crossed the limit. Renders nothing when under it.
+ */
+function CashPausedNotice() {
+  const [earnings, setEarnings] = useState<RiderEarningsDto | null>(null);
+
+  useEffect(() => {
+    dispatchApi.getEarnings().then(setEarnings).catch(() => {}); // purely informational — never worth surfacing an error over
+  }, []);
+
+  if (!earnings || earnings.cashFloatLimitMinor == null || earnings.cashBalanceMinor <= earnings.cashFloatLimitMinor) return null;
+
+  return (
+    <div className="w-full max-w-sm rounded-xl border border-danger/30 bg-danger/5 p-3 text-left">
+      <p className="text-sm font-semibold text-danger">Cash-on-delivery jobs are paused</p>
+      <p className="mt-0.5 text-xs text-ink">
+        You owe {formatNaira(minor(earnings.cashBalanceMinor))}, over your {formatNaira(minor(earnings.cashFloatLimitMinor))} limit.
+        Hand the cash back to CloseBuy — prepaid jobs still come through.
+      </p>
+      <Link href="/earnings" className="mt-1 inline-block text-xs font-medium text-primary underline">
+        See your balance
+      </Link>
     </div>
   );
 }

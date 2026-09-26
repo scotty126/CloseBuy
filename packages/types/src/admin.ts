@@ -186,7 +186,34 @@ export interface AdminRiderDto {
   vehicleType: string;
   status: RiderStatus;
   onDuty: boolean;
+  cashBalanceMinor: number; // US-R-08 — cash this rider still owes the platform
   createdAt: string;
+}
+
+// ── Rider cash remittance (US-R-08) ─────────────────────────────────────
+
+// "A remittance is recorded by admin and immediately reduces the balance."
+// Amount is required and positive; the service additionally refuses one
+// larger than the rider's current balance (a typo'd extra zero would
+// otherwise silently drive it negative).
+export const recordRemittanceSchema = z.object({
+  amountMinor: z.number().int().positive(),
+  note: z.string().max(300).optional(),
+});
+export type RecordRemittanceInput = z.infer<typeof recordRemittanceSchema>;
+
+export interface AdminRemittanceDto {
+  id: string;
+  riderId: string;
+  amountMinor: number;
+  recordedBy: string;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface RecordRemittanceResult {
+  rider: AdminRiderDto; // with the already-reduced balance
+  remittance: AdminRemittanceDto;
 }
 
 // A suspension response includes every non-terminal order this actor is
@@ -219,6 +246,7 @@ export const configUpdateSchema = z
     flatDeliveryFeeMinor: z.number().int().nonnegative().optional(),
     foundingVendorProgramActive: z.boolean().optional(),
     foundingVendorProgramWaiverMonths: z.number().int().positive().optional(),
+    riderCashFloatLimitMinor: z.number().int().positive().optional(), // US-R-08
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "At least one field is required" });
 export type ConfigUpdateInput = z.infer<typeof configUpdateSchema>;
@@ -233,6 +261,7 @@ export interface AdminConfigDto {
   flatDeliveryFeeMinor: number;
   foundingVendorProgramActive: boolean;
   foundingVendorProgramWaiverMonths: number;
+  riderCashFloatLimitMinor: number; // US-R-08 — falls back to a default until an admin sets one
   categories: CategoryDto[];
 }
 

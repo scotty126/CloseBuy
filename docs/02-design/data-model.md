@@ -78,7 +78,9 @@ One-to-one with `User`, role-specific fields.
 
 **VendorProfile**: business_name, category_id, description, logo_url, pickup_address (embedded: lat, lng, landmark, phone — per brief §3.4), bank_account_ref, status (enum: pending, approved, suspended, rejected), is_open (bool), supports_pickup (bool — brief §3.1a, independent of is_open), opening_hours, reliability_score (decimal — an internal ops metric, only ever decremented on the vendor's own auto-reject/reject; **never customer-facing**, not to be confused with the real customer rating average/count computed from `Rating` at read time, US-C-10), **founding_vendor_commission_waived_until (timestamp, nullable — brief §3.2a; set to approved_at + 3 months on approval during the launch promotion window, null once expired or if the vendor joined outside it)**, created_at.
 
-**RiderProfile**: full_name, vehicle_type, id_document_url, bank_account_ref, status (pending, approved, suspended, rejected), on_duty (bool), cash_balance_minor (int — brief R-03/US-R-08), created_at.
+**RiderProfile**: full_name, vehicle_type, id_document_url, bank_account_ref, status (pending, approved, suspended, rejected), on_duty (bool), cash_balance_minor (int — brief R-03/US-R-08; a denormalized counter, incremented when a COD delivery is confirmed and decremented only by an admin-recorded `RiderCashRemittance`), created_at.
+
+**RiderCashRemittance** — rider_id, amount_minor, recorded_by (admin user id), note, created_at. US-R-08. Append-only by DB grant (`APPEND_ONLY.sql`). Its own table rather than `LedgerEntry` rows because `ledger_entries.order_id` is NOT NULL and a remittance belongs to no order — the same reason `Payout` is separate. Reconciliation (US-A-05) must therefore treat the ledger's `rider_cash_float` account *and* this table together: the ledger only ever sees the debit side (cash collected).
 
 ### Address
 Customer-saved delivery addresses. Embedded pin, not a postal string (brief §3.4).

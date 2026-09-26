@@ -17,6 +17,7 @@ import {
   InvalidCollectionCodeError,
   InvalidDeliveryCodeError,
   CashAmountMismatchError,
+  CashFloatLimitError,
 } from "./service.js";
 
 /**
@@ -87,6 +88,9 @@ export async function dispatchRoutes(app: FastifyInstance) {
       const order = await dispatch.claimJob(req.authUser!.sub, id);
       return reply.send({ order });
     } catch (err) {
+      if (err instanceof CashFloatLimitError) {
+        return reply.code(409).send({ error: { code: "CASH_FLOAT_LIMIT", message: err.message } });
+      }
       if (err instanceof JobUnavailableError) {
         return reply.code(409).send({ error: { code: "JOB_UNAVAILABLE", message: err.message } });
       }
@@ -162,5 +166,13 @@ export async function dispatchRoutes(app: FastifyInstance) {
 
   app.get("/riders/me/earnings", { preHandler: requireAuth(["rider"]) }, async (req, reply) => {
     return reply.send(await dispatch.getEarnings(req.authUser!.sub));
+  });
+
+  // US-R-08 — read-only for the rider. Recording a remittance is an admin
+  // action (POST /admin/riders/:id/remittances, admin/remittances.ts): the
+  // story says an admin records it, and a rider who could log their own
+  // handback would just be editing their own debt.
+  app.get("/riders/me/remittances", { preHandler: requireAuth(["rider"]) }, async (req, reply) => {
+    return reply.send({ remittances: await dispatch.listRemittances(req.authUser!.sub) });
   });
 }

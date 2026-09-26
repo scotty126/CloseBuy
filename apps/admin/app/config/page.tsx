@@ -22,6 +22,7 @@ export default function ConfigPage() {
   const [commissionRateDelivery, setCommissionRateDelivery] = useState("");
   const [vendorAcceptWindowMinutes, setVendorAcceptWindowMinutes] = useState("");
   const [flatDeliveryFeeNaira, setFlatDeliveryFeeNaira] = useState("");
+  const [riderCashFloatLimitNaira, setRiderCashFloatLimitNaira] = useState("");
   const [foundingVendorProgramActive, setFoundingVendorProgramActive] = useState(false);
   const [foundingVendorProgramWaiverMonths, setFoundingVendorProgramWaiverMonths] = useState("");
 
@@ -44,6 +45,7 @@ export default function ConfigPage() {
     setCommissionRateDelivery(String(data.commissionRateDelivery));
     setVendorAcceptWindowMinutes(String(data.vendorAcceptWindowMinutes));
     setFlatDeliveryFeeNaira((data.flatDeliveryFeeMinor / 100).toFixed(2));
+    setRiderCashFloatLimitNaira((data.riderCashFloatLimitMinor / 100).toFixed(2));
     setFoundingVendorProgramActive(data.foundingVendorProgramActive);
     setFoundingVendorProgramWaiverMonths(String(data.foundingVendorProgramWaiverMonths));
   }
@@ -63,11 +65,13 @@ export default function ConfigPage() {
   async function handleSaveConfig() {
     if (!config) return;
     const flatDeliveryFeeMinor = Math.round(parseFloat(flatDeliveryFeeNaira) * 100);
+    const riderCashFloatLimitMinor = Math.round(parseFloat(riderCashFloatLimitNaira) * 100);
     const next = {
       commissionRatePickup: Number(commissionRatePickup),
       commissionRateDelivery: Number(commissionRateDelivery),
       vendorAcceptWindowMinutes: Number(vendorAcceptWindowMinutes),
       flatDeliveryFeeMinor,
+      riderCashFloatLimitMinor,
       foundingVendorProgramActive,
       foundingVendorProgramWaiverMonths: Number(foundingVendorProgramWaiverMonths),
     };
@@ -79,6 +83,7 @@ export default function ConfigPage() {
     if (next.commissionRateDelivery !== config.commissionRateDelivery) body.commissionRateDelivery = next.commissionRateDelivery;
     if (next.vendorAcceptWindowMinutes !== config.vendorAcceptWindowMinutes) body.vendorAcceptWindowMinutes = next.vendorAcceptWindowMinutes;
     if (next.flatDeliveryFeeMinor !== config.flatDeliveryFeeMinor) body.flatDeliveryFeeMinor = next.flatDeliveryFeeMinor;
+    if (next.riderCashFloatLimitMinor !== config.riderCashFloatLimitMinor) body.riderCashFloatLimitMinor = next.riderCashFloatLimitMinor;
     if (next.foundingVendorProgramActive !== config.foundingVendorProgramActive) body.foundingVendorProgramActive = next.foundingVendorProgramActive;
     if (next.foundingVendorProgramWaiverMonths !== config.foundingVendorProgramWaiverMonths) body.foundingVendorProgramWaiverMonths = next.foundingVendorProgramWaiverMonths;
 
@@ -195,6 +200,14 @@ export default function ConfigPage() {
             step="0.01"
             value={flatDeliveryFeeNaira}
             onChange={(e) => setFlatDeliveryFeeNaira(e.target.value)}
+          />
+          <Input
+            label="Rider cash limit (₦) — over this, cash-on-delivery jobs pause"
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={riderCashFloatLimitNaira}
+            onChange={(e) => setRiderCashFloatLimitNaira(e.target.value)}
           />
           <Input
             label="Vendor accept window (minutes)"

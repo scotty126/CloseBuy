@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, Card, Input, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
-import type { AdminRiderDto, AdminOrderSummaryDto, RiderStatus } from "@closebuy/types";
+import { formatNaira, minor } from "@closebuy/types";
+import type { AdminRiderDto, AdminOrderSummaryDto, AdminRemittanceDto, RiderStatus } from "@closebuy/types";
 import { adminApi } from "@/lib/api";
 
 const statusStyle: Record<RiderStatus, string> = {
@@ -128,6 +129,13 @@ export default function RidersPage() {
                 </div>
               )}
 
+              {(rider.status === "approved" || rider.status === "suspended") && (
+                <RemittancePanel
+                  rider={rider}
+                  onRiderUpdated={(updated) => setRiders((prev) => prev?.map((r) => (r.id === updated.id ? updated : r)) ?? prev)}
+                />
+              )}
+
               {actingKey === rider.id ? (
                 <div className="flex flex-col gap-2 border-t border-gray-200 pt-3">
                   <Input
@@ -164,6 +172,123 @@ export default function RidersPage() {
             </Card>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * US-R-08 — "a remittance is recorded by admin and immediately reduces the
+ * balance." Own state so it doesn't tangle with the suspend flow above. The
+ * confirm button shows the amount as it was actually parsed, so a stray
+ * extra zero is visible before it's recorded — and the API refuses one
+ * larger than the outstanding balance regardless.
+ */
+function RemittancePanel({ rider, onRiderUpdated }: { rider: AdminRiderDto; onRiderUpdated: (rider: AdminRiderDto) => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [amountNaira, setAmountNaira] = useState("");
+  const [note, setNote] = useState("");
+  const [history, setHistory] = useState<AdminRemittanceDto[] | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const owes = rider.cashBalanceMinor > 0;
+  const parsedMinor = Math.round(parseFloat(amountNaira) * 100);
+  const validAmount = Number.isFinite(parsedMinor) && parsedMinor > 0;
+
+  async function handleOpen() {
+    setIsOpen(true);
+    setError(null);
+    try {
+      const res = await adminApi.listRemittances(rider.id);
+      setHistory(res.remittances);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Couldn't load this rider's remittances.");
+    }
+  }
+
+  async function handleSubmit() {
+    if (!validAmount) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const res = await adminApi.recordRemittance(rider.id, { amountMinor: parsedMinor, note: note.trim() || undefined });
+      onRiderUpdated(res.rider);
+      setHistory((prev) => [res.remittance, ...(prev ?? [])]);
+      setAmountNaira("");
+      setNote("");
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "That remittance didn't go through.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-gray-200 p-3 text-sm">
+      <div className="flex items-center justify-between">
+        <p className="text-ink">
+          Cash owed to the platform:{" "}
+          <span className={`font-semibold ${owes ? "text-danger" : "text-success"}`}>{formatNaira(minor(rider.cashBalanceMinor))}</span>
+        </p>
+        {!isOpen && (
+          <Button type="button" variant="secondary" onClick={handleOpen}>
+            {owes ? "Record remittance" : "History"}
+          </Button>
+        )}
+      </div>
+
+      {isOpen && (
+        <div className="flex flex-col gap-3 border-t border-gray-200 pt-3">
+          {error && <p className="text-sm text-danger">{error}</p>}
+
+          {owes && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Input
+                    label="Amount handed back (₦)"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={amountNaira}
+                    onChange={(e) => setAmountNaira(e.target.value)}
+                  />
+                </div>
+                <Button type="button" variant="secondary" onClick={() => setAmountNaira((rider.cashBalanceMinor / 100).toFixed(2))}>
+                  Full balance
+                </Button>
+              </div>
+              <Input label="Note (optional — who took it, how)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} />
+              <Button type="button" disabled={isSubmitting || !validAmount} onClick={handleSubmit} className="self-start">
+                {isSubmitting ? "Recording…" : validAmount ? `Record ${formatNaira(minor(parsedMinor))}` : "Record remittance"}
+              </Button>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1">
+            <p className="text-xs font-medium text-muted">Recorded so far</p>
+            {history === null ? (
+              <p className="text-xs text-muted">Loading…</p>
+            ) : history.length === 0 ? (
+              <p className="text-xs text-muted">No remittances recorded for this rider.</p>
+            ) : (
+              history.map((r) => (
+                <div key={r.id} className="flex justify-between gap-3 text-xs">
+                  <span className="text-muted">
+                    {new Date(r.createdAt).toLocaleString()}
+                    {r.note ? ` · ${r.note}` : ""}
+                  </span>
+                  <span className="shrink-0 font-medium text-ink">{formatNaira(minor(r.amountMinor))}</span>
+                </div>
+              ))
+            )}
+          </div>
+
+          <Button type="button" variant="secondary" onClick={() => setIsOpen(false)} className="self-start">
+            Close
+          </Button>
         </div>
       )}
     </div>

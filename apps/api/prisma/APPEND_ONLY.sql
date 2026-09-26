@@ -14,6 +14,11 @@
 REVOKE UPDATE, DELETE ON order_state_transitions FROM closebuy_app;
 REVOKE UPDATE, DELETE ON ledger_entries FROM closebuy_app;
 REVOKE UPDATE, DELETE ON audit_log FROM closebuy_app;
+-- US-R-08 — a recorded cash remittance is a financial fact, corrected (if
+-- ever) by a compensating entry, never edited. Added after the table itself
+-- (migration 20260926140000_rider_cash_remittances), so this line has to be
+-- re-run by hand against any database that already existed before it.
+REVOKE UPDATE, DELETE ON rider_cash_remittances FROM closebuy_app;
 
 -- Config rows are also never overwritten (US-A-02) — new version, not an
 -- edit of an old one. UPDATE is revoked; DELETE is allowed only for the

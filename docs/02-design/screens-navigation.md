@@ -71,7 +71,7 @@ On-duty toggle (US-R-02) front and centre. Off duty: nothing else on screen. On 
 Single vendor, single pickup (brief §3.1 — no multi-stop checklist; that only returns if the parked hub model ever does, R-08). Pickup step: vendor pin/landmark/phone, tap-to-navigate (external maps app), code entry to confirm collection (US-R-04). Delivery step: customer pin/landmark/phone, tap-to-navigate, proof of delivery (photo/name/code), cash-collection amount shown and confirmed if COD (US-R-05).
 
 ### 3.3 Earnings
-Per-delivery list, cleared vs. pending, **cash balance owed to the platform** shown prominently with a remit action once it approaches the float limit (US-R-07/US-R-08).
+Per-delivery list, cleared vs. pending, **cash balance owed to the platform** shown prominently — always, including "all clear" at ₦0.00 — with the configured float limit beside it and, once over it, a plain-language notice that cash-on-delivery jobs are paused (US-R-07/US-R-08). Below: the rider's own remittance history. **There is deliberately no "remit" button** — an admin records it (US-R-08), and the balance drops here when they do. The same paused notice appears on the on-duty waiting screen (§3.1), since a rider over the limit would otherwise just see fewer jobs with no explanation.
 
 ## 4. Superadmin dashboard
 
@@ -82,7 +82,7 @@ Sidebar, desktop-first — this one genuinely is an internal tool, used only by 
 Vendor and rider vetting queue, documents visible inline, approve/reject with mandatory reason on rejection (US-A-01). Approving a vendor during the launch window shows the founding-vendor waiver being applied, not a silent side effect.
 
 ### 4.1a Vendors & riders
-Not in the original sketch — added because US-A-06 needs somewhere to suspend *from*, and Applications (§4.1) is deliberately pending-only. Every vendor/rider, any status; suspend requires a reason and immediately surfaces that actor's in-flight (non-terminal) orders so the operator handles them deliberately rather than losing track of them — orders are never auto-cancelled by a suspension. Unsuspend reverses it (US-A-06's "fully reversible").
+Not in the original sketch — added because US-A-06 needs somewhere to suspend *from*, and Applications (§4.1) is deliberately pending-only. Every vendor/rider, any status; suspend requires a reason and immediately surfaces that actor's in-flight (non-terminal) orders so the operator handles them deliberately rather than losing track of them — orders are never auto-cancelled by a suspension. Unsuspend reverses it (US-A-06's "fully reversible"). Each approved/suspended rider's card also shows the **cash they owe the platform** with a "Record remittance" action (US-R-08): amount (with a "full balance" shortcut, and the confirm button shows the amount as parsed so a stray zero is visible), optional note, and that rider's recorded history below it. An amount larger than the outstanding balance is refused.
 
 ### 4.2 Orders
 Full list, filterable by state/vendor/rider/date/fulfilment type, drill into any order's complete append-only transition history (US-A-03).

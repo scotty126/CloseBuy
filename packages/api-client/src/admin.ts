@@ -14,6 +14,9 @@ import type {
   AdminRiderDto,
   SuspendVendorResult,
   SuspendRiderResult,
+  RecordRemittanceInput,
+  RecordRemittanceResult,
+  AdminRemittanceDto,
   ConfigUpdateInput,
   AdminConfigDto,
   CategoryCreateInput,
@@ -119,6 +122,17 @@ export function createAdminApi(client: ApiClient) {
         method: "POST",
         body: JSON.stringify(input),
       }),
+
+    // ── Rider cash remittance (US-R-08) ─────────────────────────────────
+
+    recordRemittance: (riderId: string, input: RecordRemittanceInput) =>
+      client.request<RecordRemittanceResult>(`/admin/riders/${riderId}/remittances`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    listRemittances: (riderId: string) =>
+      client.request<{ remittances: AdminRemittanceDto[] }>(`/admin/riders/${riderId}/remittances`),
 
     // ── Config writes (US-A-02) ─────────────────────────────────────────
 

@@ -7,6 +7,7 @@ import {
   adminDisputeFilterSchema,
   disputeResolveSchema,
   adminActorActionSchema,
+  recordRemittanceSchema,
   configUpdateSchema,
   categoryCreateSchema,
   categoryUpdateSchema,
@@ -39,12 +40,17 @@ import {
   InvalidActorStateError,
 } from "./actors.js";
 import { createAdminConfigService, CategoryNotFoundError } from "./config.js";
+import {
+  createAdminRemittanceService,
+  RiderNotFoundError as RemittanceRiderNotFoundError,
+  RemittanceExceedsBalanceError,
+} from "./remittances.js";
 
 /**
  * Admin — vendor/rider application vetting (US-A-01, service.ts), order
  * oversight (US-A-03, orders.ts), dispute resolution (US-A-04,
  * disputes.ts), config writes (US-A-02, config.ts), actor suspension
- * (US-A-06, actors.ts) and audit-log search (US-A-08, service.ts). Payouts
+ * (US-A-06, actors.ts), rider cash remittance (US-R-08, remittances.ts) and audit-log search (US-A-08, service.ts). Payouts
  * live in ../payouts/routes.js instead (their own vendor-request/
  * admin-approve flow). Still real, still not built: reconciliation,
  * metrics — M-priority (M3), not forgotten.
@@ -62,6 +68,7 @@ export async function adminRoutes(app: FastifyInstance) {
   const adminDisputes = createAdminDisputeService({ prisma: app.prisma, monnify, notifications: app.notifications });
   const adminActors = createAdminActorService({ prisma: app.prisma, notifications: app.notifications });
   const adminConfig = createAdminConfigService({ prisma: app.prisma });
+  const adminRemittances = createAdminRemittanceService({ prisma: app.prisma, notifications: app.notifications });
 
   app.get("/admin/applications", { preHandler: requireAuth(["admin"]) }, async (_req, reply) => {
     return reply.send({ applications: await admin.listPendingApplications() });
@@ -294,6 +301,37 @@ export async function adminRoutes(app: FastifyInstance) {
       }
       if (err instanceof InvalidActorStateError) {
         return reply.code(409).send({ error: { code: "INVALID_ACTOR_STATE", message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // ── Rider cash remittance (US-R-08) ─────────────────────────────────
+
+  app.post("/admin/riders/:id/remittances", { preHandler: requireAuth(["admin"]) }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = recordRemittanceSchema.parse(req.body);
+    try {
+      const result = await adminRemittances.recordRemittance(req.authUser!.sub, id, body);
+      return reply.code(201).send(result);
+    } catch (err) {
+      if (err instanceof RemittanceRiderNotFoundError) {
+        return reply.code(404).send({ error: { code: "RIDER_NOT_FOUND", message: err.message } });
+      }
+      if (err instanceof RemittanceExceedsBalanceError) {
+        return reply.code(422).send({ error: { code: "REMITTANCE_EXCEEDS_BALANCE", message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  app.get("/admin/riders/:id/remittances", { preHandler: requireAuth(["admin"]) }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    try {
+      return reply.send({ remittances: await adminRemittances.listRemittances(id) });
+    } catch (err) {
+      if (err instanceof RemittanceRiderNotFoundError) {
+        return reply.code(404).send({ error: { code: "RIDER_NOT_FOUND", message: err.message } });
       }
       throw err;
     }

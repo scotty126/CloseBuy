@@ -8,6 +8,7 @@ import type {
   RiderProfileDto,
   RiderJobDto,
   RiderEarningsDto,
+  RiderRemittanceDto,
 } from "@closebuy/types";
 
 export function createDispatchApi(client: ApiClient) {
@@ -51,5 +52,8 @@ export function createDispatchApi(client: ApiClient) {
       }),
 
     getEarnings: () => client.request<RiderEarningsDto>("/riders/me/earnings"),
+
+    /** US-R-08 — read-only: an admin records a remittance (adminApi.recordRemittance), a rider never logs their own. */
+    listRemittances: () => client.request<{ remittances: RiderRemittanceDto[] }>("/riders/me/remittances"),
   };
 }

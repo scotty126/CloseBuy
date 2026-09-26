@@ -99,6 +99,19 @@ export interface RiderJobDto {
 export interface RiderEarningsDto {
   clearedMinor: number;
   pendingMinor: number;
-  cashBalanceMinor: number;
+  cashBalanceMinor: number; // owed back to the platform, US-R-08
+  // Past this, cash-on-delivery jobs stop being offered/claimable until an
+  // admin records a remittance. The screen compares the two itself.
+  cashFloatLimitMinor: number;
   deliveries: Array<{ orderId: string; amountMinor: number; completedAt: string }>;
+}
+
+// GET /riders/me/remittances (US-R-08 — "the rider can see a history of
+// remittances"). Deliberately no `recordedBy` — the admin's user id is none
+// of a rider's business.
+export interface RiderRemittanceDto {
+  id: string;
+  amountMinor: number;
+  note: string | null;
+  createdAt: string;
 }

@@ -52,4 +52,24 @@ export const ConfigKeys = {
   async foundingVendorProgramWaiverMonths(prisma: PrismaClient): Promise<number> {
     return getConfigValue<number>(prisma, "founding_vendor_program_waiver_months");
   },
+  /**
+   * US-R-08 — once a rider's uncleared cash balance exceeds this, cash-on-
+   * delivery jobs stop being offered to (or claimable by) them until an
+   * admin records a remittance. Unlike every key above this one falls back
+   * to a default when no row exists, instead of throwing: it was added
+   * after the seed ran, and a rider-facing endpoint 500ing for every rider
+   * until someone remembers to seed production would be a far worse failure
+   * than a placeholder limit. Still admin-editable (US-A-02) like the rest.
+   */
+  async riderCashFloatLimitMinor(prisma: PrismaClient): Promise<number> {
+    const row = await prisma.config.findFirst({
+      where: { key: RIDER_CASH_FLOAT_LIMIT_KEY, effectiveAt: { lte: new Date() } },
+      orderBy: { version: "desc" },
+    });
+    return row ? (row.value as number) : DEFAULT_RIDER_CASH_FLOAT_LIMIT_MINOR;
+  },
 };
+
+export const RIDER_CASH_FLOAT_LIMIT_KEY = "rider_cash_float_limit_minor";
+/** ₦100,000 — a placeholder, not a researched figure (same status as flat_delivery_fee_minor above): roughly ten typical grocery orders' worth of cash. */
+export const DEFAULT_RIDER_CASH_FLOAT_LIMIT_MINOR = 10_000_000;

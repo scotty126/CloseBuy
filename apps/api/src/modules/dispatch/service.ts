@@ -48,6 +48,12 @@ export class CashAmountMismatchError extends Error {
     super(`Cash collected must match the order total exactly (₦${(expectedMinor / 100).toFixed(2)}).`);
   }
 }
+/** US-R-08 — distinct from JobUnavailableError so a rider isn't told "someone else took it" when the real reason is their own cash balance. */
+export class CashFloatLimitError extends Error {
+  constructor() {
+    super("You're over your cash limit — hand your collected cash back to CloseBuy before taking more cash-on-delivery jobs.");
+  }
+}
 
 async function writeTransition(
   prisma: PrismaClient,
@@ -94,6 +100,11 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
     return omitFields(order, ["collectionCode", "deliveryCode"]);
   }
 
+  /** US-R-08 — "exceeding a configurable float limit stops further cash-on-delivery offers": strictly greater than, the limit itself is still allowed. */
+  async function isOverCashFloatLimit(cashBalanceMinor: number): Promise<boolean> {
+    return cashBalanceMinor > (await ConfigKeys.riderCashFloatLimitMinor(prisma));
+  }
+
   return {
     /** US-R-01 */
     async applyToRide(userId: string, input: RiderApplicationInput) {
@@ -131,8 +142,16 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
       const rider = await getOwnRider(userId);
       if (rider.status !== "approved" || !rider.onDuty) return [];
 
+      // US-R-08 — over the float limit: cash-on-delivery jobs simply aren't
+      // offered until an admin records a remittance. Prepaid ones still are.
+      const overLimit = await isOverCashFloatLimit(rider.cashBalanceMinor);
       const orders = await prisma.order.findMany({
-        where: { status: "READY_FOR_PICKUP", fulfilmentType: "delivery", riderId: null },
+        where: {
+          status: "READY_FOR_PICKUP",
+          fulfilmentType: "delivery",
+          riderId: null,
+          ...(overLimit ? { paymentMethod: { not: "cash_on_delivery" as const } } : {}),
+        },
         include: { vendor: true },
         orderBy: { updatedAt: "asc" },
       });
@@ -144,11 +163,33 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
       const rider = await getOwnRider(userId);
       if (rider.status !== "approved" || !rider.onDuty) throw new JobUnavailableError("You need to be on duty to accept jobs.");
 
+      // US-R-08 — enforced here too, not just by hiding COD jobs in
+      // listOpenJobs: the offer could have been listed before the rider
+      // crossed the limit, and a client can call this endpoint directly.
+      // Folded into the atomic claim's own filter so there's no read-then-
+      // write gap to race through.
+      const overLimit = await isOverCashFloatLimit(rider.cashBalanceMinor);
       const { count } = await prisma.order.updateMany({
-        where: { id: orderId, riderId: null, status: "READY_FOR_PICKUP", fulfilmentType: "delivery" },
+        where: {
+          id: orderId,
+          riderId: null,
+          status: "READY_FOR_PICKUP",
+          fulfilmentType: "delivery",
+          ...(overLimit ? { paymentMethod: { not: "cash_on_delivery" as const } } : {}),
+        },
         data: { riderId: rider.id, status: "RIDER_ASSIGNED" },
       });
-      if (count === 0) throw new JobUnavailableError();
+      if (count === 0) {
+        if (overLimit) {
+          // Only blame the limit if that's really why — otherwise it's the
+          // ordinary "someone else got there first".
+          const order = await prisma.order.findUnique({ where: { id: orderId } });
+          if (order && order.paymentMethod === "cash_on_delivery" && order.riderId === null && order.status === "READY_FOR_PICKUP") {
+            throw new CashFloatLimitError();
+          }
+        }
+        throw new JobUnavailableError();
+      }
 
       await writeTransition(prisma, orderId, "READY_FOR_PICKUP", "RIDER_ASSIGNED", userId);
       const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { vendor: true } });
@@ -253,9 +294,21 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
       return {
         clearedMinor: cleared.reduce((s, o) => s + o.deliveryFeeMinor, 0),
         pendingMinor: pending.reduce((s, o) => s + o.deliveryFeeMinor, 0),
-        cashBalanceMinor: rider.cashBalanceMinor, // owed back to the platform (US-R-08) — remittance flow itself isn't built yet
+        cashBalanceMinor: rider.cashBalanceMinor, // owed back to the platform (US-R-08) — reduced when an admin records a remittance
+        cashFloatLimitMinor: await ConfigKeys.riderCashFloatLimitMinor(prisma),
         deliveries: cleared.map((o) => ({ orderId: o.id, amountMinor: o.deliveryFeeMinor, completedAt: o.updatedAt })),
       };
+    },
+
+    /** US-R-08 — "the rider can see a history of remittances." Newest first; `recordedBy` (an admin's user id) is deliberately not selected. */
+    async listRemittances(userId: string) {
+      const rider = await getOwnRider(userId);
+      return prisma.riderCashRemittance.findMany({
+        where: { riderId: rider.id },
+        select: { id: true, amountMinor: true, note: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      });
     },
   };
 

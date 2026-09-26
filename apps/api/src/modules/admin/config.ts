@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { ConfigUpdateInput, CategoryCreateInput, CategoryUpdateInput } from "@closebuy/types";
+import { RIDER_CASH_FLOAT_LIMIT_KEY, DEFAULT_RIDER_CASH_FLOAT_LIMIT_MINOR } from "../../lib/config.js";
 
 /**
  * US-A-02 — config writes. Own module, same precedent as ./orders.js,
@@ -30,6 +31,7 @@ const CONFIG_KEYS = {
   flatDeliveryFeeMinor: "flat_delivery_fee_minor",
   foundingVendorProgramActive: "founding_vendor_program_active",
   foundingVendorProgramWaiverMonths: "founding_vendor_program_waiver_months",
+  riderCashFloatLimitMinor: RIDER_CASH_FLOAT_LIMIT_KEY, // US-R-08
 } as const;
 
 export function createAdminConfigService({ prisma }: AdminConfigServiceDeps) {
@@ -69,6 +71,7 @@ export function createAdminConfigService({ prisma }: AdminConfigServiceDeps) {
       flatDeliveryFeeMinor,
       foundingVendorProgramActive,
       foundingVendorProgramWaiverMonths,
+      riderCashFloatLimitMinor,
       categories,
     ] = await Promise.all([
       readConfigValue<number>(CONFIG_KEYS.commissionRatePickup),
@@ -77,6 +80,7 @@ export function createAdminConfigService({ prisma }: AdminConfigServiceDeps) {
       readConfigValue<number>(CONFIG_KEYS.flatDeliveryFeeMinor),
       readConfigValue<boolean>(CONFIG_KEYS.foundingVendorProgramActive),
       readConfigValue<number>(CONFIG_KEYS.foundingVendorProgramWaiverMonths),
+      readConfigValue<number>(CONFIG_KEYS.riderCashFloatLimitMinor),
       prisma.category.findMany({ orderBy: { name: "asc" } }),
     ]);
 
@@ -87,6 +91,9 @@ export function createAdminConfigService({ prisma }: AdminConfigServiceDeps) {
       flatDeliveryFeeMinor,
       foundingVendorProgramActive,
       foundingVendorProgramWaiverMonths,
+      // Same fallback lib/config.ts's accessor applies — the screen should show
+      // the value that's actually being enforced, not a blank.
+      riderCashFloatLimitMinor: riderCashFloatLimitMinor ?? DEFAULT_RIDER_CASH_FLOAT_LIMIT_MINOR,
       categories,
     };
   }

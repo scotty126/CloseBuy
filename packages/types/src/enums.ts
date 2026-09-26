@@ -97,5 +97,6 @@ export const NOTIFICATION_TYPES = [
   "vendor_unsuspended", // → vendor, US-A-06 — reversal
   "rider_suspended", // → rider, US-A-06
   "rider_unsuspended", // → rider, US-A-06 — reversal
+  "rider_cash_remitted", // → rider, US-R-08 — an admin recorded a cash handback, balance already reduced
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

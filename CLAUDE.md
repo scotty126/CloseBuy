@@ -139,6 +139,44 @@ Built and live:
   the escrow-release timer (or an admin dispute resolution), and this
   session had no vendor/rider/admin credentials.
 
+- **Rider cash remittance** (US-R-08, 2026-09-26) — the "open question"
+  the design docs kept flagging (rider-initiated vs admin-recorded) was
+  answered by the story's own acceptance criteria: *"a remittance is
+  recorded by admin"*. So: admin records it
+  (`apps/api/src/modules/admin/remittances.ts`, `POST
+  /admin/riders/:id/remittances`, form + history on the admin `/riders`
+  cards), the rider only *reads* their history (`GET
+  /riders/me/remittances`, rider `/earnings`) — deliberately no rider
+  "remit" button, a rider logging their own handback would just be editing
+  their own debt. The decrement is a guarded atomic `updateMany`
+  (`cashBalanceMinor >= amount`) in one transaction with the row + audit
+  entry, so it can't go negative and a repeated entry can't double-count;
+  an amount over the outstanding balance is refused (422). **Float limit:**
+  once the balance is strictly over `rider_cash_float_limit_minor`
+  (admin-editable on `/config`), cash-on-delivery jobs vanish from the
+  offers list *and* are refused at claim time (409 `CASH_FLOAT_LIMIT`, own
+  error so a rider isn't told "someone else took it"), enforced inside the
+  atomic claim's own filter. Limit **falls back to a ₦100,000 placeholder
+  when no Config row exists** (`lib/config.ts`) — it was added after the
+  seed ran and a 500 on every rider endpoint until someone seeds
+  production would be far worse. Remittances live in their own table
+  (`rider_cash_remittances`), **not** as ledger entries:
+  `ledger_entries.orderId` is NOT NULL and a remittance belongs to no
+  order — same reason `Payout` is separate. **Consequence for US-A-05:**
+  reconciliation has to fold remittances in alongside the ledger's
+  `rider_cash_float` account (the ledger only ever sees the debit side,
+  cash collected), same as it will for payouts. Rider screens tolerate an
+  API that hasn't been redeployed yet (`!= null` on the new limit field,
+  history fetched independently) after the ratings crash taught that
+  lesson. Verified by 22 new unit tests (typecheck/build clean); **not
+  exercised live** — the live API doesn't have the endpoints or table yet,
+  and local dev can't reach the DB.
+- Known weak spot next to this (pre-existing, not fixed): `confirmDelivery`
+  posts the COD ledger entries and increments `cashBalanceMinor` as
+  separate statements, not one transaction — if the second fails after the
+  first, the ledger and the counter drift. Worth wrapping in
+  `$transaction` before real COD volume.
+
 **Fixed (2026-09-24) — a real, live bug, not hypothetical:** every
 body-less `POST` through the shared `packages/api-client/src/client.ts`
 (vendor accept-order, vendor mark-ready, rider accept/decline-offer,
@@ -158,20 +196,20 @@ In priority order, picking up from the admin buildout — every S/M-priority
 Admin story (US-A-01 through US-A-04, US-A-06, US-A-08) is now built;
 only reconciliation and metrics remain there. Self-service cancellation,
 inventory-race handling, order history/reorder, disputes and ratings are
-also done end to end (see above) — an earlier version of this section
-listed some of these as still to do, which was wrong; verify against the
-code, not this list, before assuming something isn't built:
+also done end to end (see above), as is rider cash remittance — an
+earlier version of this section listed some of these as still to do,
+which was wrong; verify against the code, not this list, before assuming
+something isn't built:
 1. **M3 hardening — what's genuinely left.** The customer-facing S-priority
    stories (US-C-08 through US-C-11) are all built now. Still to do, none
    of it audited closely yet — grep the actual frontend, don't trust that a
    backend endpoint existing means the feature does (that's exactly how
    disputes and ratings turned out to have working-looking backends and
    zero UI, plus real gaps under them):
-   - Rider cash remittance (US-R-08) — check whether the rider app has
-     any remit UI at all, and what `RiderProfile.cashBalanceMinor` is
-     actually wired to.
    - Platform metrics (US-A-07) and the reconciliation report (US-A-05's
-     other half) — both still admin placeholders.
+     other half) — both still admin placeholders. Reconciliation must
+     account for `rider_cash_remittances` and `Payout` rows alongside the
+     ledger — neither posts ledger entries (see the remittance note above).
    - US-R-06 (failed delivery) and the other rider/vendor S-stories —
      unchecked.
 2. **Desktop-responsive layout** for customer/vendor/rider — explicitly
@@ -180,10 +218,11 @@ code, not this list, before assuming something isn't built:
    Google OAuth can leave "Testing" mode.
 
 **Nothing from 2026-09-24 onward is pushed or deployed — everything below
-is committed locally only, and two migrations are unapplied.** Disputes
+is committed locally only, and three migrations are unapplied.** Disputes
 (US-A-04), suspend-an-actor (US-A-06), config writes (US-A-02), reorder,
-report-a-problem, ratings, and the `client.ts` bodyless-POST fix all sit
-in local commits on `main`. The two migrations, both hand-written and both
+report-a-problem, ratings, rider cash remittance, and the `client.ts`
+bodyless-POST fix all sit in local commits on `main`. The three
+migrations, all hand-written and all
 **not applied to Railway's Postgres** (see Conventions below for how; a
 production-deploy action was blocked by the auto-mode classifier
 mid-session, so applying them is a step the owner has to run or explicitly
@@ -196,6 +235,11 @@ allow):
   rating rows exist; that's very unlikely (no rating UI ever existed, so
   the table should be empty) but unchecked — if it errors, look for
   duplicates first rather than dropping the constraint.
+- `20260926140000_rider_cash_remittances` — new `rider_cash_remittances`
+  table (US-R-08). **Also re-run `prisma/APPEND_ONLY.sql` by hand** after
+  applying it — the new `REVOKE UPDATE, DELETE` line for that table is a
+  manual step (that file is never a Prisma migration), so until someone
+  runs it the table is *not* append-only at the DB level.
 
 **Deploy order matters for ratings.** The customer frontend now reads
 `VendorDto.ratingAverage`/`ratingCount` and the API no longer sends
@@ -208,8 +252,10 @@ card shows "New" (no crash, but the badge is wrong until the frontend
 catches up). Since it's one monorepo and one push, both platforms rebuild
 from the same commit; just expect a short window. Apply the migrations,
 then smoke-test disputes, suspension, config, cancel/accept/ready buttons
-(the `client.ts` fix) and the vendor-card badge against the live API
-before considering any of it done.
+(the `client.ts` fix), the vendor-card badge, and rider cash remittance
+(record one from admin `/riders`, watch the rider's `/earnings` balance drop
+and the history appear) against the live API before considering any of it
+done.
 
 ## Known issues / external blockers
 
