@@ -27,9 +27,9 @@ internal tool).
 | Database | Neon Postgres (hosted) |
 | Redis | Railway-hosted (migrated off Upstash — free-tier command limit) |
 | Customer | Netlify — `closebuy1.netlify.app` — **working** |
-| Vendor | Netlify — `closebuy-vendor.netlify.app` — **broken**, see Known issues |
-| Rider | Netlify — `closebuy-rider.netlify.app` — **broken**, see Known issues |
-| Admin | Netlify — `closebuy-admin.netlify.app` — **broken**, see Known issues |
+| Vendor | Netlify — `closebuy-vendor.netlify.app` — **working** (fixed 2026-09-26) |
+| Rider | Netlify — `closebuy-rider.netlify.app` — **working** (fixed 2026-09-26) |
+| Admin | Netlify — `closebuy-admin.netlify.app` — **working** (fixed 2026-09-26) |
 | Local dev | customer `:3000`, vendor `:3001`, rider `:3002`, admin `:3003` — all four point `NEXT_PUBLIC_API_URL` at the live Railway API (`.env.local` per app, gitignored) since local Neon access is blocked (see Known issues) |
 
 CI: GitHub Actions, postgres/redis service containers, `prisma migrate deploy`.
@@ -229,9 +229,10 @@ nothing ever checked the response shape between route and pages. Fix:
 shared `OtpRequestResponse` type in `packages/types/src/auth.ts` (the route
 is now typed against it, so a mismatch is a compile error), route returns
 `{ session }`, and `api-client`'s `requestOtp` also accepts the old top-level
-shape so it works against an API that hasn't been redeployed. **Delete that
-client shim once the fixed API is live.** Found because the owner tried to
-sign into the local admin app to approve test accounts.
+shape so it worked against an API that hadn't been redeployed — **that shim is
+deleted now** (the fixed API has been live since the 2026-09-26 deploy).
+Found because the owner tried to sign into the local admin app to approve
+test accounts.
 
 **Fixed (2026-09-24) — a real, live bug, not hypothetical:** every
 body-less `POST` through the shared `packages/api-client/src/client.ts`
@@ -274,45 +275,40 @@ something isn't built:
 3. **ToS / Privacy Policy** — needed before real public launch and before
    Google OAuth can leave "Testing" mode.
 
-**Nothing from 2026-09-24 onward is pushed or deployed — everything below
-is committed locally only, and three migrations are unapplied.** Disputes
-(US-A-04), suspend-an-actor (US-A-06), config writes (US-A-02), reorder,
-report-a-problem, ratings, rider cash remittance, and the `client.ts`
-bodyless-POST fix all sit in local commits on `main`. The three
-migrations, all hand-written and all
-**not applied to Railway's Postgres** (see Conventions below for how; a
-production-deploy action was blocked by the auto-mode classifier
-mid-session, so applying them is a step the owner has to run or explicitly
-allow):
+**Deployed 2026-09-26 (owner asked for it explicitly).** Everything from
+2026-09-24 onward is pushed to `main` and live: Railway rebuilt the API from
+the Dockerfile (verified by `ratingAverage` appearing in `GET /vendors`) and
+the customer site auto-rebuilt from the same commit. The three hand-written
+migrations were applied with
+`railway ssh -- sh -c "cd /app/apps/api && npx prisma migrate deploy"` —
+Railway does **not** run migrations on start, so every future schema change
+needs that step after the deploy, or the new code queries columns that don't
+exist:
 - `20260924120000_dispute_resolution_and_suspension` — adds
   `PaymentStatus.partially_refunded` and an index on `disputes.status`.
-  Disputes/suspend/config-writes need it.
 - `20260926090000_rating_unique_per_order_target` — a unique index on
-  `ratings(orderId, targetType)`. It would fail to apply if any duplicate
-  rating rows exist; that's very unlikely (no rating UI ever existed, so
-  the table should be empty) but unchecked — if it errors, look for
-  duplicates first rather than dropping the constraint.
+  `ratings(orderId, targetType)`. The duplicate check came back empty (0 rows)
+  before applying, as expected — no rating UI had ever existed.
 - `20260926140000_rider_cash_remittances` — new `rider_cash_remittances`
-  table (US-R-08). **Also re-run `prisma/APPEND_ONLY.sql` by hand** after
-  applying it — the new `REVOKE UPDATE, DELETE` line for that table is a
-  manual step (that file is never a Prisma migration), so until someone
-  runs it the table is *not* append-only at the DB level.
+  table (US-R-08). `prisma/APPEND_ONLY.sql`'s REVOKE line for it is **not**
+  applied and would achieve nothing anyway (the app is the table owner — see
+  the ledger note under Conventions).
 
-**Deploy order matters for ratings.** The customer frontend now reads
-`VendorDto.ratingAverage`/`ratingCount` and the API no longer sends
-`reliabilityScore` on public vendor endpoints. New frontend + old API
-degrades gracefully (`!= null` → "New", verified locally — that mismatch is
-what crashed the home page before the guard was added). New API + old
-frontend is the worse direction: the old `VendorCard` calls
-`Number(vendor.reliabilityScore)` on a field that's gone → `NaN` → every
-card shows "New" (no crash, but the badge is wrong until the frontend
-catches up). Since it's one monorepo and one push, both platforms rebuild
-from the same commit; just expect a short window. Apply the migrations,
-then smoke-test disputes, suspension, config, cancel/accept/ready buttons
-(the `client.ts` fix), the vendor-card badge, and rider cash remittance
-(record one from admin `/riders`, watch the rider's `/earnings` balance drop
-and the history appear) against the live API before considering any of it
-done.
+(An earlier session's `migrate deploy` was refused by the auto-mode
+classifier as a production deploy; it went through this time because the
+owner had asked for the deploy in so many words. Don't try it unprompted.)
+
+Verified after the deploy: the full e2e (39 checks) passes against the new
+API; the earnings endpoint returns the cash-limit field; the remittance
+history endpoint exists; the public vendor list carries the real rating
+average/count and no longer leaks `reliabilityScore`; tracking returns
+`ratings` and `dispute`; every new admin route answers 401 without a
+session; CORS preflight is allowed from all four Netlify origins and refused
+for an unknown one. **Not yet exercised live:** anything that needs an admin
+session — the cash-limit gate (lower the limit on admin `/config`, watch the
+COD job vanish and a direct claim get 409 `CASH_FLOAT_LIMIT`), recording a
+remittance from admin `/riders`, resolving a dispute, metrics against real
+rows. Those are the next things to walk through in a browser.
 
 ## Smoke-testing the live order loop
 
@@ -328,22 +324,24 @@ history and actors) checked at each step — ~39 assertions.
   rider through the real signup/apply flow. They land `pending` and **only
   an admin can approve them** (admins are never self-created) — do it on the
   admin app's Applications page. Then `... run`.
-- **Passed in full, twice, on 2026-09-26** against the live API as it stood
-  then (the *older*, undeployed-since-09-17 code) — i.e. the M1 loop is
-  genuinely sound. Not covered: anything in the UIs themselves (it drives
-  the API, not a browser), escrow release → `COMPLETED` (a 48h timer),
-  ratings, disputes, remittance, metrics (none deployed yet).
+- **Passed in full on 2026-09-26** against the live API both before and
+  after the deploy above (39 checks each time) — the M1 loop is genuinely
+  sound and the deploy didn't break it. Not covered: anything in the UIs
+  themselves (it drives the API, not a browser), escrow release →
+  `COMPLETED` (a 48h timer, or an admin rejecting a dispute), ratings,
+  disputes, admin-recorded remittance, the cash-limit gate, metrics — all of
+  which need an admin in the loop.
 - **Re-run it after every deploy** — it's the fastest way to prove a push
   didn't break the core loop. `E2E_API_URL` points it elsewhere.
 - **It writes real rows** to whatever it targets. Left behind in the live
   DB: `claude-e2e-vendor@example.com` / `claude-e2e-rider@example.com` (the
   vendor is named "E2E Test Vendor (delete me)", closed; the rider off duty,
-  and **owing ₦5,400 in uncollected cash** from two delivered orders — a
-  ready-made case for trying rider cash remittance once that's deployed),
-  two products, two orders sitting in `DELIVERED` (the escrow timer will
-  move them to `COMPLETED` on its own, crediting the test vendor). The old
-  API has no way to delete or suspend them — clean up by hand or via the
-  admin suspend screen once deployed. Their generated passwords live in the
+  and **owing ₦8,100 in uncollected cash** from three delivered orders — a
+  ready-made case for trying the cash-limit gate and remittance), two
+  products, three orders sitting in `DELIVERED` (the escrow timer will move
+  them to `COMPLETED` on its own, crediting the test vendor). Clean them up
+  with the admin suspend screen (`/vendors`, `/riders`) when done testing.
+  Their generated passwords live in the
   OS temp dir (`closebuy-e2e-state.json`), never in the repo.
 
 ## Known issues / external blockers
@@ -377,18 +375,21 @@ don't re-diagnose these from scratch, they're understood:
   `TERMII_SENDER_ID` isn't. Real SMS OTP blocked; worked around via
   `OTP_DEV_FALLBACK` (see the security note above — that workaround is
   also the hole) and the auto-signin allowlist.
-- **Netlify: vendor/rider/admin sites broken** (re-verified 2026-09-26 by
-  fetching them: `closebuy-vendor.netlify.app` serves the *Admin* app,
-  `closebuy-rider` and `closebuy-admin` return **404**; the customer site
-  is fine. Credits being available doesn't change that — it's dashboard
-  config, see below). `closebuy-vendor` has its
-  Package Directory pointed at `apps/admin` (copy-paste mistake, builds the
-  wrong app). `closebuy-rider`/`closebuy-admin` were never connected to the
-  repo at all — empty config, zero deploys ever. Fix is manual, in the
-  Netlify dashboard — **the API here silently refuses build-setting changes
-  for this account** (confirmed repeatedly), so don't try the API route
-  again, go straight to the dashboard. `closebuy1` (customer) works fine.
-  Also blocked short-term on exhausted Netlify build credits (resets daily).
+- **Netlify — fixed 2026-09-26, and the old diagnosis was wrong.**
+  `closebuy-vendor` was serving the *Admin* app (its site-level Package
+  Directory pointed at `apps/admin`, and it also carried a build-command
+  override filtering on admin), and `closebuy-rider`/`closebuy-admin` had never
+  been connected to the repo. All three are now linked with the right
+  `package_path` and build fine; `curl` of each `/login` returns its own
+  app (CloseBuy Vendor / Rider / Admin) with the live Railway API URL baked in
+  (`NEXT_PUBLIC_API_URL` is inlined at build time, so changing it needs a
+  rebuild). Earlier notes here said the Netlify API "silently refuses
+  build-setting changes for this account" — it doesn't: the Package Directory
+  is `build_settings.package_path` and is set through the **`repo` object** of
+  `updateSite` (`netlify api updateSite` via the Netlify CLI works). The earlier
+  failed attempts most likely wrote to the wrong place, though that wasn't
+  isolated. `closebuy1` (customer)
+  auto-deploys from `main`.
 - **Google Cloud Billing won't complete for the account owner** — error
   `OR_BACR2_59`, "we were unable to set up your account." This blocks
   `GOOGLE_MAPS_API_KEY`/`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (Maps Platform
@@ -457,10 +458,12 @@ don't re-diagnose these from scratch, they're understood:
   file but equally inert today. Corrections are always a new reversing
   entry, never an edit.
 - **Netlify monorepo config**: "Package Directory" (not "Base Directory")
-  set via the dashboard, with `netlify.toml` living inside that app's own
-  folder — this is the only combination that's worked. The Netlify API
-  does not reliably persist build-setting changes for this account; use
-  the dashboard.
+  with `netlify.toml` living inside that app's own folder
+  (`apps/<app>/netlify.toml`, correct build command + `@netlify/plugin-nextjs`)
+  — this is the combination that works. Set it in the dashboard, or through
+  the API's `repo` object (`build_settings.package_path`); see the Netlify
+  note under Known issues. Don't leave a site-level build-command override
+  in place — that's what made the vendor site build the admin app.
 - **Real content only** — no mocked vendors, no fake payment flows, no
   decorative UI for features without a real backend. When something can't
   be built for real yet (Monnify, Maps, Apple), it's left visibly absent
