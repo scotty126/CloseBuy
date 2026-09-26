@@ -8,6 +8,7 @@ import {
   disputeResolveSchema,
   adminActorActionSchema,
   recordRemittanceSchema,
+  adminMetricsQuerySchema,
   configUpdateSchema,
   categoryCreateSchema,
   categoryUpdateSchema,
@@ -40,6 +41,7 @@ import {
   InvalidActorStateError,
 } from "./actors.js";
 import { createAdminConfigService, CategoryNotFoundError } from "./config.js";
+import { createAdminMetricsService, InvalidMetricsRangeError } from "./metrics.js";
 import {
   createAdminRemittanceService,
   RiderNotFoundError as RemittanceRiderNotFoundError,
@@ -50,7 +52,7 @@ import {
  * Admin — vendor/rider application vetting (US-A-01, service.ts), order
  * oversight (US-A-03, orders.ts), dispute resolution (US-A-04,
  * disputes.ts), config writes (US-A-02, config.ts), actor suspension
- * (US-A-06, actors.ts), rider cash remittance (US-R-08, remittances.ts) and audit-log search (US-A-08, service.ts). Payouts
+ * (US-A-06, actors.ts), rider cash remittance (US-R-08, remittances.ts), platform metrics (US-A-07, metrics.ts) and audit-log search (US-A-08, service.ts). Payouts
  * live in ../payouts/routes.js instead (their own vendor-request/
  * admin-approve flow). Still real, still not built: reconciliation,
  * metrics — M-priority (M3), not forgotten.
@@ -68,6 +70,7 @@ export async function adminRoutes(app: FastifyInstance) {
   const adminDisputes = createAdminDisputeService({ prisma: app.prisma, monnify, notifications: app.notifications });
   const adminActors = createAdminActorService({ prisma: app.prisma, notifications: app.notifications });
   const adminConfig = createAdminConfigService({ prisma: app.prisma });
+  const adminMetrics = createAdminMetricsService({ prisma: app.prisma });
   const adminRemittances = createAdminRemittanceService({ prisma: app.prisma, notifications: app.notifications });
 
   app.get("/admin/applications", { preHandler: requireAuth(["admin"]) }, async (_req, reply) => {
@@ -363,6 +366,20 @@ export async function adminRoutes(app: FastifyInstance) {
     } catch (err) {
       if (err instanceof CategoryNotFoundError) {
         return reply.code(404).send({ error: { code: "CATEGORY_NOT_FOUND", message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  // ── Platform health (US-A-07) ───────────────────────────────────────
+
+  app.get("/admin/metrics", { preHandler: requireAuth(["admin"]) }, async (req, reply) => {
+    const query = adminMetricsQuerySchema.parse(req.query);
+    try {
+      return reply.send(await adminMetrics.getMetrics(query));
+    } catch (err) {
+      if (err instanceof InvalidMetricsRangeError) {
+        return reply.code(422).send({ error: { code: "INVALID_RANGE", message: err.message } });
       }
       throw err;
     }

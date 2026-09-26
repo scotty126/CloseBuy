@@ -69,9 +69,9 @@ Built and live:
   `apps/api/src/modules/admin/disputes.ts`), suspend-an-actor (US-A-06 —
   `apps/api/src/modules/admin/actors.ts` + admin `/vendors`/`/riders`
   screens, not in the original screens-navigation.md sketch), audit-log
-  search (US-A-08). Not yet: reconciliation (US-A-05's other half),
-  metrics (US-A-07) — both M-priority (M3), real placeholders exist in
-  `apps/admin/app/*`.
+  search (US-A-08), platform metrics (US-A-07, below). Not yet:
+  reconciliation (US-A-05's other half) — M-priority (M3), a real
+  placeholder still exists at `apps/admin/app/payouts`.
 - Customer UI restyled toward the DoorDash reference kit (structural/layout
   only — brand green/orange stays, deliberately not DoorDash's red).
 - Delivery-pin map on checkout (`@vis.gl/react-google-maps`) — additive,
@@ -177,6 +177,42 @@ Built and live:
   first, the ledger and the counter drift. Worth wrapping in
   `$transaction` before real COD volume.
 
+- **Platform metrics** (US-A-07, 2026-09-26) — `GET /admin/metrics?from&to`
+  (`apps/api/src/modules/admin/metrics.ts`) + the admin `/metrics` screen:
+  stat tiles (orders, gross value, completion rate, average delivery time,
+  failed, disputed, active vendors/riders) and two *separate* column charts
+  (orders/day, gross/day — different scales, never one dual-axis plot),
+  filterable by date range. **The definitions are the contract and are
+  restated on the screen** ("How these are counted"): everything is
+  cohorted by placement day in Africa/Lagos (UTC+1, fixed — Nigeria has no
+  DST); "placed" excludes abandoned `PENDING_PAYMENT` checkouts; completion
+  rate = fulfilled ÷ (fulfilled + cancelled/refunded + failed) so in-flight
+  orders don't drag it down; gross excludes cancelled/refunded but **does
+  not net out goodwill or partial-dispute refunds** (those deliberately
+  leave `Order.status` alone, so they can't be seen from here); average
+  delivery time is PAID→DELIVERED for delivery orders only with scheduled
+  ones excluded. `openDisputes` and the *approved* vendor/rider counts are
+  "right now", not range-scoped. The per-day series is built in
+  application code from one row per order, hence the 366-day range cap
+  (422 `INVALID_RANGE`); at that scale a `date_trunc` `GROUP BY` would be
+  the upgrade path, at the cost of being un-unit-testable against the
+  in-memory fakes. **No new migration, no new Config key.**
+  Chart notes for whoever touches it next: `ColumnChart.tsx` is hand-built
+  SVG (the admin app has no chart library) following the `dataviz` skill's
+  mark specs. The brand green (`#255748`) **fails that skill's
+  categorical-palette validator** on lightness band and chroma floor —
+  those checks guard telling hues apart from each other, moot for a single
+  series; it passes the contrast check against white, and the alternatives
+  (the status green, the action orange) are reserved. Y-axis ticks are
+  whole numbers only: rendering a quiet week showed a "1.5 orders" axis
+  that no type check or unit test would have caught — **there is no
+  browser tool in some sessions, but you can still look**: server-render
+  the component to static HTML with the CSS from `apps/admin/.next`, then
+  `msedge --headless --screenshot=…` and open the PNG. Verified that way
+  (charts) plus 17 API tests (the timezone bucket boundaries and each
+  definition); the full page against the live API is **not exercised**
+  — the endpoint isn't deployed and the screen needs an admin session.
+
 **Fixed (2026-09-24) — a real, live bug, not hypothetical:** every
 body-less `POST` through the shared `packages/api-client/src/client.ts`
 (vendor accept-order, vendor mark-ready, rider accept/decline-offer,
@@ -193,8 +229,8 @@ nothing silently, that's not fixed elsewhere — check this.**
 ## What's next
 
 In priority order, picking up from the admin buildout — every S/M-priority
-Admin story (US-A-01 through US-A-04, US-A-06, US-A-08) is now built;
-only reconciliation and metrics remain there. Self-service cancellation,
+Admin story (US-A-01 through US-A-04 and US-A-06 through US-A-08) is now built;
+only reconciliation remains there. Self-service cancellation,
 inventory-race handling, order history/reorder, disputes and ratings are
 also done end to end (see above), as is rider cash remittance — an
 earlier version of this section listed some of these as still to do,
@@ -206,10 +242,11 @@ something isn't built:
    backend endpoint existing means the feature does (that's exactly how
    disputes and ratings turned out to have working-looking backends and
    zero UI, plus real gaps under them):
-   - Platform metrics (US-A-07) and the reconciliation report (US-A-05's
-     other half) — both still admin placeholders. Reconciliation must
-     account for `rider_cash_remittances` and `Payout` rows alongside the
-     ledger — neither posts ledger entries (see the remittance note above).
+   - The reconciliation report (US-A-05's other half) — still an admin
+     placeholder, and the last unbuilt Admin story. It must account for
+     `rider_cash_remittances` and `Payout` rows alongside the ledger —
+     neither posts ledger entries (see the remittance note above) — and
+     for goodwill/partial-refund money that metrics' gross can't see.
    - US-R-06 (failed delivery) and the other rider/vendor S-stories —
      unchecked.
 2. **Desktop-responsive layout** for customer/vendor/rider — explicitly

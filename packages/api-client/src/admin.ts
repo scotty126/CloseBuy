@@ -15,6 +15,8 @@ import type {
   SuspendVendorResult,
   SuspendRiderResult,
   RecordRemittanceInput,
+  AdminMetricsQuery,
+  AdminMetricsDto,
   RecordRemittanceResult,
   AdminRemittanceDto,
   ConfigUpdateInput,
@@ -122,6 +124,11 @@ export function createAdminApi(client: ApiClient) {
         method: "POST",
         body: JSON.stringify(input),
       }),
+
+    // ── Platform health (US-A-07) ───────────────────────────────────────
+
+    getMetrics: (range: AdminMetricsQuery = {}) =>
+      client.request<AdminMetricsDto>(`/admin/metrics${toQueryString(range)}`),
 
     // ── Rider cash remittance (US-R-08) ─────────────────────────────────
 

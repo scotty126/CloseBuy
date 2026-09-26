@@ -265,6 +265,57 @@ export interface AdminConfigDto {
   categories: CategoryDto[];
 }
 
+// ── Platform metrics (US-A-07) ──────────────────────────────────────────
+
+// A real calendar day (2026-09-24), not just something shaped like one.
+const calendarDaySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((v) => {
+    const d = new Date(`${v}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+  }, "Not a real calendar date");
+
+// Both bounds are optional and inclusive. Omitted → the last 30 days ending
+// today, in Africa/Lagos (the only timezone the platform operates in). The
+// service — not this schema — rejects a reversed or over-long range, since it
+// needs the resolved defaults to judge that.
+export const adminMetricsQuerySchema = z.object({
+  from: calendarDaySchema.optional(),
+  to: calendarDaySchema.optional(),
+});
+export type AdminMetricsQuery = z.infer<typeof adminMetricsQuerySchema>;
+
+// Longest range the endpoint will aggregate. The per-day series is built in
+// application code from one row per order, so an unbounded range would mean
+// an unbounded read.
+export const MAX_METRICS_RANGE_DAYS = 366;
+
+// GET /admin/metrics. Every figure is scoped to orders *placed* in the range
+// (cohorted by placement day, Africa/Lagos) so the numbers always agree with
+// each other — except the three "right now" ones flagged below. Definitions
+// live next to the code that computes them: admin/metrics.ts.
+export interface AdminMetricsDto {
+  range: { from: string; to: string }; // inclusive calendar days
+  timezone: "Africa/Lagos";
+  orders: {
+    placedCount: number; // payment confirmed or COD accepted — abandoned PENDING_PAYMENT checkouts excluded
+    fulfilledCount: number; // DELIVERED or COMPLETED
+    inFlightCount: number; // still moving — kept out of the completion rate
+    failedCount: number; // DELIVERY_FAILED
+    cancelledOrRefundedCount: number;
+    disputedCount: number; // placed in range and has a dispute
+  };
+  grossMinor: number; // placed orders' totals, excluding CANCELLED/REFUNDED
+  completionRate: number | null; // 0–1; fulfilled ÷ (fulfilled + cancelled/refunded + failed). null with nothing decided yet
+  averageDeliveryMinutes: number | null; // PAID → DELIVERED, delivery orders only, scheduled ones excluded
+  deliveriesMeasured: number; // how many orders that average is over
+  openDisputes: number; // right now, not range-scoped — a queue, not a rate
+  vendors: { approved: number; active: number }; // approved is right now; active = had a placed order in range
+  riders: { approved: number; active: number }; // approved is right now; active = carried a placed order in range
+  perDay: Array<{ date: string; orders: number; grossMinor: number }>; // every day in range, zero-filled
+}
+
 // ── Audit log (US-A-08) ─────────────────────────────────────────────────
 
 export const auditLogFilterSchema = z.object({

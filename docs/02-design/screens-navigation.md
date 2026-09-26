@@ -97,7 +97,7 @@ Categories, **pickup and delivery commission rates** (brief §3.2a — not per-c
 Payout run screen, ledger-vs-gateway-settlement reconciliation report (US-A-05) — note this may need to run against Monnify's multi-daily settlement cadence rather than once per day, per the open verification item in ADR-0001.
 
 ### 4.6 Metrics
-Orders/day, GMV, completion rate, average delivery time, active vendors/riders, failed/disputed counts, filterable by date range (US-A-07).
+Orders/day, GMV, completion rate, average delivery time, active vendors/riders, failed/disputed counts, filterable by date range (US-A-07). One filter row above everything it scopes — presets (7/30/90 days) first, custom From/To after — and every tile and chart re-renders against the same slice; while it refetches the previous render stays, dimmed, rather than flashing a skeleton. Headline numbers are **stat tiles**, not charts; the two time series are **two separate column charts** (orders/day and gross value/day — different scales, so never one dual-axis plot), single series in the brand green so no legend box, peak labelled, per-column hover/focus tooltip, and a table-view twin. Past 120 days it groups by week. A "How these are counted" disclosure spells out every definition, because a metric with an unstated definition is worse than none.
 
 ### 4.7 Audit log
 Searchable, read-only, by actor/target/date (US-A-08).
