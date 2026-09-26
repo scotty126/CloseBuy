@@ -100,6 +100,20 @@ export const authSessionSchema = z.object({
 });
 export type AuthSession = z.infer<typeof authSessionSchema>;
 
+/**
+ * POST /auth/otp/request's response, shared so the server and the three
+ * staff login pages can't drift apart again: the route returned the session's
+ * fields at the top level while every login page waited for `res.session`, so
+ * the DEV_AUTO_SIGNIN_PHONES shortcut never once worked from the UI (2026-09-26;
+ * present since the commit that introduced both). Exactly one of the two
+ * fields is ever set — `session` for an allowlisted number, `devCode` for the
+ * OTP_DEV_FALLBACK path — and neither for a real Termii send (204, no body).
+ */
+export interface OtpRequestResponse {
+  devCode?: string;
+  session?: AuthSession;
+}
+
 export const refreshRequestSchema = z.object({
   refreshToken: z.string(),
 });

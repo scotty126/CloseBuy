@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { otpRequestSchema, otpVerifySchema, refreshRequestSchema, staffRegisterSchema, staffLoginSchema } from "@closebuy/types";
+import type { OtpRequestResponse } from "@closebuy/types";
 import { createAuthService, OtpInvalidError, OtpLockedError } from "./service.js";
 import {
   createStaffEmailAuthService,
@@ -60,7 +61,10 @@ export async function staffAuthRoutes(app: FastifyInstance) {
       // DEV_AUTO_SIGNIN_PHONES exists for, so it must not be blocked by it.
       const auto = await authService.tryAutoSignin(body.phone, body.role);
       if (auto) {
-        return reply.send({ accessToken: auto.accessToken, refreshToken: auto.refreshToken, user: serializeUser(auto.user) });
+        const body: OtpRequestResponse = {
+          session: { accessToken: auto.accessToken, refreshToken: auto.refreshToken, user: serializeUser(auto.user) },
+        };
+        return reply.send(body);
       }
 
       if (otpUnavailable) {
@@ -72,7 +76,7 @@ export async function staffAuthRoutes(app: FastifyInstance) {
       // devCode is only ever set by the dev fallback (termii.ts,
       // OTP_DEV_FALLBACK) — a real Termii send never returns one, so this
       // never appears once real credentials are configured.
-      if (devCode) return reply.code(200).send({ devCode });
+      if (devCode) return reply.code(200).send({ devCode } satisfies OtpRequestResponse);
       return reply.code(204).send();
     });
   });

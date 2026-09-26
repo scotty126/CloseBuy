@@ -57,6 +57,11 @@ Built and live:
 - `DEV_AUTO_SIGNIN_PHONES` (Railway env var, currently the owner's own
   number) — typing that number on any staff app's login skips Termii/OTP
   entirely, mints a real session. Owner convenience, not for real users.
+  **This claim was wrong until 2026-09-26: it never worked from the UI**
+  (see "Fixed" below) — for a *deployed* build it still doesn't until the
+  fixed API/frontends ship. For the **admin** role it also only signs in an
+  admin that already exists (`findOrCreateStaffUser`); the owner's admin
+  account does exist (created 2026-09-17).
 - 10 real vendors, 99 real products seeded in the live DB (not a mockup) —
   see `apps/api/scripts/seed-demo-vendors.mjs`. Real sourced product photos
   (Wikimedia/Unsplash/Pexels).
@@ -213,6 +218,21 @@ Built and live:
   definition); the full page against the live API is **not exercised**
   — the endpoint isn't deployed and the screen needs an admin session.
 
+**Fixed (2026-09-26) — staff auto-signin never worked from the UI.**
+`POST /auth/otp/request` returned the auto-signin session's fields at the
+top level (`{accessToken, refreshToken, user}`) while all three staff login
+pages waited for `res.session`, so `res.session` was always undefined and
+the page always fell through to the code step — even for the owner's own
+allowlisted number with a real admin account. Both sides date from the same
+commit (`3198c8b`); the service logic (`tryAutoSignin`) was unit-tested but
+nothing ever checked the response shape between route and pages. Fix:
+shared `OtpRequestResponse` type in `packages/types/src/auth.ts` (the route
+is now typed against it, so a mismatch is a compile error), route returns
+`{ session }`, and `api-client`'s `requestOtp` also accepts the old top-level
+shape so it works against an API that hasn't been redeployed. **Delete that
+client shim once the fixed API is live.** Found because the owner tried to
+sign into the local admin app to approve test accounts.
+
 **Fixed (2026-09-24) — a real, live bug, not hypothetical:** every
 body-less `POST` through the shared `packages/api-client/src/client.ts`
 (vendor accept-order, vendor mark-ready, rider accept/decline-offer,
@@ -294,6 +314,38 @@ then smoke-test disputes, suspension, config, cancel/accept/ready buttons
 and the history appear) against the live API before considering any of it
 done.
 
+## Smoke-testing the live order loop
+
+`apps/api/scripts/e2e-lifecycle.mjs` drives the whole order-to-delivery
+loop through the real HTTP API (no browser needed): guest cash-on-delivery
+checkout → vendor accept → ready → rider claim → collection code → delivery
+code + exact cash → `DELIVERED`, with the guards (wrong collection code,
+wrong delivery code, wrong cash amount, double claim, idempotent replay) and
+the books (stock decrement, rider cash balance, escrow held, transition
+history and actors) checked at each step — ~39 assertions.
+
+- `node apps/api/scripts/e2e-lifecycle.mjs setup` creates a test vendor and
+  rider through the real signup/apply flow. They land `pending` and **only
+  an admin can approve them** (admins are never self-created) — do it on the
+  admin app's Applications page. Then `... run`.
+- **Passed in full, twice, on 2026-09-26** against the live API as it stood
+  then (the *older*, undeployed-since-09-17 code) — i.e. the M1 loop is
+  genuinely sound. Not covered: anything in the UIs themselves (it drives
+  the API, not a browser), escrow release → `COMPLETED` (a 48h timer),
+  ratings, disputes, remittance, metrics (none deployed yet).
+- **Re-run it after every deploy** — it's the fastest way to prove a push
+  didn't break the core loop. `E2E_API_URL` points it elsewhere.
+- **It writes real rows** to whatever it targets. Left behind in the live
+  DB: `claude-e2e-vendor@example.com` / `claude-e2e-rider@example.com` (the
+  vendor is named "E2E Test Vendor (delete me)", closed; the rider off duty,
+  and **owing ₦5,400 in uncollected cash** from two delivered orders — a
+  ready-made case for trying rider cash remittance once that's deployed),
+  two products, two orders sitting in `DELIVERED` (the escrow timer will
+  move them to `COMPLETED` on its own, crediting the test vendor). The old
+  API has no way to delete or suspend them — clean up by hand or via the
+  admin suspend screen once deployed. Their generated passwords live in the
+  OS temp dir (`closebuy-e2e-state.json`), never in the repo.
+
 ## Known issues / external blockers
 
 Things that are broken or waiting on something outside this codebase —
@@ -304,11 +356,32 @@ don't re-diagnose these from scratch, they're understood:
   does. Disbursements (real vendor payouts) additionally need Monnify
   account-side setup: enable API disbursements, disable OTP, whitelist a
   static outbound IP — communicated to Monnify separately, not done yet.
+- **SECURITY — `OTP_DEV_FALLBACK=true` on a `NODE_ENV=production` API
+  hands out login codes to anyone.** In that mode `POST /auth/otp/request`
+  returns the code **in the response body**, unauthenticated
+  (`auth/routes.ts`, `termii.ts`'s dev client) — so anyone who knows a staff
+  phone number (a vendor's, a rider's, the admin's) can request a code, read
+  it back, and verify to get a session as them. Confirmed by reading the
+  code and the live Railway variables (2026-09-26). Harmless while
+  everything is demo data; **serious the moment a real vendor exists** (they
+  could change bank details and request payouts; admin approval on payouts
+  is the only remaining net). Not fixed, on purpose — it's a decision that
+  changes how the owner logs in. The one-variable fix is
+  `OTP_DEV_FALLBACK=false` on Railway: the owner's number still works
+  (auto-signin is checked before that gate), and email/password + Google
+  sign-in are unaffected. The proper fix is to never return `devCode` when
+  `NODE_ENV === "production"`. Also: the demo vendors' phones are
+  sequential dummies (`+2348010000001`–`10`) in `seed-demo-vendors.mjs`, so
+  they're guessable — another reason to fix this before launch.
 - **Termii Sender ID pending CAC approval** — `TERMII_API_KEY` is set,
-  `TERMII_SENDER_ID` isn't. Real SMS OTP blocked; fully worked around via
-  `OTP_DEV_FALLBACK` (real codes, logged not texted) and the auto-signin
-  allowlist above.
-- **Netlify: vendor/rider/admin sites broken.** `closebuy-vendor` has its
+  `TERMII_SENDER_ID` isn't. Real SMS OTP blocked; worked around via
+  `OTP_DEV_FALLBACK` (see the security note above — that workaround is
+  also the hole) and the auto-signin allowlist.
+- **Netlify: vendor/rider/admin sites broken** (re-verified 2026-09-26 by
+  fetching them: `closebuy-vendor.netlify.app` serves the *Admin* app,
+  `closebuy-rider` and `closebuy-admin` return **404**; the customer site
+  is fine. Credits being available doesn't change that — it's dashboard
+  config, see below). `closebuy-vendor` has its
   Package Directory pointed at `apps/admin` (copy-paste mistake, builds the
   wrong app). `closebuy-rider`/`closebuy-admin` were never connected to the
   repo at all — empty config, zero deploys ever. Fix is manual, in the

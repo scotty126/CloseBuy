@@ -22,7 +22,7 @@ Two separate paths, by role (brief §3.1b) — a customer never touches the OTP 
 
 | Method & path | Purpose | Notes |
 |---|---|---|
-| `POST /auth/otp/request` | Send an OTP to a phone number | Rate-limited per US-V-01/US-R-01 (5 attempts / 15 min) |
+| `POST /auth/otp/request` | Send an OTP to a phone number | Rate-limited per US-V-01/US-R-01 (5 attempts / 15 min). Body `{ phone, role }`. Response is `OtpRequestResponse` (`packages/types/src/auth.ts`, shared by the route and the three staff login pages): `{ session }` for a `DEV_AUTO_SIGNIN_PHONES` number that has an eligible account (admin: only if that admin already exists), `{ devCode }` under `OTP_DEV_FALLBACK`, otherwise 204 with no body. **Security: `devCode` is returned unauthenticated — never leave `OTP_DEV_FALLBACK` on in production** (see CLAUDE.md). Before 2026-09-26 the route sent the session's fields at the top level instead of under `session`, so the auto-signin shortcut never worked from any login page |
 | `POST /auth/otp/verify` | Verify code, issue session | Returns JWT + refresh token; creates the `User` row on first success |
 
 **Customer — email/password or Google/Apple:**
