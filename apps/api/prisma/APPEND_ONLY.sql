@@ -10,6 +10,13 @@
 -- is rebuilt from scratch.
 --
 -- Replace closebuy_app with the actual role your DATABASE_URL connects as.
+--
+-- WARNING (found 2026-09-26): none of this is in effect in production. The
+-- app connects as `neondb_owner`, the table OWNER, and REVOKE against an
+-- owner achieves nothing — it can simply GRANT the privilege back. These
+-- statements only mean something when DATABASE_URL uses a separate,
+-- NON-owner role (with DIRECT_URL keeping the owner for migrations). Until
+-- that role exists, append-only is enforced by application code alone.
 
 REVOKE UPDATE, DELETE ON order_state_transitions FROM closebuy_app;
 REVOKE UPDATE, DELETE ON ledger_entries FROM closebuy_app;

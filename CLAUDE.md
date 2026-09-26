@@ -438,10 +438,24 @@ don't re-diagnose these from scratch, they're understood:
   `findOrCreateStaffUser` (service.ts), `AdminSelfRegistrationDisabledError`
   (email.ts), `OAuthAdminNotProvisionedError` (oauth-account.ts). If you add
   a fourth auth method, it needs the same guard.
-- **The ledger is append-only by DB grant**, not just convention —
-  `ledger_entries` and `audit_log` have `UPDATE`/`DELETE` revoked for the
-  app role (`apps/api/prisma/APPEND_ONLY.sql`). Corrections are always a
-  new reversing entry, never an edit.
+- **The ledger is append-only by code discipline, NOT by DB grant —
+  despite what this file and `data-model.md` §6 used to claim.** Checked
+  against production on 2026-09-26: the app connects as `neondb_owner`,
+  the table *owner*, which holds `UPDATE`/`DELETE`/`TRUNCATE` on
+  `ledger_entries`, `audit_log`, `order_state_transitions` and `config`.
+  `apps/api/prisma/APPEND_ONLY.sql` was never effective — and revoking from
+  an owner would be toothless anyway, since it can grant itself back. What
+  *is* true: no application code updates or deletes those tables (grepped,
+  no raw SQL either), corrections are always a new reversing entry, and
+  `Config` writes are always a new version. What's missing is any defence
+  against a bug or a leaked credential. **Real fix (not done — it changes
+  the DB role setup):** create a separate non-owner role for the app, point
+  `DATABASE_URL` at it, keep the owner on `DIRECT_URL` (already what
+  `schema.prisma` separates it for, and what migrations use), then run
+  `APPEND_ONLY.sql` for that role. Do this before real money moves. The
+  same applies to `rider_cash_remittances`, whose REVOKE line is in that
+  file but equally inert today. Corrections are always a new reversing
+  entry, never an edit.
 - **Netlify monorepo config**: "Package Directory" (not "Base Directory")
   set via the dashboard, with `netlify.toml` living inside that app's own
   folder — this is the only combination that's worked. The Netlify API
