@@ -82,6 +82,11 @@ export default function LoginPage() {
             Create an account
           </Link>
         </p>
+
+        <p className="text-center text-xs text-muted">
+          <Link href="/terms" className="underline">Terms of Service</Link> ·{" "}
+          <Link href="/privacy" className="underline">Privacy Policy</Link>
+        </p>
       </div>
     </div>
   );

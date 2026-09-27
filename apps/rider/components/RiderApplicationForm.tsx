@@ -75,6 +75,12 @@ export function RiderApplicationForm({ onSubmitted }: { onSubmitted: () => void 
 
         {error && <p className="text-sm text-danger">{error}</p>}
 
+        <p className="text-xs text-muted">
+          By submitting, you agree to CloseBuy&apos;s{" "}
+          <a href="https://closebuy1.netlify.app/terms" target="_blank" rel="noreferrer" className="underline">Terms of Service</a> and{" "}
+          <a href="https://closebuy1.netlify.app/privacy" target="_blank" rel="noreferrer" className="underline">Privacy Policy</a>.
+        </p>
+
         <Button type="submit" disabled={isSubmitting}>
           {isSubmitting ? "Submitting…" : "Submit application"}
         </Button>

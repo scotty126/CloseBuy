@@ -47,6 +47,10 @@ export default function AccountPage() {
           note="Sign in for order history, saved addresses and editable ratings — none of it required just to order."
         />
         <Button onClick={() => router.push("/login")}>Sign in</Button>
+        <p className="text-xs text-muted">
+          <Link href="/terms" className="underline">Terms of Service</Link> ·{" "}
+          <Link href="/privacy" className="underline">Privacy Policy</Link>
+        </p>
       </div>
     );
   }
@@ -109,6 +113,11 @@ export default function AccountPage() {
       >
         Sign out
       </Button>
+
+      <p className="text-center text-xs text-muted">
+        <Link href="/terms" className="underline">Terms of Service</Link> ·{" "}
+        <Link href="/privacy" className="underline">Privacy Policy</Link>
+      </p>
     </div>
   );
 }
