@@ -475,20 +475,65 @@ responsive" claim was half right: the drawer/nav chrome fix was real and
 deployed, but this one screen's own content had never actually been
 checked, and was broken until this fix.
 
+**Saved addresses (US-C-05, 2026-09-27) — a real M-priority gap, not a
+deferred nice-to-have.** Went looking for "what's genuinely next" after the
+mobile-audit above and cross-checked `docs/01-requirements/user-stories.md`
+against the actual frontend rather than trusting this file's own "What's
+next" list (which had called M3 fully done) — US-C-05 is tagged **M**
+("the platform cannot process a single real order without it"), and its
+"saved addresses can be reused, renamed and deleted" criterion was flatly
+unbuilt: the account page carried a literal `Placeholder` in its place. The
+schema was never the gap — `addresses` and `Order.addressId` have existed
+since the very first migration (`20260916113905_init`), and `checkoutSchema`
+already accepted an optional `addressId` — nothing had ever exposed CRUD
+for it, so it sat there unreachable. Built the missing half:
+`apps/api/src/modules/auth/customer/addresses.ts` (new module, same
+factory-function shape as `admin/remittances.ts`) + four routes on
+`/customer/addresses[/:id]` in the existing `auth/customer/routes.ts`;
+`AddressDto`/`addressCreateSchema`/`addressUpdateSchema`
+(`packages/types/src/user.ts`); account page (`apps/customer/app/account`)
+gets a real list/add/edit/delete UI (two-step inline delete confirmation,
+no native `confirm()` — this codebase doesn't use those anywhere); checkout
+gets a chip picker above `AddressSearch` that prefills the pin/landmark/phone
+from a saved address, plus a "Save this address for next time" checkbox that
+creates one right after a successful order (both best-effort, same
+non-blocking pattern as the existing "save as default phone" checkbox).
+`addressId` was already being written onto the order un-validated — added an
+ownership check in `order/service.ts`'s checkout (the id is silently dropped,
+not hard-rejected, if it isn't actually the caller's own address, since it's
+never authoritative for where the order actually ships — data-model.md's own
+note on the table). Two real, live-caught issues fixed along the way: the
+account page's address list showed "Loading…" forever *alongside* a real
+error, because `addresses` state was never set to `[]` on a failed fetch —
+found by testing against the live API, which correctly 404s this route
+(not deployed yet) and surfaced exactly that bug; and the ownership check
+above, which didn't exist before this pass. 12 new tests (10 in
+`addresses.test.ts`, 2 new checkout-ownership cases in
+`order/service.test.ts`) — 301 API tests total, all green, plus a clean
+`pnpm typecheck`/`lint` across all 8 packages. **Verified locally against
+the live API** (headless Edge, 390px, a real throwaway account registered
+for this — `claude-address-test@example.com`, no orders, safe to delete
+whenever test-data cleanup happens): account page and the add-address form
+both render and don't crash, checkout renders with the picker section
+present and correctly empty (`GET /customer/addresses` 404s against the
+live API exactly as expected, degrading to no chips rather than breaking
+the page), no overflow at phone width either place. **Not exercised as a
+real working round-trip** — that needs this deployed, same caveat as every
+other local-only feature this session.
+
 **None of this — everything in this dated section plus the 2026-09-27
-section above it, 17 commits — is pushed yet** (still holding off per the
+section above it, 20 commits — is pushed yet** (still holding off per the
 Netlify-credits constraint below, and then explicitly told not to) —
 all local-only commits on `main`, confirmed against `origin/main` (currently
 `3b2eafd`, see "Deployed 2026-09-26" below — that commit and everything
-before it really is live; only these 17 are not). `pnpm typecheck`, `lint`,
-and `test` (277 tests) all green as of the last commit before this
-mobile-audit one (a pure layout fix, no new tests). The 4-digit-code and
-geocoding changes are both genuinely untestable end-to-end without a deploy
-(see their notes above) — this is a real, active decision point, not an
-oversight: ask before pushing next, and say plainly that it also triggers
-the three auto-connected Netlify sites, not just Railway (no way to push to
-one without the other, short of disconnecting their auto-deploy, which
-hasn't been done).
+before it really is live; only these 20 are not). `pnpm typecheck`, `lint`,
+and `test` (301 tests) all green as of the last commit in this list. The
+4-digit-code and geocoding changes are both genuinely untestable end-to-end
+without a deploy (see their notes above) — this is a real, active decision
+point, not an oversight: ask before pushing next, and say plainly that it
+also triggers the three auto-connected Netlify sites, not just Railway (no
+way to push to one without the other, short of disconnecting their
+auto-deploy, which hasn't been done).
 
 ## What's next
 
