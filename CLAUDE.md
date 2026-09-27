@@ -454,16 +454,41 @@ caught, all fixed same-session:
   panel, ledger table, tiles) verified by rendering against realistic
   fixture data instead.
 
-**None of this is pushed yet** (still holding off per the Netlify-credits
-constraint below, and then explicitly told not to) — all local-only commits
-on `main`. `pnpm typecheck`, `lint`, and `test` (277 tests) all green as of
-the last commit in this list. The 4-digit-code and geocoding changes are
-both genuinely untestable end-to-end without a deploy (see their notes
-above) — this is a real, active decision point, not an oversight: ask
-before pushing next, and say plainly that it also triggers the three
-auto-connected Netlify sites, not just Railway (no way to push to one
-without the other, short of disconnecting their auto-deploy, which hasn't
-been done).
+**Mobile-responsiveness re-audit (2026-09-27, prompted by a direct user
+challenge to an earlier "fixed" claim).** The Sidebar-drawer fix in
+`3b2eafd` (deployed, see below) is real and does cover the actual sidebar/nav
+chrome on vendor, rider and admin — that part of the earlier claim held up.
+But it was never a claim that *every screen's own content* was checked at
+phone width, and one hadn't been: `apps/vendor/app/settings/page.tsx`'s
+opening-hours row (day label + two native `<input type="time">`, which
+render in 12-hour AM/PM and are wider than a 24h locale + a "Closed" button,
+all in one flex row) needed ~433px and only had 390px on a real deployed
+phone-width render — confirmed live on `closebuy-vendor.netlify.app/settings`
+via headless-Edge screenshot before fixing it. Fixed by stacking the day
+label above a `flex-wrap` controls row instead of beside it. Re-checked
+every other page of all three staff-facing apps (vendor `/`, `/products`;
+rider `/`, `/earnings`; admin `/`, `/orders`, `/vendors`, `/riders`,
+`/config`, `/metrics`, `/audit-log`, `/disputes`, `/payouts`) against the
+live deployed sites at 390px with a real authenticated session on each —
+all clean, no overflow found anywhere else. So the earlier "mobile
+responsive" claim was half right: the drawer/nav chrome fix was real and
+deployed, but this one screen's own content had never actually been
+checked, and was broken until this fix.
+
+**None of this — everything in this dated section plus the 2026-09-27
+section above it, 17 commits — is pushed yet** (still holding off per the
+Netlify-credits constraint below, and then explicitly told not to) —
+all local-only commits on `main`, confirmed against `origin/main` (currently
+`3b2eafd`, see "Deployed 2026-09-26" below — that commit and everything
+before it really is live; only these 17 are not). `pnpm typecheck`, `lint`,
+and `test` (277 tests) all green as of the last commit before this
+mobile-audit one (a pure layout fix, no new tests). The 4-digit-code and
+geocoding changes are both genuinely untestable end-to-end without a deploy
+(see their notes above) — this is a real, active decision point, not an
+oversight: ask before pushing next, and say plainly that it also triggers
+the three auto-connected Netlify sites, not just Railway (no way to push to
+one without the other, short of disconnecting their auto-deploy, which
+hasn't been done).
 
 ## What's next
 
