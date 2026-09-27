@@ -1,5 +1,6 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { PaymentsUnavailableError } from "../modules/payments/monnify.js";
+import { GeocodeUnavailableError } from "../modules/geocode/service.js";
 
 /**
  * The one error shape every client parses: `{ error: { code, message } }`
@@ -58,6 +59,13 @@ export function apiErrorHandler(err: FastifyError | Error, req: FastifyRequest, 
     // A `cause` means the gateway was configured but failed; that one is worth a log line.
     if (err.cause) req.log.warn({ err: err.cause }, "payment gateway call failed");
     return reply.code(503).send({ error: { code: "PAYMENTS_UNAVAILABLE", message: err.message } });
+  }
+
+  if (err instanceof GeocodeUnavailableError) {
+    // Nominatim down/timed out/erroring — a clear 503. Never fatal to checkout itself: the frontend's
+    // current-location and manual-coordinate paths don't go through this endpoint at all.
+    if (err.cause) req.log.warn({ err: err.cause }, "geocode provider call failed");
+    return reply.code(503).send({ error: { code: "GEOCODE_UNAVAILABLE", message: err.message } });
   }
 
   // Fastify's own 4xx (bad JSON body, oversized body, unsupported media type)

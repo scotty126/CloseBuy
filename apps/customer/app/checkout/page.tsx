@@ -6,23 +6,31 @@ import { Button, Input, PhoneInput, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
 import { formatNaira, minor } from "@closebuy/types";
 import type { CheckoutInput } from "@closebuy/types";
-import { catalogApi, customerAuthApi, orderApi } from "@/lib/api";
+import type { GeocodeResultDto } from "@closebuy/types";
+import { catalogApi, customerAuthApi, geocodeApi, orderApi } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { addGuestOrder } from "@/lib/guestOrders";
 import { DeliveryLocationMap } from "@/components/DeliveryLocationMap";
+import { AddressSearch } from "@/components/AddressSearch";
 
 type PaymentChoice = "online" | "cash_on_delivery";
 
 /**
- * screens-navigation.md §1.6. Address is a real pin (browser geolocation
- * for the first fix, then fine-tuneable on the map, or entered manually)
- * + landmark — never a postal string (brief §3.4). DeliveryLocationMap
- * renders nothing if NEXT_PUBLIC_GOOGLE_MAPS_API_KEY isn't set in a given
- * environment — geolocation + manual entry alone is still a real, working
- * flow on its own, this is additive. Server-side service-area validation
- * (US-C-05) still runs regardless of how the pin was set — an
- * outside-Riverpark pin is rejected with a clear reason, not silently
- * accepted.
+ * screens-navigation.md §1.6. Address is a real pin — browser geolocation,
+ * an address search (AddressSearch, backed by geocode/service.ts's
+ * Nominatim proxy), the map (fine-tune by dragging), or typed coordinates
+ * — plus a required landmark, never a bare postal string (brief §3.4:
+ * street addressing is unreliable across much of the launch market, so a
+ * text address alone must never be assumed accurate). The search box makes
+ * *setting* that pin feel like typing an address instead of hunting for
+ * coordinates; it doesn't change what's actually being validated — every
+ * path here still ends at a lat/lng, and server-side service-area
+ * validation (US-C-05) still runs against that pin regardless of which
+ * path set it, rejecting an outside-Riverpark one with a clear reason,
+ * never silently accepting it. DeliveryLocationMap renders nothing if
+ * NEXT_PUBLIC_GOOGLE_MAPS_API_KEY isn't set in a given environment (it
+ * currently isn't, live — Known issues in CLAUDE.md) — geolocation,
+ * search, and manual entry are all real without it, this is additive.
  */
 export default function CheckoutPage() {
   const router = useRouter();
@@ -43,6 +51,11 @@ export default function CheckoutPage() {
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [accuracyMeters, setAccuracyMeters] = useState<number | null>(null);
+  // Set by picking an AddressSearch result, or by a best-effort reverse-geocode after "Use my current
+  // location" succeeds. Cleared by anything that changes the pin WITHOUT a known label for the new spot
+  // (dragging the map, typing coordinates by hand) — showing a stale label next to a pin it no longer
+  // describes would be worse than just falling back to the coordinates, which is what happens when this is null.
+  const [addressLabel, setAddressLabel] = useState<string | null>(null);
   const [landmark, setLandmark] = useState("");
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -101,6 +114,7 @@ export default function CheckoutPage() {
 
   function useCurrentLocation() {
     setLocationError(null);
+    setAddressLabel(null);
     if (!navigator.geolocation) {
       setLocationError("Your browser doesn't support location — enter coordinates manually below.");
       return;
@@ -108,11 +122,17 @@ export default function CheckoutPage() {
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLat(pos.coords.latitude);
-        setLng(pos.coords.longitude);
-        setAccuracyMeters(pos.coords.accuracy);
-        setShowManualHint(pos.coords.accuracy > POOR_ACCURACY_METERS);
+        const { latitude, longitude, accuracy } = pos.coords;
+        setLat(latitude);
+        setLng(longitude);
+        setAccuracyMeters(accuracy);
+        setShowManualHint(accuracy > POOR_ACCURACY_METERS);
         setLocating(false);
+        // Best-effort — a raw coordinate is still shown (below) if this fails or is slow; never blocks anything.
+        geocodeApi
+          .reverse(latitude, longitude)
+          .then((res) => setAddressLabel(res.label))
+          .catch(() => {});
       },
       () => {
         setLocationError("Couldn't get your location — check permissions, or enter coordinates manually below.");
@@ -120,6 +140,15 @@ export default function CheckoutPage() {
       },
       { enableHighAccuracy: true, timeout: 10000 },
     );
+  }
+
+  function handleAddressSelected(result: GeocodeResultDto) {
+    setLat(result.lat);
+    setLng(result.lng);
+    setAddressLabel(result.label);
+    setAccuracyMeters(null); // a geocoded match has no GPS-style accuracy figure — nothing to warn about
+    setLocationError(null);
+    setShowManualHint(false);
   }
 
   if (!sessionLoaded || !cartLoaded || !cart.vendor || cart.items.length === 0) return null;
@@ -185,7 +214,7 @@ export default function CheckoutPage() {
         setError(
           `${err.message} The location submitted was ${lat?.toFixed(5)}, ${lng?.toFixed(5)}` +
             (accuracyMeters ? ` (accurate to about ±${Math.round(accuracyMeters)}m)` : "") +
-            ". If that's not where you are, enter exact coordinates below instead — look up your address on Google Maps, right-click the pin, and the coordinates are the first line of the menu that appears.",
+            ". If that's not where you are, search your street above again, or enter exact coordinates below — look up your address on Google Maps, right-click the pin, and the coordinates are the first line of the menu that appears.",
         );
         setShowManualHint(true);
       } else {
@@ -202,23 +231,50 @@ export default function CheckoutPage() {
       {isDelivery ? (
         <section className="flex flex-col gap-2">
           <p className="text-sm font-medium text-ink">Delivery location</p>
+
+          <AddressSearch onSelect={handleAddressSelected} />
+
+          <div className="flex items-center gap-2 text-xs text-muted">
+            <span className="h-px flex-1 bg-gray-200" />
+            or
+            <span className="h-px flex-1 bg-gray-200" />
+          </div>
           <Button type="button" variant="secondary" onClick={useCurrentLocation} disabled={locating}>
             {locating ? "Locating…" : lat !== null ? "Location set — tap to refresh" : "Use my current location"}
           </Button>
           {locationError && <p className="text-xs text-danger">{locationError}</p>}
-          {lat !== null && lng !== null && (
-            <p className={`text-xs ${accuracyMeters && accuracyMeters > POOR_ACCURACY_METERS ? "text-danger" : "text-muted"}`}>
-              {lat.toFixed(5)}, {lng.toFixed(5)}
-              {accuracyMeters !== null && ` — accurate to about ±${Math.round(accuracyMeters)}m`}
-            </p>
+
+          {/* The whole point of AddressSearch/reverse-geocoding: a real street/area name here instead of raw
+              numbers. The coordinates only surface when no label could be resolved for the current pin — never
+              hidden outright, since at that point they're the only description of where the pin actually is. */}
+          {addressLabel ? (
+            <p className="text-sm text-ink">{addressLabel}</p>
+          ) : (
+            lat !== null &&
+            lng !== null && (
+              <p className={`text-xs ${accuracyMeters && accuracyMeters > POOR_ACCURACY_METERS ? "text-danger" : "text-muted"}`}>
+                {lat.toFixed(5)}, {lng.toFixed(5)}
+                {accuracyMeters !== null && ` — accurate to about ±${Math.round(accuracyMeters)}m`}
+              </p>
+            )
           )}
           {accuracyMeters !== null && accuracyMeters > POOR_ACCURACY_METERS && (
             <p className="text-xs text-danger">
               That&apos;s not precise — normal for a laptop with no GPS (it falls back to WiFi/IP location, which can
-              land hundreds of metres away and change between tries). Enter exact coordinates below instead.
+              land hundreds of metres away and change between tries). Search your street above instead, or enter
+              exact coordinates below.
             </p>
           )}
-          <DeliveryLocationMap lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); setAccuracyMeters(null); }} />
+          <DeliveryLocationMap
+            lat={lat}
+            lng={lng}
+            onChange={(newLat, newLng) => {
+              setLat(newLat);
+              setLng(newLng);
+              setAccuracyMeters(null);
+              setAddressLabel(null);
+            }}
+          />
           {lat !== null && lng !== null && (
             <p className="text-xs text-muted">Drag the pin or tap the map to fine-tune the exact spot.</p>
           )}
@@ -233,13 +289,21 @@ export default function CheckoutPage() {
                 placeholder="Latitude"
                 inputMode="decimal"
                 value={lat ?? ""}
-                onChange={(e) => { setLat(e.target.value ? Number(e.target.value) : null); setAccuracyMeters(null); }}
+                onChange={(e) => {
+                  setLat(e.target.value ? Number(e.target.value) : null);
+                  setAccuracyMeters(null);
+                  setAddressLabel(null);
+                }}
               />
               <Input
                 placeholder="Longitude"
                 inputMode="decimal"
                 value={lng ?? ""}
-                onChange={(e) => { setLng(e.target.value ? Number(e.target.value) : null); setAccuracyMeters(null); }}
+                onChange={(e) => {
+                  setLng(e.target.value ? Number(e.target.value) : null);
+                  setAccuracyMeters(null);
+                  setAddressLabel(null);
+                }}
               />
             </div>
           </details>

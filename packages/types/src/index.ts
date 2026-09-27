@@ -20,3 +20,4 @@ export * from "./order.js";
 export * from "./rider.js";
 export * from "./admin.js";
 export * from "./notifications.js";
+export * from "./geocode.js";

@@ -1,6 +1,6 @@
 "use client";
 
-import { createApiClient, createAuthApi, createCustomerAuthApi, createCatalogApi, createOrderApi } from "@closebuy/api-client";
+import { createApiClient, createAuthApi, createCustomerAuthApi, createCatalogApi, createOrderApi, createGeocodeApi } from "@closebuy/api-client";
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -59,6 +59,7 @@ export const customerAuthApi = createCustomerAuthApi(client);
 export const authApi = createAuthApi(client);
 export const catalogApi = createCatalogApi(client);
 export const orderApi = createOrderApi(client);
+export const geocodeApi = createGeocodeApi(client);
 
 // Plain browser navigations, not fetch calls — the API redirects to
 // Google/Apple itself (brief §3.1b, api-contracts.md).
