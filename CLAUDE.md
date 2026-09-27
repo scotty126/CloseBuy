@@ -532,7 +532,37 @@ something isn't built:
    outright — pickup and delivery confirmation were both fully blocked,
    independent of whether the API was deployed. Fixed immediately on
    discovery, separate commit, before this feature was even scoped.
-   Other rider/vendor S-stories: still unaudited.
+   **Every S-priority rider/vendor story is now audited — US-V-04 (track
+   inventory) was the only one left, and it had a real gap too, found and
+   fixed 2026-09-27.** Three of its four acceptance criteria were already
+   solid: decrement-on-accept is atomic and correctly guarded against
+   concurrency (`order/service.ts`'s `acceptOrder`, a conditional
+   `updateMany` on `stock: { gte: quantity }` inside a transaction, the
+   whole accept fails if any item's short); stock reaching zero already
+   makes a product unavailable in practice — `ProductCard`/`QuickBuyCard`
+   disable "add to cart" and label it, and checkout re-validates
+   server-side regardless — just not via literally flipping `isActive`
+   (deliberately: `isActive` means "still in this vendor's catalog at
+   all," a different, longer-lived concept than "temporarily out of
+   stock," and conflating them would need an explicit reactivation step
+   every restock). The fourth — "a cancelled or rejected order returns its
+   stock" — had a real hole: the two normal paths (self-service
+   `cancelOrder`, vendor `rejectOrder`) correctly have nothing to restore,
+   since both only ever act on a still-`PAID` order and stock isn't
+   decremented until accept. Admin's `forceCancelOrder`
+   (`admin/orders.ts`) is the one path that can stop an order *after* that
+   decrement already happened — `PREPARING` through `IN_TRANSIT` are all
+   fair game for it — and it never gave that stock back, silently, every
+   time. Fixed: restores each item's stock when force-cancelling from any
+   of those four statuses, deliberately excluding `PAID` (nothing was ever
+   taken) and `DELIVERED` (the goods are with the customer now, not
+   sellable inventory — force-cancelling a delivered order is a financial
+   correction, `forceRefundOrder` is the tool for that, and it already
+   correctly never touches stock). 5 new tests, one per status including
+   both deliberately-excluded ones. Unit-tested only, not verified live —
+   `forceCancelOrder`'s route is already deployed, but this session's fix
+   to it isn't pushed yet, so exercising it live right now would only
+   prove the *old*, gap-having behavior.
 2. **Desktop-responsive layout** for customer/vendor/rider — explicitly
    deferred pre-launch, mobile-only for now by the user's own call.
 3. **ToS / Privacy Policy** — needed before real public launch and before
