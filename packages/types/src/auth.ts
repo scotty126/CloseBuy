@@ -28,6 +28,31 @@ export function normalizePhone(input: string): string {
   return compact;
 }
 
+// The `+234` chip PhoneInput (packages/ui) pins in front of every phone
+// field, so people can type a number the way they actually dial one
+// locally — `0907 701 8785` — instead of the E.164 the API wants.
+export const NIGERIA_DIAL_CODE = "+234";
+
+/**
+ * The counterpart to `normalizePhone`: given whatever's in a phone field —
+ * empty, mid-typed ("090"), a full local number, or a pasted `+234…`/`234…`
+ * one — returns just the local digits PhoneInput should show *next to* its
+ * fixed `+234` chip, with a leading trunk `0` dropped immediately rather
+ * than only once a complete 11-digit number is typed (that would make the
+ * field jump on the last keystroke instead of stripping it as you go).
+ * Nigeria-only, matching phoneSchema's own comment — a pasted non-NG number
+ * (`+1…`) isn't unwound here; it just shows next to the chip as typed, same
+ * as before this component existed, and the API's own validation still says
+ * what's wrong with it.
+ */
+export function toLocalDigits(input: string): string {
+  const normalized = normalizePhone(input);
+  const digits = normalized.replace(/[^\d+]/g, "");
+  if (digits.startsWith(NIGERIA_DIAL_CODE)) return digits.slice(NIGERIA_DIAL_CODE.length);
+  if (digits.startsWith("0")) return digits.slice(1);
+  return digits;
+}
+
 export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters");

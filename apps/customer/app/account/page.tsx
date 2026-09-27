@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Button, Card, Input, Placeholder, useAuthSession } from "@closebuy/ui";
+import { Button, Card, Placeholder, PhoneInput, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
-import { normalizePhone } from "@closebuy/types";
 import { customerAuthApi } from "@/lib/api";
 
 /**
@@ -57,7 +56,7 @@ export default function AccountPage() {
     setSaved(false);
     setIsSaving(true);
     try {
-      const res = await customerAuthApi.updateProfile({ defaultPhone: normalizePhone(defaultPhone) || null });
+      const res = await customerAuthApi.updateProfile({ defaultPhone: defaultPhone || null });
       setSavedPhone(res.profile.defaultPhone);
       setSaved(true);
     } catch (err) {
@@ -82,14 +81,12 @@ export default function AccountPage() {
       <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4">
         <p className="text-sm font-medium text-ink">Default contact number</p>
         <p className="text-xs text-muted">Presets the phone field at checkout — never verified, never used to sign in (brief §3.1b).</p>
-        <Input
-          type="tel"
+        <PhoneInput
           value={defaultPhone}
-          onChange={(e) => {
-            setDefaultPhone(e.target.value);
+          onChange={(v) => {
+            setDefaultPhone(v);
             setSaved(false);
           }}
-          placeholder="+2348012345678"
         />
         {saveError && <p className="text-xs text-danger">{saveError}</p>}
         <Button

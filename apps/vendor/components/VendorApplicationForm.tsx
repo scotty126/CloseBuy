@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Input } from "@closebuy/ui";
+import { Button, Input, PhoneInput } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
-import { normalizePhone, type CategoryDto } from "@closebuy/types";
+import type { CategoryDto } from "@closebuy/types";
 import { catalogApi } from "@/lib/api";
 
 /**
@@ -82,7 +82,7 @@ export function VendorApplicationForm({ onSubmitted }: { onSubmitted: () => void
         pickupLat: lat,
         pickupLng: lng,
         pickupLandmark: landmark.trim(),
-        pickupPhone: normalizePhone(pickupPhone),
+        pickupPhone,
         bankAccountNumber: bankAccountNumber.trim() || undefined,
         bankCode: bankCode.trim() || undefined,
         bankAccountName: bankAccountName.trim() || undefined,
@@ -166,14 +166,7 @@ export function VendorApplicationForm({ onSubmitted }: { onSubmitted: () => void
           />
         </div>
 
-        <Input
-          label="Pickup contact phone"
-          type="tel"
-          value={pickupPhone}
-          onChange={(e) => setPickupPhone(e.target.value)}
-          placeholder="+2348012345678"
-          required
-        />
+        <PhoneInput label="Pickup contact phone" value={pickupPhone} onChange={setPickupPhone} required />
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium text-ink">Bank details (optional — needed to withdraw once approved)</p>
           <Input

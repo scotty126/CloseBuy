@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Input, useAuthSession } from "@closebuy/ui";
+import { Button, Input, PhoneInput, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
-import { normalizePhone } from "@closebuy/types";
 import { authApi } from "@/lib/api";
 import { OAuthButtons } from "@/components/OAuthButtons";
 
@@ -40,7 +39,7 @@ export default function LoginPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      const res = await authApi.requestOtp({ phone: normalizePhone(phone), role: ROLE });
+      const res = await authApi.requestOtp({ phone, role: ROLE });
       if (res.session) {
         // Dev auto-signin (DEV_AUTO_SIGNIN_PHONES) — skips the code step
         // entirely, straight to a real session.
@@ -61,7 +60,7 @@ export default function LoginPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      const session = await authApi.verifyOtp({ phone: normalizePhone(phone), code, role: ROLE });
+      const session = await authApi.verifyOtp({ phone, code, role: ROLE });
       save(session);
       router.push("/");
     } catch (err) {
@@ -132,13 +131,11 @@ export default function LoginPage() {
         {method === "phone" ? (
           step === "phone" ? (
             <form onSubmit={handleRequestOtp} className="flex flex-col gap-4">
-              <Input
+              <PhoneInput
                 label="Phone number"
                 name="phone"
-                type="tel"
-                placeholder="+2348012345678"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={setPhone}
                 error={error ?? undefined}
                 required
               />

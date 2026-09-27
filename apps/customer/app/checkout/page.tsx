@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Input, useAuthSession } from "@closebuy/ui";
+import { Button, Input, PhoneInput, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
-import { formatNaira, minor, normalizePhone } from "@closebuy/types";
+import { formatNaira, minor } from "@closebuy/types";
 import type { CheckoutInput } from "@closebuy/types";
 import { catalogApi, customerAuthApi, orderApi } from "@/lib/api";
 import { useCart } from "@/lib/cart";
@@ -131,8 +131,8 @@ export default function CheckoutPage() {
         deliveryLng: isDelivery ? lng! : undefined,
         deliveryLandmark: isDelivery ? landmark.trim() : undefined,
         paymentMethod: paymentChoice === "cash_on_delivery" ? "cash_on_delivery" : "card",
-        contactPhone: normalizePhone(contactPhone),
-        alternateContactPhone: normalizePhone(alternateContactPhone) || undefined,
+        contactPhone,
+        alternateContactPhone: alternateContactPhone || undefined,
         email: !session && paymentChoice === "online" ? email.trim() || undefined : undefined,
       };
 
@@ -140,7 +140,7 @@ export default function CheckoutPage() {
 
       if (session && saveAsDefault) {
         // Best-effort — never blocks a successful order on a profile-save failing.
-        customerAuthApi.updateProfile({ defaultPhone: normalizePhone(contactPhone) }).catch(() => {});
+        customerAuthApi.updateProfile({ defaultPhone: contactPhone }).catch(() => {});
       }
 
       clearCart();
@@ -210,21 +210,8 @@ export default function CheckoutPage() {
 
       <section className="flex flex-col gap-3">
         <p className="text-sm font-medium text-ink">Contact</p>
-        <Input
-          label="Phone number"
-          type="tel"
-          value={contactPhone}
-          onChange={(e) => setContactPhone(e.target.value)}
-          placeholder="+2348012345678"
-          required
-        />
-        <Input
-          label="Alternate number (optional)"
-          type="tel"
-          value={alternateContactPhone}
-          onChange={(e) => setAlternateContactPhone(e.target.value)}
-          placeholder="+2348012345678"
-        />
+        <PhoneInput label="Phone number" value={contactPhone} onChange={setContactPhone} required />
+        <PhoneInput label="Alternate number (optional)" value={alternateContactPhone} onChange={setAlternateContactPhone} />
         {session && (
           <label className="flex items-center gap-2 text-xs text-muted">
             <input type="checkbox" checked={saveAsDefault} onChange={(e) => setSaveAsDefault(e.target.checked)} />
