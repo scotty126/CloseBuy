@@ -17,6 +17,7 @@ function createFakePrisma() {
   const riders = new Map<string, any>();
   const customers = new Map<string, any>();
   const items: any[] = [];
+  const products = new Map<string, any>();
   const transitions: any[] = [];
   const payments = new Map<string, any>(); // keyed by orderId
   const ledgerEntries: any[] = [];
@@ -66,6 +67,17 @@ function createFakePrisma() {
         return t;
       },
     },
+    orderItem: {
+      findMany: async ({ where }: any) => items.filter((i) => i.orderId === where.orderId),
+    },
+    product: {
+      update: async ({ where, data }: any) => {
+        const p = products.get(where.id);
+        const updated = { ...p, stock: p.stock + data.stock.increment };
+        products.set(where.id, updated);
+        return updated;
+      },
+    },
     payment: {
       findUnique: async ({ where }: any) => payments.get(where.orderId) ?? null,
       update: async ({ where, data }: any) => {
@@ -84,6 +96,9 @@ function createFakePrisma() {
     vendorProfile: { findUnique: async ({ where }: any) => vendors.get(where.id) ?? null },
     riderProfile: { findUnique: async ({ where }: any) => riders.get(where.id) ?? null },
     customerProfile: { findUnique: async ({ where }: any) => customers.get(where.id) ?? null },
+    // Array form only (forceCancelOrder's only use here) — the calls are already-started promises by the time
+    // this runs, same as real Prisma's array form; this fake doesn't attempt real atomicity, just awaits them.
+    $transaction: async (arg: any) => (Array.isArray(arg) ? Promise.all(arg) : arg(db)),
     auditLog: {
       create: async ({ data }: any) => {
         const a = { id: id(), createdAt: new Date(), ...data };
@@ -91,7 +106,7 @@ function createFakePrisma() {
         return a;
       },
     },
-    __state: { orders, vendors, riders, customers, items, transitions, payments, ledgerEntries, auditLog },
+    __state: { orders, vendors, riders, customers, items, products, transitions, payments, ledgerEntries, auditLog },
   };
 
   function withRelations(order: any, include: any) {
@@ -243,6 +258,56 @@ describe("admin order oversight — forceCancelOrder", () => {
     const svc = createAdminOrderService({ prisma, monnify: createFakeMonnify(), notifications: createFakeNotifications() });
 
     await expect(svc.forceCancelOrder(ADMIN_ID, ORDER_ID, "reason")).rejects.toThrow(InvalidOrderStateError);
+  });
+
+  // US-V-04's own acceptance criterion: "a cancelled or rejected order returns its stock." Force-cancel is the
+  // one path that can stop an order after acceptOrder's atomic decrement already ran (order/service.ts) — until
+  // this was fixed it never gave that stock back.
+  describe("returns stock for an order that had already been accepted (a real, live gap until fixed)", () => {
+    function seedTwoItemOrder(prisma: ReturnType<typeof createFakePrisma>, status: string) {
+      prisma.__state.orders.set(ORDER_ID, baseOrder({ status, paymentMethod: "cash_on_delivery" }));
+      prisma.__state.payments.set(ORDER_ID, { id: "pay_1", orderId: ORDER_ID, status: "pending", gateway: "cash", gatewayReference: "ref_1" });
+      prisma.__state.vendors.set(VENDOR_ID, { userId: "vendor_user_1" });
+      prisma.__state.products.set("prod_a", { id: "prod_a", stock: 3 });
+      prisma.__state.products.set("prod_b", { id: "prod_b", stock: 0 });
+      prisma.__state.items.push(
+        { orderId: ORDER_ID, productId: "prod_a", quantity: 2, nameSnapshot: "Coca-Cola 35cl" },
+        { orderId: ORDER_ID, productId: "prod_b", quantity: 1, nameSnapshot: "Eva Water 75cl" },
+      );
+    }
+
+    it.each(["PREPARING", "READY_FOR_PICKUP", "RIDER_ASSIGNED", "IN_TRANSIT"])("restores every item's stock when force-cancelling from %s", async (status) => {
+      const prisma = createFakePrisma();
+      seedTwoItemOrder(prisma, status);
+      const svc = createAdminOrderService({ prisma, monnify: createFakeMonnify(), notifications: createFakeNotifications() });
+
+      await svc.forceCancelOrder(ADMIN_ID, ORDER_ID, "Vendor can't fulfil");
+
+      expect(prisma.__state.products.get("prod_a").stock).toBe(5); // 3 + 2
+      expect(prisma.__state.products.get("prod_b").stock).toBe(1); // 0 + 1 — the whole point: a sold-out item becomes available again
+    });
+
+    it("does NOT touch stock when cancelling a still-PAID order — acceptOrder never decremented it yet", async () => {
+      const prisma = createFakePrisma();
+      seedTwoItemOrder(prisma, "PAID");
+      const svc = createAdminOrderService({ prisma, monnify: createFakeMonnify(), notifications: createFakeNotifications() });
+
+      await svc.forceCancelOrder(ADMIN_ID, ORDER_ID, "Customer changed their mind, vendor never accepted");
+
+      expect(prisma.__state.products.get("prod_a").stock).toBe(3); // unchanged
+      expect(prisma.__state.products.get("prod_b").stock).toBe(0); // unchanged
+    });
+
+    it("does NOT touch stock when force-cancelling a DELIVERED order — those goods are with the customer, not sellable inventory", async () => {
+      const prisma = createFakePrisma();
+      seedTwoItemOrder(prisma, "DELIVERED");
+      const svc = createAdminOrderService({ prisma, monnify: createFakeMonnify(), notifications: createFakeNotifications() });
+
+      await svc.forceCancelOrder(ADMIN_ID, ORDER_ID, "Goodwill cancellation after delivery");
+
+      expect(prisma.__state.products.get("prod_a").stock).toBe(3);
+      expect(prisma.__state.products.get("prod_b").stock).toBe(0);
+    });
   });
 });
 

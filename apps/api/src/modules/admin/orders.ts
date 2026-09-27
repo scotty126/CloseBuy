@@ -180,6 +180,22 @@ export function createAdminOrderService({ prisma, monnify, notifications }: Admi
       }
 
       const fromStatus = order.status;
+
+      // US-V-04's own acceptance criterion: "a cancelled or rejected order returns its stock." The two normal
+      // paths (order/service.ts's self-service cancelOrder and vendor rejectOrder) never need this — both only
+      // ever act on a still-PAID order, and stock is only ever decremented at accept time (PAID -> PREPARING),
+      // so there's nothing to give back yet. Force-cancel is the one path that can stop an order *after* that
+      // decrement already happened, and until now it never reversed it — a real, live gap, not a hypothetical
+      // one: stock silently stayed down every time an admin force-cancelled an accepted order. Excludes
+      // DELIVERED deliberately: those goods are with the customer, not sellable inventory the vendor still has
+      // — force-cancelling a delivered order is a financial correction (force-refund is the more natural tool
+      // for that), not an inventory event, and shouldn't hand stock back that isn't really there.
+      const STOCK_ALREADY_TAKEN_STATUSES = ["PREPARING", "READY_FOR_PICKUP", "RIDER_ASSIGNED", "IN_TRANSIT"];
+      if (STOCK_ALREADY_TAKEN_STATUSES.includes(fromStatus)) {
+        const items = await prisma.orderItem.findMany({ where: { orderId } });
+        await prisma.$transaction(items.map((item) => prisma.product.update({ where: { id: item.productId }, data: { stock: { increment: item.quantity } } })));
+      }
+
       await prisma.order.update({ where: { id: orderId }, data: { status: "CANCELLED" } });
       await writeTransition(prisma, orderId, fromStatus, "CANCELLED", adminUserId, reason);
 
