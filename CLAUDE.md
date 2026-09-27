@@ -408,22 +408,80 @@ caught, all fixed same-session:
   billing is unblocked — the module's shape (`search` → `[{label,lat,lng}]`,
   `reverse` → `label`) is deliberately provider-agnostic for exactly that
   swap.
+- **Reconciliation (US-A-05's other half) — the last unbuilt Admin story,
+  now built,** plus a bigger real gap found alongside it. New
+  `apps/api/src/modules/admin/reconciliation.ts` (`GET /admin/reconciliation`)
+  and admin `/payouts`. Lifetime totals, not date-ranged — "do the books
+  check out right now" doesn't need a period window, and one would only
+  complicate a Payout/remittance landing outside whatever range the ledger
+  entry it corresponds to falls in. Every individual ledger write is
+  already balance-asserted at the source (`order/ledger.ts`'s
+  `assertBalanced`), so a platform-wide debit/credit mismatch is checked
+  but should be structurally impossible; the two checks that actually earn
+  their keep are per-payee: has a vendor ever been paid more than the
+  ledger credited them (`vendor_payable` vs. `paid` `Payout` rows), and
+  does a rider's live `cashBalanceMinor` equal cash collected
+  (`rider_cash_float` ledger debits) minus cash remitted
+  (`rider_cash_remittances`) — the second one is a real, already-known bug
+  class: `confirmDelivery` (`dispatch/service.ts`) posts the COD ledger
+  entry and increments `cashBalanceMinor` as two separate statements, not
+  one transaction, and a crash between them would show up here as exactly
+  this mismatch. **US-A-05's own acceptance criterion also asks for
+  gateway-settlement-vs-ledger comparison — genuinely not buildable yet,**
+  Monnify isn't configured so there's no real settlement data anywhere;
+  the report says so honestly (`gatewaySettlement.reason`) rather than
+  fabricating a comparison, and distinguishes "not configured" from
+  "configured but the fetch isn't built" for when that changes.
+  **Bigger finding while scoping this:** the admin `/payouts` page was a
+  bare `Placeholder` component — but `GET/POST /admin/payouts/*`
+  (approve/reject a vendor's withdrawal request) already existed and
+  worked, real and live since early M1, with `PendingPayoutRequest`/
+  `VendorBalanceDto`/`PayoutDto` types already written — nothing in any
+  frontend ever called them. A real vendor payout request had no way to
+  be acted on except a raw API call. Built the missing half of the same
+  page: a request queue with approve/reject (mandatory reason on reject,
+  matching every other admin action), pulled from `packages/api-client`
+  additions of the same name. Approving with Monnify unconfigured fails
+  exactly like it should (the existing `approvePayout` catches the
+  `PaymentsUnavailableError` and marks the payout `failed` with that
+  reason) — not specially handled, the UI just shows whatever the API
+  says. 15 new unit tests (`reconciliation.test.ts`). **Verified against
+  the live API for the payout-request half** (that part's backend was
+  already deployed) — real session, real empty queue, no errors; the
+  reconciliation half correctly degrades to a visible, scoped error
+  ("That doesn't exist.") without breaking the rest of the page, since its
+  route isn't deployed yet. Both halves' actual UI (cards, discrepancy
+  panel, ledger table, tiles) verified by rendering against realistic
+  fixture data instead.
 
 **None of this is pushed yet** (still holding off per the Netlify-credits
-constraint below) — all local-only commits on `main`. `pnpm typecheck`,
-`lint`, and `test` (262 tests) all green as of the last commit in this
-list. The 4-digit-code and geocoding changes are both genuinely
-untestable end-to-end without a deploy (see their notes above) — this is a
-real, active decision point, not an oversight: ask before pushing next, and
-say plainly that it also triggers the three auto-connected Netlify sites,
-not just Railway (no way to push to one without the other, short of
-disconnecting their auto-deploy, which hasn't been done).
+constraint below, and then explicitly told not to) — all local-only commits
+on `main`. `pnpm typecheck`, `lint`, and `test` (277 tests) all green as of
+the last commit in this list. The 4-digit-code and geocoding changes are
+both genuinely untestable end-to-end without a deploy (see their notes
+above) — this is a real, active decision point, not an oversight: ask
+before pushing next, and say plainly that it also triggers the three
+auto-connected Netlify sites, not just Railway (no way to push to one
+without the other, short of disconnecting their auto-deploy, which hasn't
+been done).
 
 ## What's next
 
-In priority order, picking up from the admin buildout — every S/M-priority
-Admin story (US-A-01 through US-A-04 and US-A-06 through US-A-08) is now built;
-only reconciliation remains there. Self-service cancellation,
+**Every Admin story is now built (US-A-01 through US-A-08)** — reconciliation
+(US-A-05's other half) was the last one, built 2026-09-27 (see the dated
+section above): `apps/api/src/modules/admin/reconciliation.ts`,
+`GET /admin/reconciliation`, admin `/payouts`. **Found and fixed alongside
+it, not originally scoped:** the admin payout-*approval* UI didn't exist
+either — `GET/POST /admin/payouts/*` (approve/reject a vendor's withdrawal
+request) had been real and working since early M1, `PendingPayoutRequest`/
+`VendorBalanceDto`/`PayoutDto` types already existed, but nothing in any
+frontend ever called them. A real vendor payout request had no way to be
+acted on except a raw API call. Exactly the "working-looking backend, zero
+UI" pattern that's bitten this project before (disputes, ratings) — grep the
+actual frontend before trusting a doc that says a story is "built" from the
+backend alone; this file has been wrong about that repeatedly.
+
+In priority order, picking up from there. Self-service cancellation,
 inventory-race handling, order history/reorder, disputes and ratings are
 also done end to end (see above), as is rider cash remittance — an
 earlier version of this section listed some of these as still to do,
@@ -432,14 +490,7 @@ something isn't built:
 1. **M3 hardening — what's genuinely left.** The customer-facing S-priority
    stories (US-C-08 through US-C-11) are all built now. Still to do, none
    of it audited closely yet — grep the actual frontend, don't trust that a
-   backend endpoint existing means the feature does (that's exactly how
-   disputes and ratings turned out to have working-looking backends and
-   zero UI, plus real gaps under them):
-   - The reconciliation report (US-A-05's other half) — still an admin
-     placeholder, and the last unbuilt Admin story. It must account for
-     `rider_cash_remittances` and `Payout` rows alongside the ledger —
-     neither posts ledger entries (see the remittance note above) — and
-     for goodwill/partial-refund money that metrics' gross can't see.
+   backend endpoint existing means the feature does:
    - US-R-06 (failed delivery) and the other rider/vendor S-stories —
      unchecked.
 2. **Desktop-responsive layout** for customer/vendor/rider — explicitly
