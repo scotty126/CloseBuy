@@ -35,6 +35,7 @@ function createFakePrisma() {
   const payouts: any[] = [];
   const disputes = new Map<string, any>();
   const ratings = new Map<string, any>(); // keyed by `${orderId}:${targetType}`, same shape as Rating's real @@unique
+  const addresses = new Map<string, any>();
   // Same defaults as prisma/seed.ts — the order service reads these
   // through lib/config.ts exactly the way it would read real seeded rows.
   const config = new Map<string, any>([
@@ -72,6 +73,9 @@ function createFakePrisma() {
     customerProfile: {
       findUnique: async ({ where }: any) =>
         where.id ? (customers.get(where.id) ?? null) : [...customers.values()].find((c) => c.userId === where.userId) ?? null,
+    },
+    address: {
+      findUnique: async ({ where }: any) => addresses.get(where.id) ?? null,
     },
     riderProfile: {
       findUnique: async ({ where }: any) =>
@@ -194,7 +198,7 @@ function createFakePrisma() {
     },
     $transaction: async (fn: any) => fn(db),
     // Exposed for assertions, not part of the real Prisma surface.
-    __state: { vendors, products, customers, riders, orders, orderItems, transitions, payments, ledgerEntries, payouts, disputes, ratings },
+    __state: { vendors, products, customers, riders, orders, orderItems, transitions, payments, ledgerEntries, payouts, disputes, ratings, addresses },
   };
 
   function applyOps(existing: any, data: any) {
@@ -326,6 +330,26 @@ describe("order service — checkout (US-C-06)", () => {
   it("rejects a delivery order whose address falls outside the service area (brief §2a — Riverpark only)", async () => {
     const input = { ...baseInput(), fulfilmentType: "delivery" as const, deliveryLat: 55, deliveryLng: 55, deliveryLandmark: "Somewhere else entirely" };
     await expect(service().checkout(input, null, "idem-area-2")).rejects.toThrow(OutsideServiceAreaError);
+  });
+
+  it("stores addressId on the order when it's the signed-in customer's own saved address (US-C-05)", async () => {
+    prisma.__state.customers.set(CUSTOMER_ID, { id: CUSTOMER_ID, userId: CUSTOMER_USER_ID });
+    prisma.__state.addresses.set("addr_1", { id: "addr_1", customerId: CUSTOMER_ID, label: "Home" });
+    const input = { ...baseInput(), fulfilmentType: "delivery" as const, deliveryLat: 5, deliveryLng: 5, deliveryLandmark: "Blue gate", addressId: "addr_1" };
+
+    const result = await service().checkout(input, { sub: CUSTOMER_USER_ID, role: "customer" }, "idem-addr-1");
+
+    expect((result.order as any).addressId).toBe("addr_1");
+  });
+
+  it("silently drops an addressId that belongs to someone else, rather than trusting a client-submitted id", async () => {
+    prisma.__state.customers.set(CUSTOMER_ID, { id: CUSTOMER_ID, userId: CUSTOMER_USER_ID });
+    prisma.__state.addresses.set("addr_2", { id: "addr_2", customerId: "some_other_customer", label: "Not yours" });
+    const input = { ...baseInput(), fulfilmentType: "delivery" as const, deliveryLat: 5, deliveryLng: 5, deliveryLandmark: "Blue gate", addressId: "addr_2" };
+
+    const result = await service().checkout(input, { sub: CUSTOMER_USER_ID, role: "customer" }, "idem-addr-2");
+
+    expect((result.order as any).addressId).toBeUndefined();
   });
 
   it("rejects checkout for more items than are in stock", async () => {

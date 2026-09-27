@@ -200,6 +200,16 @@ export function createOrderService(deps: OrderServiceDeps) {
       const customer =
         auth?.role === "customer" ? await prisma.customerProfile.findUnique({ where: { userId: auth.sub } }) : null;
 
+      // Never authoritative for the order itself (deliveryLat/Lng/Landmark below are the real,
+      // copied source of truth) — just a "this corresponds to one of my saved addresses" tag
+      // (US-C-05). Dropped silently rather than a hard error if it isn't actually the customer's
+      // own, since getting this wrong changes nothing about where the order actually ships.
+      let addressId: string | undefined;
+      if (input.addressId && customer) {
+        const address = await prisma.address.findUnique({ where: { id: input.addressId } });
+        if (address && address.customerId === customer.id) addressId = input.addressId;
+      }
+
       const order = await prisma.$transaction(async (tx) => {
         const created = await tx.order.create({
           data: {
@@ -209,7 +219,7 @@ export function createOrderService(deps: OrderServiceDeps) {
             alternateContactPhone: input.alternateContactPhone,
             fulfilmentType: input.fulfilmentType,
             scheduledFor: input.scheduledFor ? new Date(input.scheduledFor) : null,
-            addressId: input.addressId,
+            addressId,
             deliveryLat: input.deliveryLat,
             deliveryLng: input.deliveryLng,
             deliveryLandmark: input.deliveryLandmark,

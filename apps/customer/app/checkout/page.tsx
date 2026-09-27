@@ -6,7 +6,7 @@ import { Button, Input, PhoneInput, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
 import { formatNaira, minor } from "@closebuy/types";
 import type { CheckoutInput } from "@closebuy/types";
-import type { GeocodeResultDto } from "@closebuy/types";
+import type { GeocodeResultDto, AddressDto } from "@closebuy/types";
 import { catalogApi, customerAuthApi, geocodeApi, orderApi } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { addGuestOrder } from "@/lib/guestOrders";
@@ -59,6 +59,16 @@ export default function CheckoutPage() {
   const [landmark, setLandmark] = useState("");
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+
+  // US-C-05 — a saved address is a shortcut into the same pin/landmark
+  // fields below, never a separate code path: picking one just prefills
+  // them, and selectedAddressId is cleared the moment anything about the
+  // pin changes afterward, so a stale "this is Home" tag can never survive
+  // onto a delivery that's since moved somewhere else.
+  const [savedAddresses, setSavedAddresses] = useState<AddressDto[] | null>(null);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [saveThisAddress, setSaveThisAddress] = useState(false);
+  const [newAddressLabel, setNewAddressLabel] = useState("");
   // A desktop/laptop has no GPS chip — the browser falls back to WiFi/IP
   // positioning, which can be off by hundreds of metres to several
   // kilometres and can return a different fix each time (which WiFi
@@ -112,9 +122,30 @@ export default function CheckoutPage() {
       .catch(() => {});
   }, [session]);
 
+  useEffect(() => {
+    if (!session || !isDelivery) return;
+    customerAuthApi
+      .listAddresses()
+      .then((res) => setSavedAddresses(res.addresses))
+      .catch(() => {}); // best-effort — checkout still works fully without this
+  }, [session, isDelivery]);
+
+  function selectSavedAddress(address: AddressDto) {
+    setLat(address.lat);
+    setLng(address.lng);
+    setLandmark(address.landmarkDescription);
+    setContactPhone(address.contactPhone);
+    setAddressLabel(address.label);
+    setAccuracyMeters(null);
+    setLocationError(null);
+    setShowManualHint(false);
+    setSelectedAddressId(address.id);
+  }
+
   function useCurrentLocation() {
     setLocationError(null);
     setAddressLabel(null);
+    setSelectedAddressId(null);
     if (!navigator.geolocation) {
       setLocationError("Your browser doesn't support location — enter coordinates manually below.");
       return;
@@ -149,6 +180,7 @@ export default function CheckoutPage() {
     setAccuracyMeters(null); // a geocoded match has no GPS-style accuracy figure — nothing to warn about
     setLocationError(null);
     setShowManualHint(false);
+    setSelectedAddressId(null);
   }
 
   if (!sessionLoaded || !cartLoaded || !cart.vendor || cart.items.length === 0) return null;
@@ -182,6 +214,7 @@ export default function CheckoutPage() {
         deliveryLat: isDelivery ? lat! : undefined,
         deliveryLng: isDelivery ? lng! : undefined,
         deliveryLandmark: isDelivery ? landmark.trim() : undefined,
+        addressId: isDelivery ? (selectedAddressId ?? undefined) : undefined,
         paymentMethod: paymentChoice === "cash_on_delivery" ? "cash_on_delivery" : "card",
         contactPhone,
         alternateContactPhone: alternateContactPhone || undefined,
@@ -194,6 +227,12 @@ export default function CheckoutPage() {
       if (session && saveAsDefault) {
         // Best-effort — never blocks a successful order on a profile-save failing.
         customerAuthApi.updateProfile({ defaultPhone: contactPhone }).catch(() => {});
+      }
+      if (session && isDelivery && saveThisAddress && newAddressLabel.trim() && lat !== null && lng !== null) {
+        // Also best-effort, same reasoning — the order is already placed regardless of whether this succeeds.
+        customerAuthApi
+          .createAddress({ label: newAddressLabel.trim(), lat, lng, landmarkDescription: landmark.trim(), contactPhone })
+          .catch(() => {});
       }
       if (!session) addGuestOrder(result.trackingToken); // so it shows up under Orders on this device — see lib/guestOrders.ts
 
@@ -231,6 +270,23 @@ export default function CheckoutPage() {
       {isDelivery ? (
         <section className="flex flex-col gap-2">
           <p className="text-sm font-medium text-ink">Delivery location</p>
+
+          {savedAddresses && savedAddresses.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {savedAddresses.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => selectSavedAddress(a)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                    selectedAddressId === a.id ? "border-primary bg-primary/10 text-primary" : "border-gray-300 text-ink"
+                  }`}
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           <AddressSearch onSelect={handleAddressSelected} />
 
@@ -273,6 +329,7 @@ export default function CheckoutPage() {
               setLng(newLng);
               setAccuracyMeters(null);
               setAddressLabel(null);
+              setSelectedAddressId(null);
             }}
           />
           {lat !== null && lng !== null && (
@@ -293,6 +350,7 @@ export default function CheckoutPage() {
                   setLat(e.target.value ? Number(e.target.value) : null);
                   setAccuracyMeters(null);
                   setAddressLabel(null);
+                  setSelectedAddressId(null);
                 }}
               />
               <Input
@@ -303,6 +361,7 @@ export default function CheckoutPage() {
                   setLng(e.target.value ? Number(e.target.value) : null);
                   setAccuracyMeters(null);
                   setAddressLabel(null);
+                  setSelectedAddressId(null);
                 }}
               />
             </div>
@@ -314,6 +373,18 @@ export default function CheckoutPage() {
             onChange={(e) => setLandmark(e.target.value)}
             required
           />
+
+          {session && !selectedAddressId && (
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 text-xs text-muted">
+                <input type="checkbox" checked={saveThisAddress} onChange={(e) => setSaveThisAddress(e.target.checked)} />
+                Save this address for next time
+              </label>
+              {saveThisAddress && (
+                <Input placeholder='Name it, e.g. "Home"' value={newAddressLabel} onChange={(e) => setNewAddressLabel(e.target.value)} />
+              )}
+            </div>
+          )}
         </section>
       ) : (
         <section className="rounded-lg bg-surface p-3 text-sm text-ink">
