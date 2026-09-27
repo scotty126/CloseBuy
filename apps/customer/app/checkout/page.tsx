@@ -41,9 +41,22 @@ export default function CheckoutPage() {
 
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
+  const [accuracyMeters, setAccuracyMeters] = useState<number | null>(null);
   const [landmark, setLandmark] = useState("");
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  // A desktop/laptop has no GPS chip — the browser falls back to WiFi/IP
+  // positioning, which can be off by hundreds of metres to several
+  // kilometres and can return a different fix each time (which WiFi
+  // networks are visible right now). Riverpark's real boundary is only
+  // ~700m across, smaller than that error margin, so "I'm standing in the
+  // same spot and it says I'm not in Riverpark" is a real, expected
+  // consequence of testing from a desktop, not a bug in the polygon check
+  // (lib/geo.ts) or the seeded boundary (prisma/seed.ts) — both are
+  // correct. Surfacing accuracy, rather than silently trusting whatever fix
+  // came back, is what makes that legible instead of a black box.
+  const POOR_ACCURACY_METERS = 300;
+  const [showManualHint, setShowManualHint] = useState(false);
 
   const [paymentChoice, setPaymentChoice] = useState<PaymentChoice>("online");
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +102,8 @@ export default function CheckoutPage() {
       (pos) => {
         setLat(pos.coords.latitude);
         setLng(pos.coords.longitude);
+        setAccuracyMeters(pos.coords.accuracy);
+        setShowManualHint(pos.coords.accuracy > POOR_ACCURACY_METERS);
         setLocating(false);
       },
       () => {
@@ -152,7 +167,20 @@ export default function CheckoutPage() {
       }
     } catch (err) {
       if (err instanceof ApiClientError) setIdempotencyKey(crypto.randomUUID());
-      setError(err instanceof ApiClientError ? err.message : "Couldn't reach CloseBuy. Check your connection and try again.");
+      if (err instanceof ApiClientError && err.code === "OUTSIDE_SERVICE_AREA") {
+        // The pin the server actually checked, not a vague "somewhere wrong" —
+        // most often this is desktop WiFi/IP geolocation drift (see the note by
+        // POOR_ACCURACY_METERS above), not a mistyped pin, so show it plainly
+        // rather than just repeating the API's own "we don't deliver there".
+        setError(
+          `${err.message} The location submitted was ${lat?.toFixed(5)}, ${lng?.toFixed(5)}` +
+            (accuracyMeters ? ` (accurate to about ±${Math.round(accuracyMeters)}m)` : "") +
+            ". If that's not where you are, enter exact coordinates below instead — look up your address on Google Maps, right-click the pin, and the coordinates are the first line of the menu that appears.",
+        );
+        setShowManualHint(true);
+      } else {
+        setError(err instanceof ApiClientError ? err.message : "Couldn't reach CloseBuy. Check your connection and try again.");
+      }
       setIsSubmitting(false);
     }
   }
@@ -169,28 +197,39 @@ export default function CheckoutPage() {
           </Button>
           {locationError && <p className="text-xs text-danger">{locationError}</p>}
           {lat !== null && lng !== null && (
-            <p className="text-xs text-muted">
+            <p className={`text-xs ${accuracyMeters && accuracyMeters > POOR_ACCURACY_METERS ? "text-danger" : "text-muted"}`}>
               {lat.toFixed(5)}, {lng.toFixed(5)}
+              {accuracyMeters !== null && ` — accurate to about ±${Math.round(accuracyMeters)}m`}
             </p>
           )}
-          <DeliveryLocationMap lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); }} />
+          {accuracyMeters !== null && accuracyMeters > POOR_ACCURACY_METERS && (
+            <p className="text-xs text-danger">
+              That&apos;s not precise — normal for a laptop with no GPS (it falls back to WiFi/IP location, which can
+              land hundreds of metres away and change between tries). Enter exact coordinates below instead.
+            </p>
+          )}
+          <DeliveryLocationMap lat={lat} lng={lng} onChange={(newLat, newLng) => { setLat(newLat); setLng(newLng); setAccuracyMeters(null); }} />
           {lat !== null && lng !== null && (
             <p className="text-xs text-muted">Drag the pin or tap the map to fine-tune the exact spot.</p>
           )}
-          <details className="text-xs text-muted">
+          <details className="text-xs text-muted" open={showManualHint} onToggle={(e) => setShowManualHint(e.currentTarget.open)}>
             <summary className="cursor-pointer select-none">Enter coordinates manually instead</summary>
+            <p className="mt-1.5">
+              On Google Maps: right-click your exact spot → the coordinates are the first line of the menu that
+              appears → tap to copy.
+            </p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <Input
                 placeholder="Latitude"
                 inputMode="decimal"
                 value={lat ?? ""}
-                onChange={(e) => setLat(e.target.value ? Number(e.target.value) : null)}
+                onChange={(e) => { setLat(e.target.value ? Number(e.target.value) : null); setAccuracyMeters(null); }}
               />
               <Input
                 placeholder="Longitude"
                 inputMode="decimal"
                 value={lng ?? ""}
-                onChange={(e) => setLng(e.target.value ? Number(e.target.value) : null)}
+                onChange={(e) => { setLng(e.target.value ? Number(e.target.value) : null); setAccuracyMeters(null); }}
               />
             </div>
           </details>
