@@ -305,6 +305,120 @@ once (the whole point of the shared package). **If anything upstream of
 this still behaves like the old cancel/accept/ready buttons doing
 nothing silently, that's not fixed elsewhere — check this.**
 
+## 2026-09-27 — a real testing session, several real bugs found and fixed
+
+The owner made themselves owner of **Grachi Pharmacy** (vendor) and a real
+rider profile ("Scott pippen", motorcycle, `apps/vendor`/`apps/rider` under
+`+2349077018785`) and walked a real order end to end against the live API —
+this surfaced several real bugs no amount of automated testing alone had
+caught, all fixed same-session:
+
+- **No session refresh — every login died after 15 minutes.**
+  `POST /auth/refresh` existed and `authApi.refresh()` was even exported,
+  but nothing ever called it. `createApiClient` (`packages/api-client`) now
+  retries once on a 401 from a request that sent a token: silent refresh,
+  persist the new access token, replay. Concurrent 401s share one in-flight
+  refresh. Verified against the live API by deliberately corrupting a real
+  session's access token and confirming it recovered transparently.
+- **`+234` phone preset** — new `PhoneInput` (`packages/ui`) pins a fixed
+  `+234` chip; typing `09077018785` shows `9077018785` next to it.
+  `toLocalDigits`/`NIGERIA_DIAL_CODE` (`packages/types/src/auth.ts`).
+  Replaces every phone `<Input>` across the four apps; the submit-time
+  `normalizePhone()` calls that made necessary are now redundant, removed.
+- **Mobile layout** — the shared `Sidebar` (`packages/ui`, used by
+  admin/vendor) was a permanent 224px column with no way to dismiss it; now
+  a top bar + drawer below `lg`, unchanged from `lg` up. Admin's wide
+  tables scroll inside their card instead of clipping.
+- **"Place order" did nothing** — the API had **no error handler at all**,
+  so every `schema.parse()` failure (e.g. a phone typed `0801…` instead of
+  `+234…`) was a 500 in Fastify's default shape, which the client couldn't
+  read, so it fell back to an empty `res.statusText` and rendered nothing.
+  New `apps/api/src/lib/error-handler.ts`: ZodError → 400
+  `VALIDATION_ERROR` naming the field, typed errors → their own code (503
+  `PAYMENTS_UNAVAILABLE`, 503 `GEOCODE_UNAVAILABLE`), anything else → a
+  generic 500 that no longer leaks internals. `client.ts`'s `readError`
+  accepts either shape. Checkout with online payment while Monnify is
+  unconfigured now refuses *before* writing an order (it used to create a
+  dead `PENDING_PAYMENT` row first, then a retry replayed it).
+- **Checkout raced its own empty-cart guard.** `clearCart()` (called right
+  before redirecting to the tracking page) re-triggered the page's own
+  "empty cart → back to `/cart`" effect, and that redirect usually won —
+  confirmed live, a real guest checkout landed on `/cart`, not its own
+  order. Fixed with `orderJustPlacedRef`, set the moment checkout succeeds,
+  that the guard effect now checks. **This was very likely the real root
+  cause of "guest orders go nowhere,"** more fundamental than the next
+  item.
+- **Guests had no way back to their orders.** By design, `/orders` was
+  signed-in-only (no account to list against server-side) — true, but a
+  dead end once a guest's one tracking link was lost. New
+  `apps/customer/lib/guestOrders.ts` remembers tracking tokens in that
+  browser (same pattern as the cart itself); `/orders` reads them back via
+  the same public trackingToken route the tracking page uses. Labelled
+  on-screen as same-device-only, not a synced account.
+- **Vendor's collection code vanished once a rider was assigned.**
+  `OrderCard` only showed it for `READY_FOR_PICKUP`; the moment
+  `RIDER_ASSIGNED` hit, the code box disappeared even though the code was
+  still live and still needed at the door. With more than one order in
+  flight, the vendor had no way to tell which card's code belonged to the
+  job actually being collected, and read out the wrong one — "that code
+  doesn't match" was the API correctly doing its job, not a bug there. Now
+  shown for both statuses (`apps/vendor/components/OrderCard.tsx`).
+- **All codes are now 4 digits, not 6** — OTP login codes and the
+  collection/delivery handoff codes both (`generateShortCode` in
+  `order/service.ts`, Termii's dev-fallback generator, every `code`
+  zod schema, every `maxLength`/placeholder in the four apps). A 4-digit
+  OTP is still safe: `MAX_ATTEMPTS = 5` lockout already existed
+  (`auth/service.ts`), so brute force tops out at 0.05% before locking.
+  **This one needs the API redeployed to be testable at all** — until
+  pushed, the live API still issues 6-digit codes while local frontends
+  now cap entry at 4, so pickup/delivery code confirmation is broken
+  *locally* in the meantime (OTP auto-signin is unaffected, it skips code
+  entry entirely).
+- **Address search, replacing raw coordinates as the primary input** — new
+  `apps/api/src/modules/geocode/` (`GET /geocode/search`,
+  `GET /geocode/reverse`), backed by **Nominatim (OpenStreetMap)**, not
+  Google Places — `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is still unset (Known
+  issues below). Deliberately **not** a replacement for the pin+landmark
+  model — brief §3.4 is explicit that street addressing is unreliable
+  across much of the launch market — only a faster way to *set* the same
+  lat/lng checkout already required; landmark stays required, current-
+  location and manual-coordinate entry stay as fallbacks. Scoped server-
+  side to the *real, current* service-area polygon (read from Config, not
+  a second hardcoded copy — `boundingBoxOf` in `geocode/service.ts`), so it
+  never suggests an address CloseBuy can't deliver to. New `AddressSearch`
+  component (`apps/customer`) debounces input, shows a dropdown, closes on
+  outside-click; "Use my current location" now also reverse-geocodes the
+  fix for a readable label, falling back to coordinates (with the accuracy
+  figure) when no label resolves — never hidden outright, since at that
+  point it's the only description of where the pin actually is.
+  Nominatim's usage policy (max 1 req/sec, a real identifying User-Agent,
+  no anonymous access) is enforced server-side: throttled + a 5-minute
+  cache, state closed over per service instance (module-level would have
+  meant one caller's throttle/cache bleeding into another's, and made
+  tests slow/order-dependent — the throttle interval is injectable for
+  exactly that reason, tests use ~15ms instead of the real ~1100ms). 10
+  new unit tests (`geocode/service.test.ts`), all passing in <50ms.
+  **Real coverage caveat, checked against live Nominatim, not assumed:**
+  results for Riverpark specifically are sparse — a broad term ("estate")
+  found the real "River Park Estate," but "road"/"close"/"market" found
+  nothing, and this is exactly what brief §3.4 predicted going in. Expect
+  this to work well for named landmarks/estates and often not for granular
+  street names; the pin-based fallbacks exist precisely because of this,
+  not as a formality. Worth revisiting with Google Places once Maps
+  billing is unblocked — the module's shape (`search` → `[{label,lat,lng}]`,
+  `reverse` → `label`) is deliberately provider-agnostic for exactly that
+  swap.
+
+**None of this is pushed yet** (still holding off per the Netlify-credits
+constraint below) — all local-only commits on `main`. `pnpm typecheck`,
+`lint`, and `test` (262 tests) all green as of the last commit in this
+list. The 4-digit-code and geocoding changes are both genuinely
+untestable end-to-end without a deploy (see their notes above) — this is a
+real, active decision point, not an oversight: ask before pushing next, and
+say plainly that it also triggers the three auto-connected Netlify sites,
+not just Railway (no way to push to one without the other, short of
+disconnecting their auto-deploy, which hasn't been done).
+
 ## What's next
 
 In priority order, picking up from the admin buildout — every S/M-priority
