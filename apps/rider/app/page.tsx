@@ -253,7 +253,7 @@ function PickupStep({ order, onChanged }: { order: RiderJobDto; onChanged: () =>
         <Input
           label="Collection code (ask the vendor to read it out)"
           inputMode="numeric"
-          maxLength={6}
+          maxLength={4}
           value={code}
           onChange={(e) => setCode(e.target.value)}
           required
@@ -284,7 +284,7 @@ function DeliveryStep({ order, onChanged }: { order: RiderJobDto; onChanged: () 
     setError(null);
 
     if (code.trim().length !== 6) {
-      setError("Ask the customer to read out their 6-digit code — it has to match before you can confirm.");
+      setError("Ask the customer to read out their 4-digit code — it has to match before you can confirm.");
       return;
     }
     const cashCollectedMinor = isCod ? Math.round(Number(cashCollected) * 100) : undefined;
@@ -375,7 +375,7 @@ function DeliveryStep({ order, onChanged }: { order: RiderJobDto; onChanged: () 
         <Input
           label="Confirmation code (ask the customer to read it out)"
           inputMode="numeric"
-          maxLength={6}
+          maxLength={4}
           value={code}
           onChange={(e) => setCode(e.target.value)}
           required

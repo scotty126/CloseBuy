@@ -55,7 +55,7 @@ export const rejectOrderSchema = z.object({
 export type RejectOrderInput = z.infer<typeof rejectOrderSchema>;
 
 export const confirmPickupSchema = z.object({
-  code: z.string().length(6),
+  code: z.string().length(4),
 });
 export type ConfirmPickupInput = z.infer<typeof confirmPickupSchema>;
 

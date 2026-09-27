@@ -75,7 +75,7 @@ export type OtpRequestInput = z.infer<typeof otpRequestSchema>;
 
 export const otpVerifySchema = z.object({
   phone: phoneSchema,
-  code: z.string().length(6, "Code must be 6 digits"),
+  code: z.string().length(4, "Code must be 4 digits"),
   // Required, not optional — this path is never a customer's (brief §3.1b).
   // US-V-01 / US-R-01 each collect their own role-specific profile after
   // this step.

@@ -75,7 +75,7 @@ export interface OrderServiceDeps {
 }
 
 function generateShortCode(): string {
-  return String(randomInt(100000, 999999)); // 6 digits — used for both collectionCode and deliveryCode
+  return String(randomInt(1000, 9999)); // 4 digits — used for both collectionCode and deliveryCode
 }
 
 // Shared by getOrder/getOrderByTrackingToken — exactly what the tracking

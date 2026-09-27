@@ -87,7 +87,7 @@ export function createTermiiClient(apiKey: string | undefined, senderId: string 
 /**
  * Stands in for Termii while TERMII_SENDER_ID is pending CAC approval
  * (OTP_DEV_FALLBACK=true — see env.ts, opt-in only, never automatic).
- * Generates a real 6-digit code and holds it in memory instead of
+ * Generates a real 4-digit code and holds it in memory instead of
  * sending an SMS, so the real requestOtp/verifyOtp flow — lockout
  * included — can be exercised end to end without a phone. The code is
  * logged and also handed back in sendOtp's own return value so routes.ts
@@ -100,7 +100,7 @@ export function createDevOtpClient(): TermiiClient {
   return {
     async sendOtp(phone: string) {
       const pinId = randomUUID();
-      const code = String(randomInt(100000, 999999));
+      const code = String(randomInt(1000, 9999));
       codesByPinId.set(pinId, code);
       console.log(`[otp-dev-fallback] code for ${phone}: ${code} (Termii not configured — TERMII_SENDER_ID pending CAC approval)`);
       return { pinId, devCode: code };

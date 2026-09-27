@@ -476,7 +476,7 @@ describe("order service — vendor actions (US-V-05/06)", () => {
     await svc.markReady(VENDOR_USER_ID, order.id);
 
     const withCode = prisma.__state.orders.get(order.id);
-    expect(withCode.collectionCode).toMatch(/^\d{6}$/);
+    expect(withCode.collectionCode).toMatch(/^\d{4}$/);
 
     await expect(svc.confirmCustomerPickup(VENDOR_USER_ID, order.id, { code: "000000" })).rejects.toThrow(InvalidCollectionCodeError);
 
@@ -579,7 +579,7 @@ describe("order service — vendor actions (US-V-05/06)", () => {
     await svc.acceptOrder(VENDOR_USER_ID, pickupOrder.id);
     await svc.markReady(VENDOR_USER_ID, pickupOrder.id);
     const storedPickup = prisma.__state.orders.get(pickupOrder.id);
-    expect(storedPickup.collectionCode).toMatch(/^\d{6}$/);
+    expect(storedPickup.collectionCode).toMatch(/^\d{4}$/);
     expect(storedPickup.deliveryCode).toBeNull();
 
     const { order: deliveryOrder } = await svc.checkout(
@@ -599,8 +599,8 @@ describe("order service — vendor actions (US-V-05/06)", () => {
     await svc.acceptOrder(VENDOR_USER_ID, deliveryOrder.id);
     await svc.markReady(VENDOR_USER_ID, deliveryOrder.id);
     const storedDelivery = prisma.__state.orders.get(deliveryOrder.id);
-    expect(storedDelivery.collectionCode).toMatch(/^\d{6}$/);
-    expect(storedDelivery.deliveryCode).toMatch(/^\d{6}$/);
+    expect(storedDelivery.collectionCode).toMatch(/^\d{4}$/);
+    expect(storedDelivery.deliveryCode).toMatch(/^\d{4}$/);
     expect(storedDelivery.deliveryCode).not.toBe(storedDelivery.collectionCode);
   });
 

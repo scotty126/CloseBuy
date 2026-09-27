@@ -202,7 +202,7 @@ async function run() {
   const readyOrder = vorders.find((o) => o.id === order.id);
   ok(readyOrder.status === "READY_FOR_PICKUP", "status READY_FOR_PICKUP", readyOrder.status);
   const collectionCode = readyOrder.collectionCode;
-  ok(/^\d{6}$/.test(collectionCode ?? ""), "vendor sees a 6-digit collection code", collectionCode);
+  ok(/^\d{4}$/.test(collectionCode ?? ""), "vendor sees a 4-digit collection code", collectionCode);
   ok(!("deliveryCode" in readyOrder), "vendor is NOT given the customer's delivery code");
 
   head("RIDER claims the job");
@@ -226,7 +226,7 @@ async function run() {
   head("HANDOFF 2 — rider -> customer (delivery code + cash)");
   const tr2 = (await call("GET", `/orders/track/${token}`)).json.order;
   const deliveryCode = tr2.deliveryCode;
-  ok(/^\d{6}$/.test(deliveryCode ?? ""), "customer's tracking page shows the delivery code", deliveryCode);
+  ok(/^\d{4}$/.test(deliveryCode ?? ""), "customer's tracking page shows the delivery code", deliveryCode);
   const badDel = await call("POST", `/orders/${order.id}/confirm-delivery`, { token: rt, body: { code: deliveryCode === "000000" ? "111111" : "000000", cashCollectedMinor: order.totalMinor } });
   ok(badDel.status === 400, "wrong delivery code is rejected", `HTTP ${badDel.status}`);
   const badCash = await call("POST", `/orders/${order.id}/confirm-delivery`, { token: rt, body: { code: deliveryCode, cashCollectedMinor: order.totalMinor - 100 } });

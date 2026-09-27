@@ -142,12 +142,12 @@ export default function LoginPage() {
             </form>
           ) : (
             <form onSubmit={handleVerifyOtp} className="flex flex-col gap-4">
-              <p className="text-sm text-muted">Enter the 6-digit code sent to {phone}</p>
+              <p className="text-sm text-muted">Enter the 4-digit code sent to {phone}</p>
               <Input
                 label="Verification code"
                 name="code"
                 inputMode="numeric"
-                maxLength={6}
+                maxLength={4}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 error={error ?? undefined}

@@ -37,7 +37,7 @@ export const confirmDeliverySchema = z
 export type ConfirmDeliveryInput = z.infer<typeof confirmDeliverySchema>;
 
 export const confirmCollectionSchema = z.object({
-  code: z.string().length(6),
+  code: z.string().length(4),
 });
 export type ConfirmCollectionInput = z.infer<typeof confirmCollectionSchema>;
 

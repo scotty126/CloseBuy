@@ -121,7 +121,7 @@ export function OrderCard({ order, onChanged }: { order: OrderDto; onChanged: ()
       {order.status === "READY_FOR_PICKUP" && isPickup && (
         expanded === "pickup" ? (
           <div className="flex flex-col gap-2 border-t border-gray-200 pt-2">
-            <Input placeholder="6-digit code" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
+            <Input placeholder="4-digit code" inputMode="numeric" maxLength={4} value={code} onChange={(e) => setCode(e.target.value)} />
             <div className="flex gap-2">
               <Button
                 disabled={busy || code.length !== 6}

@@ -7,7 +7,7 @@ describe("dev OTP fallback client (OTP_DEV_FALLBACK)", () => {
     const { pinId, devCode } = await client.sendOtp("+2348012345678");
 
     expect(pinId).toEqual(expect.any(String));
-    expect(devCode).toMatch(/^\d{6}$/);
+    expect(devCode).toMatch(/^\d{4}$/);
 
     const { verified } = await client.verifyOtp(pinId, devCode!);
     expect(verified).toBe(true);
