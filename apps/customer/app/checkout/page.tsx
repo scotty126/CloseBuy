@@ -8,6 +8,7 @@ import { formatNaira, minor } from "@closebuy/types";
 import type { CheckoutInput } from "@closebuy/types";
 import { catalogApi, customerAuthApi, orderApi } from "@/lib/api";
 import { useCart } from "@/lib/cart";
+import { addGuestOrder } from "@/lib/guestOrders";
 import { DeliveryLocationMap } from "@/components/DeliveryLocationMap";
 
 type PaymentChoice = "online" | "cash_on_delivery";
@@ -70,8 +71,15 @@ export default function CheckoutPage() {
     if (error) errorRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [error]);
 
+  // Guards against landing on this page with nothing in the cart (a stale bookmark, the back button after
+  // checkout, a manually-typed URL) — NOT against a cart that's empty *because checkout just succeeded and
+  // cleared it*. Without orderJustPlacedRef, clearCart() below re-triggers this same effect (cart.items.length
+  // now 0) and its router.replace("/cart") would race the redirect to the tracking page and usually win,
+  // since it fires from a commit this page's own re-render causes, right as the intended navigation is still
+  // in flight. Confirmed live: a real guest checkout landed on /cart, not the order it had just placed.
+  const orderJustPlacedRef = useRef(false);
   useEffect(() => {
-    if (!cartLoaded) return;
+    if (!cartLoaded || orderJustPlacedRef.current) return;
     if (!cart.vendor || cart.items.length === 0) router.replace("/cart");
   }, [cartLoaded, cart.vendor, cart.items.length, router]);
 
@@ -152,11 +160,13 @@ export default function CheckoutPage() {
       };
 
       const result = await orderApi.checkout(input, idempotencyKey);
+      orderJustPlacedRef.current = true; // before clearCart() below empties it and would otherwise bounce us to /cart
 
       if (session && saveAsDefault) {
         // Best-effort — never blocks a successful order on a profile-save failing.
         customerAuthApi.updateProfile({ defaultPhone: contactPhone }).catch(() => {});
       }
+      if (!session) addGuestOrder(result.trackingToken); // so it shows up under Orders on this device — see lib/guestOrders.ts
 
       clearCart();
 
