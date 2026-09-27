@@ -68,7 +68,12 @@ export function OrderCard({ order, onChanged }: { order: OrderDto; onChanged: ()
         {!isPickup && order.deliveryLandmark && <> · {order.deliveryLandmark}</>}
       </div>
 
-      {order.status === "READY_FOR_PICKUP" && !isPickup && order.collectionCode && (
+      {/* The code is still needed at the door for as long as pickup hasn't happened yet — READY_FOR_PICKUP
+          (no rider has claimed it) AND RIDER_ASSIGNED (one has, but hasn't arrived/confirmed collection). It
+          used to disappear from this card the moment a rider was assigned, even though it was still live and
+          still required — a vendor with more than one order in flight at once had no way to tell which
+          card's code belonged to the job actually being picked up, and would read out the wrong one. */}
+      {(order.status === "READY_FOR_PICKUP" || order.status === "RIDER_ASSIGNED") && !isPickup && order.collectionCode && (
         <div className="rounded-lg border-2 border-dashed border-primary px-3 py-2 text-center">
           <p className="text-[10px] text-muted">Read this to the rider when they arrive</p>
           <p className="text-xl font-bold tracking-widest text-primary">{order.collectionCode}</p>
