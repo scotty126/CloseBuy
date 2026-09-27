@@ -488,11 +488,51 @@ earlier version of this section listed some of these as still to do,
 which was wrong; verify against the code, not this list, before assuming
 something isn't built:
 1. **M3 hardening — what's genuinely left.** The customer-facing S-priority
-   stories (US-C-08 through US-C-11) are all built now. Still to do, none
-   of it audited closely yet — grep the actual frontend, don't trust that a
-   backend endpoint existing means the feature does:
-   - US-R-06 (failed delivery) and the other rider/vendor S-stories —
-     unchecked.
+   stories (US-C-08 through US-C-11) are all built now. **US-R-06 (failed
+   delivery) audited and finished 2026-09-27** — the backend
+   (`reportDeliveryFailed`) and a rider-side report-failure form had
+   existed since early Rider work, but two of the story's four acceptance
+   criteria weren't actually met: "alerts admin" had nothing on the admin
+   side at all (`order_delivery_failed` was customer-only), and "the rider
+   is instructed whether to return the goods" had zero UI — the form just
+   closed and dropped the rider back to "waiting for a job" holding a real
+   package with no guidance. Fixed: `notifyAllAdmins` (dispatch/service.ts,
+   queries every `role: "admin"` User row — no such broadcast helper
+   existed before this, `notify()` is per-user) now fires alongside the
+   customer notification; `ReturnGoodsScreen` (apps/rider/app/page.tsx)
+   shows after a reported failure — vendor name/landmark, Navigate/Call,
+   an explicit "I've returned the goods" acknowledgement (local UI state
+   only, nothing server-side tracks a return — no field exists for it, so
+   this never claims to have recorded something it hasn't) — before
+   falling back to the normal duty-polling loop. The money criterion
+   ("cash already collected is tracked") was already fine as-is: COD only
+   collects cash at `confirmDelivery`, which a failed delivery never
+   reaches, so there's nothing to track for that path; an online-paid
+   order can already be refunded via the existing `forceRefundOrder`
+   (admin/orders.ts has no status guard, so DELIVERY_FAILED was already a
+   valid state for it). 6 new tests (dispatch/service.test.ts). Verified
+   live end to end: a real order walked through checkout → accept → ready
+   → claim → confirm-collection → report-failed against the live API,
+   driving the real rider frontend the whole way — `ReturnGoodsScreen`
+   rendered with the real vendor's real pickup address, and "Done"
+   correctly returned to the normal active-job flow (confirmed by it
+   picking up a second, leftover order from an earlier interrupted test
+   run — proof the flow re-queries properly rather than getting stuck).
+   The admin-notification half is unit-tested only, not live — its route
+   isn't deployed yet.
+   **Also found and fixed while auditing this: a real, live-breaking
+   regression from the earlier 4-digit-code change** —
+   `apps/rider/app/page.tsx` (collection-code submit button, delivery-code
+   confirm validation, delivery-code submit button) and
+   `apps/vendor/components/OrderCard.tsx` (collection-code submit button)
+   all still compared `code.length` against `6`, not `4`. The original
+   sweep's grep pattern didn't match a bare `.length !== 6`. Live effect:
+   every one of those submit buttons was permanently disabled and
+   confirm-delivery's own validation rejected a correct 4-digit code
+   outright — pickup and delivery confirmation were both fully blocked,
+   independent of whether the API was deployed. Fixed immediately on
+   discovery, separate commit, before this feature was even scoped.
+   Other rider/vendor S-stories: still unaudited.
 2. **Desktop-responsive layout** for customer/vendor/rider — explicitly
    deferred pre-launch, mobile-only for now by the user's own call.
 3. **ToS / Privacy Policy** — needed before real public launch and before
