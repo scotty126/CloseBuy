@@ -27,6 +27,11 @@ function DutyScreen({ rider, refetchRider }: { rider: RiderProfileDto; refetchRi
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [togglingDuty, setTogglingDuty] = useState(false);
+  // Set the moment reportDeliveryFailed succeeds, from the order that was just active — `load()` would
+  // otherwise immediately drop it (getActiveJob() returns null once the order is DELIVERY_FAILED) and the
+  // rider would land back on "waiting for a job" mid-sentence, never told where to take what they're still
+  // physically holding (US-R-06's own acceptance criterion: "instructed whether to return the goods").
+  const [justFailedOrder, setJustFailedOrder] = useState<RiderJobDto | null>(null);
 
   function load() {
     if (!rider.onDuty) return;
@@ -71,8 +76,20 @@ function DutyScreen({ rider, refetchRider }: { rider: RiderProfileDto; refetchRi
     );
   }
 
+  if (justFailedOrder) {
+    return (
+      <ReturnGoodsScreen
+        order={justFailedOrder}
+        onDone={() => {
+          setJustFailedOrder(null);
+          load();
+        }}
+      />
+    );
+  }
+
   if (activeJob) {
-    return <ActiveJob order={activeJob} onChanged={load} />;
+    return <ActiveJob order={activeJob} onChanged={load} onFailed={(order) => { setActiveJob(null); setJustFailedOrder(order); }} />;
   }
 
   const currentOffer = offers.find((o) => !dismissedIds.has(o.id));
@@ -206,11 +223,39 @@ function OfferScreen({
   );
 }
 
-function ActiveJob({ order, onChanged }: { order: RiderJobDto; onChanged: () => void }) {
+function ActiveJob({ order, onChanged, onFailed }: { order: RiderJobDto; onChanged: () => void; onFailed: (order: RiderJobDto) => void }) {
   return order.status === "RIDER_ASSIGNED" ? (
     <PickupStep order={order} onChanged={onChanged} />
   ) : (
-    <DeliveryStep order={order} onChanged={onChanged} />
+    <DeliveryStep order={order} onChanged={onChanged} onFailed={onFailed} />
+  );
+}
+
+/** US-R-06's own acceptance criterion: after a failed delivery, the rider is instructed whether to return the goods — every current failure reason (customer unreachable, wrong address, customer refused, other) leaves the rider still physically holding them with nowhere else they can reasonably go, so this always points back to the vendor rather than branching on the reason. Acknowledging here is local UI state only — nothing server-side tracks "returned" (no field exists for it), so this never claims to have recorded anything it hasn't. */
+function ReturnGoodsScreen({ order, onDone }: { order: RiderJobDto; onDone: () => void }) {
+  return (
+    <div className="flex flex-col gap-4 p-6">
+      <p className="text-xs font-medium uppercase tracking-wide text-danger">Delivery reported failed</p>
+
+      <div className="rounded-xl border border-warning/30 bg-warning/5 p-4">
+        <p className="text-lg font-semibold text-ink">Return these goods to {order.vendor.businessName}</p>
+        <p className="mt-1 text-sm text-muted">
+          This order couldn&apos;t be delivered. Take what you&apos;re carrying back to the vendor now — don&apos;t
+          attempt the delivery again without a new job offer.
+        </p>
+        <p className="mt-3 text-sm text-ink">{order.vendor.pickupLandmark}</p>
+        <div className="mt-3 flex gap-2">
+          <LinkButton href={mapsLink(order.vendor.pickupLat, order.vendor.pickupLng)} target="_blank" rel="noreferrer" className="flex-1">
+            Navigate
+          </LinkButton>
+          <LinkButton href={`tel:${order.vendor.pickupPhone}`} className="flex-1">
+            Call
+          </LinkButton>
+        </div>
+      </div>
+
+      <Button onClick={onDone}>I&apos;ve returned the goods</Button>
+    </div>
   );
 }
 
@@ -267,7 +312,7 @@ function PickupStep({ order, onChanged }: { order: RiderJobDto; onChanged: () =>
   );
 }
 
-function DeliveryStep({ order, onChanged }: { order: RiderJobDto; onChanged: () => void }) {
+function DeliveryStep({ order, onChanged, onFailed }: { order: RiderJobDto; onChanged: () => void; onFailed: (order: RiderJobDto) => void }) {
   const [recipientName, setRecipientName] = useState("");
   const [code, setCode] = useState("");
   const [cashCollected, setCashCollected] = useState("");
@@ -313,7 +358,7 @@ function DeliveryStep({ order, onChanged }: { order: RiderJobDto; onChanged: () 
     setBusy(true);
     try {
       await dispatchApi.reportDeliveryFailed(order.id, { reason: failReason, notes: failNotes.trim() || undefined });
-      onChanged();
+      onFailed(order); // not onChanged() — the parent needs this exact order to show the return-goods screen, and getActiveJob() won't have it anymore
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Couldn't report this.");
       setBusy(false);

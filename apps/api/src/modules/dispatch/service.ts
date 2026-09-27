@@ -90,6 +90,21 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
   }
 
   /**
+   * US-R-06's "alerts admin" — every admin User row, not a single fixed
+   * one (there is no built-in notification-centre UI anywhere yet to read
+   * these from — apps/admin has no bell/feed screen, same as every other
+   * app — but the row is written correctly and completely regardless, so
+   * nothing here needs revisiting once one exists). No precedent for
+   * "notify every admin" existed before this; `notify()` is per-user, so
+   * this just calls it once per admin rather than inventing a new
+   * broadcast primitive in the shared notifications module for one caller.
+   */
+  async function notifyAllAdmins(type: NotificationType, payload: Record<string, unknown>) {
+    const admins = await prisma.user.findMany({ where: { role: "admin" }, select: { id: true } });
+    await Promise.all(admins.map((a) => notifications.notify(a.id, type, payload)));
+  }
+
+  /**
    * Every order this module ever hands back to a rider goes through this
    * first. Both codes exist specifically so they have to come from
    * someone else in person (the vendor, then the customer) — a rider who
@@ -271,7 +286,17 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
       return redactForRider(updated);
     },
 
-    /** US-R-06 — admin follow-up (whether to return goods, refund) isn't built yet; this just records the failure honestly rather than pretending to resolve it. */
+    /**
+     * US-R-06. Admin follow-up on the money side (a refund for an
+     * online-paid order — a COD one never had anything charged through the
+     * gateway in the first place, since cash only changes hands at
+     * confirmDelivery, which this order never reached) already exists —
+     * forceRefundOrder (admin/orders.ts) has no status guard at all, so it
+     * already works from DELIVERY_FAILED. What was actually missing:
+     * admin was never told this happened (see notifyAllAdmins above), and
+     * the rider was never told what to do next (apps/rider/app/page.tsx's
+     * ReturnGoodsScreen) — both fixed alongside this comment, 2026-09-27.
+     */
     async reportDeliveryFailed(userId: string, orderId: string, input: DeliveryFailedInput) {
       const order = await getOwnedRiderOrder(userId, orderId);
       if (order.status !== "IN_TRANSIT") throw new JobUnavailableError(`Cannot report failure for an order in status ${order.status}.`);
@@ -280,6 +305,7 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
       await writeTransition(prisma, orderId, "IN_TRANSIT", "DELIVERY_FAILED", userId, `${input.reason}${input.notes ? `: ${input.notes}` : ""}`);
       const updated = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
       await notifyCustomer(updated, "order_delivery_failed", { orderId, reason: input.reason });
+      await notifyAllAdmins("order_delivery_failed", { orderId, reason: input.reason, notes: input.notes });
       return redactForRider(updated);
     },
 

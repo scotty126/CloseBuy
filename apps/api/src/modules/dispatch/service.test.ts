@@ -17,6 +17,7 @@ function createFakePrisma() {
   const riders = new Map<string, any>();
   const orders = new Map<string, any>();
   const customers = new Map<string, any>();
+  const users = new Map<string, any>();
   const transitions: any[] = [];
   const ledgerEntries: any[] = [];
   const remittances: any[] = [];
@@ -104,7 +105,10 @@ function createFakePrisma() {
       findMany: async ({ where }: any) =>
         remittances.filter((r) => r.riderId === where.riderId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
     },
-    __state: { riders, orders, customers, transitions, ledgerEntries, remittances, config },
+    user: {
+      findMany: async ({ where }: any) => [...users.values()].filter((u) => !where?.role || u.role === where.role),
+    },
+    __state: { riders, orders, customers, users, transitions, ledgerEntries, remittances, config },
   };
 
   function applyOps(existing: any, data: any) {
@@ -297,6 +301,69 @@ describe("dispatch service", () => {
 
     const order = await service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John", code: "654321" });
     expect(order.status).toBe("DELIVERED");
+  });
+
+  describe("reportDeliveryFailed (US-R-06)", () => {
+    it("moves the order to DELIVERY_FAILED and writes the reason (+ notes) to the transition history", async () => {
+      seedApprovedOnDutyRider(prisma);
+      seedOpenOrder(prisma, { status: "IN_TRANSIT", riderId: RIDER_ID, customerId: CUSTOMER_ID });
+
+      const order = await service().reportDeliveryFailed(RIDER_USER_ID, ORDER_ID, { reason: "customer_unreachable", notes: "No answer after 3 calls" });
+
+      expect(order.status).toBe("DELIVERY_FAILED");
+      expect(prisma.__state.orders.get(ORDER_ID).status).toBe("DELIVERY_FAILED");
+      const last = prisma.__state.transitions.at(-1);
+      expect(last).toMatchObject({ fromStatus: "IN_TRANSIT", toStatus: "DELIVERY_FAILED", actorType: "rider", actorId: RIDER_USER_ID });
+      expect(last.reason).toContain("customer_unreachable");
+      expect(last.reason).toContain("No answer after 3 calls");
+    });
+
+    it("refuses to report a failure for an order that isn't IN_TRANSIT", async () => {
+      seedApprovedOnDutyRider(prisma);
+      seedOpenOrder(prisma, { status: "RIDER_ASSIGNED", riderId: RIDER_ID });
+
+      await expect(service().reportDeliveryFailed(RIDER_USER_ID, ORDER_ID, { reason: "other" })).rejects.toThrow(JobUnavailableError);
+      expect(prisma.__state.orders.get(ORDER_ID).status).toBe("RIDER_ASSIGNED");
+    });
+
+    it("notifies the customer", async () => {
+      seedApprovedOnDutyRider(prisma);
+      seedOpenOrder(prisma, { status: "IN_TRANSIT", riderId: RIDER_ID, customerId: CUSTOMER_ID });
+
+      await service().reportDeliveryFailed(RIDER_USER_ID, ORDER_ID, { reason: "wrong_address" });
+
+      expect(notifications.notify).toHaveBeenCalledWith(CUSTOMER_USER_ID, "order_delivery_failed", expect.objectContaining({ orderId: ORDER_ID, reason: "wrong_address" }));
+    });
+
+    it("alerts every admin, not just the customer — the story's own acceptance criterion", async () => {
+      seedApprovedOnDutyRider(prisma);
+      seedOpenOrder(prisma, { status: "IN_TRANSIT", riderId: RIDER_ID, customerId: CUSTOMER_ID });
+      prisma.__state.users.set("admin_1", { id: "admin_1", role: "admin" });
+      prisma.__state.users.set("admin_2", { id: "admin_2", role: "admin" });
+      prisma.__state.users.set("some_vendor_user", { id: "some_vendor_user", role: "vendor" }); // must NOT be notified — only role: admin
+
+      await service().reportDeliveryFailed(RIDER_USER_ID, ORDER_ID, { reason: "customer_refused", notes: "Said they never ordered this" });
+
+      expect(notifications.notify).toHaveBeenCalledWith("admin_1", "order_delivery_failed", expect.objectContaining({ orderId: ORDER_ID, reason: "customer_refused", notes: "Said they never ordered this" }));
+      expect(notifications.notify).toHaveBeenCalledWith("admin_2", "order_delivery_failed", expect.anything());
+      expect(notifications.notify).not.toHaveBeenCalledWith("some_vendor_user", expect.anything(), expect.anything());
+    });
+
+    it("doesn't throw when there happen to be no admin users at all", async () => {
+      seedApprovedOnDutyRider(prisma);
+      seedOpenOrder(prisma, { status: "IN_TRANSIT", riderId: RIDER_ID, customerId: CUSTOMER_ID });
+
+      await expect(service().reportDeliveryFailed(RIDER_USER_ID, ORDER_ID, { reason: "other" })).resolves.toMatchObject({ status: "DELIVERY_FAILED" });
+    });
+
+    it("never exposes either handoff code to the rider on the returned order, same as every other rider-facing read", async () => {
+      seedApprovedOnDutyRider(prisma);
+      seedOpenOrder(prisma, { status: "IN_TRANSIT", riderId: RIDER_ID });
+
+      const order = await service().reportDeliveryFailed(RIDER_USER_ID, ORDER_ID, { reason: "other" });
+      expect(order).not.toHaveProperty("collectionCode");
+      expect(order).not.toHaveProperty("deliveryCode");
+    });
   });
 
   it("confirmDelivery: cash on delivery requires the exact total, and posts the collection ledger entries when correct", async () => {
