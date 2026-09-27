@@ -565,8 +565,33 @@ something isn't built:
    prove the *old*, gap-having behavior.
 2. **Desktop-responsive layout** for customer/vendor/rider — explicitly
    deferred pre-launch, mobile-only for now by the user's own call.
-3. **ToS / Privacy Policy** — needed before real public launch and before
-   Google OAuth can leave "Testing" mode.
+3. **ToS / Privacy Policy — written 2026-09-27.**
+   `apps/customer/app/terms/page.tsx` and `.../privacy/page.tsx`, hosted in
+   the customer app (the one surface a member of the public reaches
+   without a staff account already) — linked from the login, register,
+   and account pages there, and from the vendor and rider application
+   forms (cross-app links to the customer app's production URL, since the
+   content lives in one place). Grounded in what the system actually does,
+   not a generic template: the commission split (5%/10%), the escrow
+   holding window (~48h), and the service-area restriction are real
+   `Config` defaults (`prisma/seed.ts`), phrased as "currently" since
+   they're admin-adjustable; the third-party list (Termii, Monnify,
+   Google, Nominatim, Neon, Railway, Netlify) was grepped against
+   `.env.example` and actual imports, not assumed; the location section
+   describes brief §3.5's real point-in-time-only design, not continuous
+   tracking; the "your rights" section says "email us" for
+   access/correction/deletion because that's genuinely how it works right
+   now — **there is no self-service account deletion built**, and this
+   never promises one that doesn't exist. **Two things the owner needs to
+   actually do, not just code:** (1) create the `closebuy.ng@gmail.com`
+   inbox these documents point to — it doesn't exist yet, it was proposed
+   and not pushed back on when asked; (2) **this is a first draft, not
+   reviewed by a lawyer** — both documents say so nowhere on the page
+   itself (deliberately — a public legal document doesn't editorialize
+   about its own drafting process), so it's worth remembering here:
+   get real legal review before this is what a paying customer, a real
+   vendor's bank details, or a Google OAuth verification reviewer relies
+   on.
 
 **Deployed 2026-09-26 (owner asked for it explicitly).** Everything from
 2026-09-24 onward is pushed to `main` and live: Railway rebuilt the API from
