@@ -47,15 +47,18 @@ import {
   RiderNotFoundError as RemittanceRiderNotFoundError,
   RemittanceExceedsBalanceError,
 } from "./remittances.js";
+import { createAdminReconciliationService } from "./reconciliation.js";
 
 /**
  * Admin — vendor/rider application vetting (US-A-01, service.ts), order
  * oversight (US-A-03, orders.ts), dispute resolution (US-A-04,
  * disputes.ts), config writes (US-A-02, config.ts), actor suspension
- * (US-A-06, actors.ts), rider cash remittance (US-R-08, remittances.ts), platform metrics (US-A-07, metrics.ts) and audit-log search (US-A-08, service.ts). Payouts
- * live in ../payouts/routes.js instead (their own vendor-request/
- * admin-approve flow). Still real, still not built: reconciliation,
- * metrics — M-priority (M3), not forgotten.
+ * (US-A-06, actors.ts), rider cash remittance (US-R-08, remittances.ts),
+ * platform metrics (US-A-07, metrics.ts), reconciliation (US-A-05's other
+ * half, reconciliation.ts) and audit-log search (US-A-08, service.ts).
+ * Payouts live in ../payouts/routes.js instead (their own vendor-request/
+ * admin-approve flow) — reconciliation reads the same `Payout` table but
+ * never writes to it.
  */
 export async function adminRoutes(app: FastifyInstance) {
   const admin = createAdminService({ prisma: app.prisma, notifications: app.notifications });
@@ -72,6 +75,10 @@ export async function adminRoutes(app: FastifyInstance) {
   const adminConfig = createAdminConfigService({ prisma: app.prisma });
   const adminMetrics = createAdminMetricsService({ prisma: app.prisma });
   const adminRemittances = createAdminRemittanceService({ prisma: app.prisma, notifications: app.notifications });
+  const adminReconciliation = createAdminReconciliationService({
+    prisma: app.prisma,
+    monnifyConfigured: Boolean(app.env.MONNIFY_API_KEY && app.env.MONNIFY_SECRET_KEY && app.env.MONNIFY_CONTRACT_CODE),
+  });
 
   app.get("/admin/applications", { preHandler: requireAuth(["admin"]) }, async (_req, reply) => {
     return reply.send({ applications: await admin.listPendingApplications() });
@@ -383,6 +390,12 @@ export async function adminRoutes(app: FastifyInstance) {
       }
       throw err;
     }
+  });
+
+  // ── Reconciliation (US-A-05's other half) ───────────────────────────
+
+  app.get("/admin/reconciliation", { preHandler: requireAuth(["admin"]) }, async (_req, reply) => {
+    return reply.send(await adminReconciliation.getReport());
   });
 
   // ── Audit log (US-A-08) ─────────────────────────────────────────────

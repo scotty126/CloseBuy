@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ORDER_STATUSES, FULFILMENT_TYPES, DISPUTE_RESOLUTIONS, DISPUTE_STATUSES } from "./enums.js";
-import type { PayoutStatus, DisputeStatus, DisputeResolution, VendorStatus, RiderStatus } from "./enums.js";
+import type { PayoutStatus, DisputeStatus, DisputeResolution, VendorStatus, RiderStatus, LedgerAccount } from "./enums.js";
 import type { OrderSummaryDto } from "./order.js";
 import type { CategoryDto } from "./catalog.js";
 
@@ -85,6 +85,52 @@ export interface PayoutDto {
 // vendor context to review without a second round trip.
 export interface PendingPayoutRequest extends PayoutDto {
   vendor: { id: string; businessName: string };
+}
+
+// ── Reconciliation (US-A-05's other half) ───────────────────────────────
+
+// GET /admin/reconciliation. Lifetime totals, not date-ranged — the
+// question this answers is "do the books check out, right now", which a
+// period window would only complicate (a Payout/remittance can land
+// outside whatever range a ledger entry it corresponds to falls in).
+//
+// Every discrepancy here is `critical` deliberately, not `warning` — each
+// one is either something that should be structurally impossible
+// (`unbalanced_ledger`, since every write is balance-asserted at the
+// source, order/ledger.ts's assertBalanced) or real money already having
+// moved somewhere the books can't account for (`vendor_overpaid`,
+// `rider_cash_mismatch`). There's no "minor" version of either.
+export type ReconciliationDiscrepancyType = "unbalanced_ledger" | "vendor_overpaid" | "rider_cash_mismatch";
+
+export interface ReconciliationDiscrepancy {
+  type: ReconciliationDiscrepancyType;
+  message: string;
+  payeeId?: string; // the vendor or rider id, for vendor_overpaid/rider_cash_mismatch
+  payeeName?: string;
+  details: Record<string, number>; // the actual disagreeing figures, in minor units, for a human to verify by hand
+}
+
+export interface LedgerAccountTotalDto {
+  account: LedgerAccount;
+  creditMinor: number;
+  debitMinor: number;
+  netMinor: number; // credit - debit — which side "net" means depends on the account (data-model.md's chart of accounts), not uniformly "money owed" or "money held"
+}
+
+export interface ReconciliationReportDto {
+  generatedAt: string;
+  ledgerByAccount: LedgerAccountTotalDto[];
+  payoutTotals: Partial<Record<PayoutStatus, { count: number; amountMinor: number }>>;
+  remittanceTotalMinor: number; // lifetime, across every rider
+  discrepancies: ReconciliationDiscrepancy[];
+  // The other half of US-A-05's own acceptance criterion ("compares gateway
+  // settlement against internal ledger totals") — genuinely not buildable
+  // yet: Monnify isn't configured (CLAUDE.md, Known issues), so there is no
+  // real settlement data anywhere to compare against. `configured` reflects
+  // whether Monnify credentials exist at all; even once they do, fetching a
+  // real settlement report is a separate, later piece of work — this never
+  // fabricates a comparison in the meantime.
+  gatewaySettlement: { available: false; configured: boolean; reason: string };
 }
 
 // ── Order oversight (US-A-03) ───────────────────────────────────────────

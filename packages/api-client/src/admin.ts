@@ -26,6 +26,11 @@ import type {
   CategoryDto,
   AuditLogFilterInput,
   AuditLogEntryDto,
+  PendingPayoutRequest,
+  VendorBalanceDto,
+  PayoutDto,
+  PayoutRejectInput,
+  ReconciliationReportDto,
 } from "@closebuy/types";
 import type { OrderDto } from "@closebuy/types";
 
@@ -158,5 +163,27 @@ export function createAdminApi(client: ApiClient) {
 
     searchAuditLog: (filter: Partial<AuditLogFilterInput> = {}) =>
       client.request<{ entries: AuditLogEntryDto[]; nextCursor?: string }>(`/admin/audit-log${toQueryString(filter)}`),
+
+    // ── Payouts (vendor-requested, admin-approved) ─────────────────────
+    // Lives in ../payouts/routes.js server-side, not admin/routes.js — grouped here anyway since this is the
+    // client every app's admin screens import from, same as every other admin.* function below.
+
+    listPayoutRequests: () => client.request<{ requests: PendingPayoutRequest[] }>("/admin/payouts/requests"),
+
+    getVendorPayoutBalance: (vendorId: string) =>
+      client.request<{ balance: VendorBalanceDto }>(`/admin/payouts/vendors/${vendorId}/balance`),
+
+    approvePayout: (payoutId: string) =>
+      client.request<{ payout: PayoutDto }>(`/admin/payouts/${payoutId}/approve`, { method: "POST" }),
+
+    rejectPayout: (payoutId: string, input: PayoutRejectInput) =>
+      client.request<{ payout: PayoutDto }>(`/admin/payouts/${payoutId}/reject`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+
+    // ── Reconciliation (US-A-05's other half) ──────────────────────────
+
+    getReconciliationReport: () => client.request<ReconciliationReportDto>("/admin/reconciliation"),
   };
 }
