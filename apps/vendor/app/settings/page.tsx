@@ -88,13 +88,19 @@ function StoreSettings({ vendor, refetch }: { vendor: OwnVendorProfileDto; refet
           <ToggleSwitch checked={supportsPickup} onChange={(v) => { setSupportsPickup(v); setSaved(false); }} />
         </div>
 
-        <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-3">
+        <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3">
           <p className="text-sm font-medium text-ink">Opening hours</p>
           {DAYS.map((day) => (
-            <div key={day.key} className="flex items-center gap-2">
-              <span className="w-24 shrink-0 text-sm text-ink">{day.label}</span>
+            // The day label used to share a row with both native time inputs — a native <input type="time">
+            // renders wide enough on its own (wider still in a 12-hour AM/PM locale), and the label plus two of
+            // them plus the "Closed" button never fit in 390px (needed ~433px, confirmed live on a real deployed
+            // phone-width render). Stacking the label above its controls, rather than beside them, is what
+            // actually frees enough width — shrinking the inputs further isn't really an option, their intrinsic
+            // size is the browser's, not ours to style much past this.
+            <div key={day.key} className="flex flex-col gap-1.5 border-b border-gray-100 pb-3 last:border-0 last:pb-0">
+              <span className="text-sm font-medium text-ink">{day.label}</span>
               {hours[day.key] ? (
-                <>
+                <div className="flex flex-wrap items-center gap-2">
                   <input
                     type="time"
                     value={hours[day.key]![0]}
@@ -121,12 +127,12 @@ function StoreSettings({ vendor, refetch }: { vendor: OwnVendorProfileDto; refet
                   >
                     Closed
                   </button>
-                </>
+                </div>
               ) : (
                 <button
                   type="button"
                   onClick={() => { setHours((h) => ({ ...h, [day.key]: ["09:00", "18:00"] })); setSaved(false); }}
-                  className="text-xs text-primary underline"
+                  className="self-start text-xs text-primary underline"
                 >
                   Set hours
                 </button>
