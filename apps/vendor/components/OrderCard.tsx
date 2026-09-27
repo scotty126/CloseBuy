@@ -124,7 +124,7 @@ export function OrderCard({ order, onChanged }: { order: OrderDto; onChanged: ()
             <Input placeholder="4-digit code" inputMode="numeric" maxLength={4} value={code} onChange={(e) => setCode(e.target.value)} />
             <div className="flex gap-2">
               <Button
-                disabled={busy || code.length !== 6}
+                disabled={busy || code.length !== 4}
                 onClick={() => run(() => orderApi.confirmPickup(order.id, { code }))}
               >
                 {busy ? "Confirming…" : "Confirm"}

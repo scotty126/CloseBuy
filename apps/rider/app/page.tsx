@@ -259,7 +259,7 @@ function PickupStep({ order, onChanged }: { order: RiderJobDto; onChanged: () =>
           required
         />
         {error && <p className="text-sm text-danger">{error}</p>}
-        <Button type="submit" disabled={busy || code.length !== 6}>
+        <Button type="submit" disabled={busy || code.length !== 4}>
           {busy ? "Confirming…" : "Confirm collection"}
         </Button>
       </form>
@@ -283,7 +283,7 @@ function DeliveryStep({ order, onChanged }: { order: RiderJobDto; onChanged: () 
     e.preventDefault();
     setError(null);
 
-    if (code.trim().length !== 6) {
+    if (code.trim().length !== 4) {
       setError("Ask the customer to read out their 4-digit code — it has to match before you can confirm.");
       return;
     }
@@ -391,7 +391,7 @@ function DeliveryStep({ order, onChanged }: { order: RiderJobDto; onChanged: () 
           />
         )}
         {error && <p className="text-sm text-danger">{error}</p>}
-        <Button type="submit" disabled={busy || code.length !== 6}>
+        <Button type="submit" disabled={busy || code.length !== 4}>
           {busy ? "Confirming…" : "Confirm delivery"}
         </Button>
         <button type="button" onClick={() => setReportingFailed(true)} className="text-xs text-muted underline">
