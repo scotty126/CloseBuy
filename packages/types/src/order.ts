@@ -77,6 +77,21 @@ export interface RatingDto {
   editedUntil: string; // still-editable while now < this
 }
 
+// GET /customer/ratings — US-C-10's "ratings you've given", across every
+// order, enriched with just enough context (which order, who it was for)
+// to display without a second round trip per row.
+export interface MyRatingDto {
+  id: string;
+  orderId: string;
+  trackingToken: string;
+  targetType: RatingTargetType;
+  targetName: string;
+  score: number;
+  comment: string | null;
+  createdAt: string;
+  editedUntil: string;
+}
+
 export const disputeOrderSchema = z.object({
   reason: z.string().min(10).max(1000),
   evidence: z.array(z.string().url()).max(5).optional(),

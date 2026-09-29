@@ -175,6 +175,10 @@ export async function orderRoutes(app: FastifyInstance) {
     return reply.send({ orders: await order.listCustomerOrders(req.authUser!.sub) });
   });
 
+  app.get("/customer/ratings", { preHandler: requireAuth(["customer"]) }, async (req, reply) => {
+    return reply.send({ ratings: await order.listMyRatings(req.authUser!.sub) });
+  });
+
   app.get(
     "/orders/:id",
     { preHandler: requireAuth(["customer", "vendor", "rider"]) },

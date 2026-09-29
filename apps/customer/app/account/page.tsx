@@ -5,19 +5,21 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, Card, Input, Placeholder, PhoneInput, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
-import { ClipboardList, ChevronRight, UserRound } from "lucide-react";
-import type { AddressDto, GeocodeResultDto } from "@closebuy/types";
-import { customerAuthApi } from "@/lib/api";
+import { ClipboardList, ChevronRight, UserRound, Star } from "lucide-react";
+import type { AddressDto, GeocodeResultDto, MyRatingDto } from "@closebuy/types";
+import { customerAuthApi, orderApi } from "@/lib/api";
 import { AddressSearch } from "@/components/AddressSearch";
 
 /**
  * screens-navigation.md §1.9. Real for what has backend support: profile
  * (email, default contact phone), saved addresses (US-C-05, addresses.ts —
  * the `addresses` table and Order.addressId existed since the very first
- * migration, but nothing ever exposed CRUD for it until now) and the
- * orders shortcut. Payment methods and ratings-given still aren't built —
- * there's no ratings-read endpoint to show real data against, so that half
- * stays a Placeholder rather than a fake list.
+ * migration, but nothing ever exposed CRUD for it until now), ratings
+ * given (US-C-10, order/service.ts's listMyRatings — same story, the
+ * table existed, nothing ever read it back) and the orders shortcut.
+ * Payment methods aren't built — no real payment-method storage exists
+ * (cards are handled entirely by Monnify's hosted page), so that stays a
+ * Placeholder rather than a fake list.
  */
 export default function AccountPage() {
   const router = useRouter();
@@ -125,7 +127,9 @@ export default function AccountPage() {
 
       <AddressManager />
 
-      <Placeholder title="Ratings you've given" note="US-C-10 — no ratings-read endpoint yet to list them back. Real future scope, not a silent gap." />
+      <RatingsGiven />
+
+      <Placeholder title="Payment methods" note="CloseBuy never stores card details — Monnify's hosted page handles those entirely — so there's no real payment method to list here." />
 
       <Button
         variant="secondary"
@@ -257,6 +261,55 @@ function AddressManager() {
         <Button variant="secondary" onClick={() => setFormOpenFor("new")}>
           + Add address
         </Button>
+      )}
+    </div>
+  );
+}
+
+/** US-C-10 — read side of the ratings a customer has given, across every order. */
+function RatingsGiven() {
+  const [ratings, setRatings] = useState<MyRatingDto[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    orderApi
+      .listMyRatings()
+      .then((res) => setRatings(res.ratings))
+      .catch((err) => setError(err instanceof ApiClientError ? err.message : "Couldn't load your ratings."));
+  }, []);
+
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <p className="text-sm font-bold text-ink">Ratings you&apos;ve given</p>
+      {error ? (
+        <p className="text-xs text-danger">{error}</p>
+      ) : ratings === null ? (
+        <p className="text-xs text-muted">Loading…</p>
+      ) : ratings.length === 0 ? (
+        <p className="text-xs text-muted">Nothing rated yet — rate an order from its tracking page once it&apos;s complete.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {ratings.map((r) => (
+            <Link
+              key={r.id}
+              href={`/orders/track/${r.trackingToken}`}
+              className="flex items-start justify-between gap-2 rounded-lg border border-gray-100 p-3 active:bg-surface"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">
+                  {r.targetName} <span className="text-xs font-normal text-muted">({r.targetType})</span>
+                </p>
+                {r.comment && <p className="truncate text-xs text-muted">{r.comment}</p>}
+                <p className="text-xs text-muted">{new Date(r.createdAt).toLocaleDateString()}</p>
+              </div>
+              <div className="flex shrink-0 gap-0.5">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <Star key={n} size={14} className={n <= r.score ? "fill-accent text-accent" : "text-gray-300"} />
+                ))}
+              </div>
+            </Link>
+          ))}
+        </div>
       )}
     </div>
   );

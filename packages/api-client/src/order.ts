@@ -11,6 +11,7 @@ import type {
   DisputeDto,
   RateOrderInput,
   RatingDto,
+  MyRatingDto,
 } from "@closebuy/types";
 
 export function createOrderApi(client: ApiClient) {
@@ -34,6 +35,9 @@ export function createOrderApi(client: ApiClient) {
 
     /** US-C-09 — signed-in only. */
     listMyOrders: () => client.request<{ orders: OrderSummaryDto[] }>("/orders"),
+
+    /** US-C-10 — "Ratings you've given", signed-in only. */
+    listMyRatings: () => client.request<{ ratings: MyRatingDto[] }>("/customer/ratings"),
 
     /** US-C-08 — self-service, only while the order is still PAID (server-enforced). */
     cancelOrder: (id: string) => client.request<void>(`/orders/${id}/cancel`, { method: "POST" }),

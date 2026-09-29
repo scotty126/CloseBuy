@@ -403,6 +403,34 @@ export function createOrderService(deps: OrderServiceDeps) {
     },
 
     /**
+     * US-C-10 — "Ratings you've given", the account page's own read side
+     * (was a Placeholder — no endpoint ever existed to list these back).
+     * A rating's targetId always points at its own order's vendorId or
+     * riderId (see rateOrder above) — joining through the order rather
+     * than a second lookup by targetId.
+     */
+    async listMyRatings(userId: string) {
+      const customer = await prisma.customerProfile.findUnique({ where: { userId } });
+      if (!customer) return [];
+      const ratings = await prisma.rating.findMany({
+        where: { customerId: customer.id },
+        orderBy: { createdAt: "desc" },
+        include: { order: { select: { id: true, trackingToken: true, vendor: { select: { businessName: true } }, rider: { select: { fullName: true } } } } },
+      });
+      return ratings.map((r) => ({
+        id: r.id,
+        orderId: r.order.id,
+        trackingToken: r.order.trackingToken,
+        targetType: r.targetType,
+        targetName: r.targetType === "vendor" ? r.order.vendor.businessName : (r.order.rider?.fullName ?? "Rider"),
+        score: r.score,
+        comment: r.comment,
+        createdAt: r.createdAt,
+        editedUntil: r.editedUntil,
+      }));
+    },
+
+    /**
      * US-V-05 — the vendor's own order queue. One flat, newest-first list;
      * the New/In Progress/Scheduled/History tabs screens-navigation.md
      * §2.1 describes are bucketed client-side from this, not four separate

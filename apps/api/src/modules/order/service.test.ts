@@ -194,6 +194,25 @@ function createFakePrisma() {
         ratings.set(`${updated.orderId}:${updated.targetType}`, updated);
         return updated;
       },
+      findMany: async ({ where }: any) => {
+        const matches = [...ratings.values()]
+          .filter((r) => r.customerId === where.customerId)
+          .sort((a: any, b: any) => b.createdAt.getTime() - a.createdAt.getTime());
+        return matches.map((r) => {
+          const order = orders.get(r.orderId);
+          const vendor = order ? vendors.get(order.vendorId) : undefined;
+          const rider = order?.riderId ? riders.get(order.riderId) : undefined;
+          return {
+            ...r,
+            order: {
+              id: order?.id,
+              trackingToken: order?.trackingToken,
+              vendor: { businessName: vendor?.businessName },
+              rider: rider ? { fullName: rider.fullName } : null,
+            },
+          };
+        });
+      },
     },
     config: {
       findFirst: async ({ where }: any) => (config.has(where.key) ? { key: where.key, value: config.get(where.key) } : null),
@@ -899,6 +918,31 @@ describe("order service — rateOrder (US-C-10)", () => {
 
     expect(prisma.__state.ratings.get(`${orderId}:vendor`).score).toBe(4);
     expect(prisma.__state.ratings.get(`${orderId}:rider`).score).toBe(2);
+  });
+
+  it("US-C-10 — listMyRatings returns every rating the customer has given, newest first, enriched with the target's name", async () => {
+    prisma.__state.customers.set(CUSTOMER_ID, { id: CUSTOMER_ID, userId: CUSTOMER_USER_ID });
+    prisma.__state.riders.set(RIDER_ID, { id: RIDER_ID, userId: RIDER_USER_ID, fullName: "Scott Pippen" });
+    seed(prisma, { vendor: { businessName: "Ada's Kitchen" } });
+    const orderId = completedOrder();
+    const svc = service();
+    await svc.rateOrder(orderId, { targetType: "vendor", score: 4, comment: "Good food" }, CUSTOMER_ID);
+    await svc.rateOrder(orderId, { targetType: "rider", score: 5 }, CUSTOMER_ID);
+
+    const ratings = await svc.listMyRatings(CUSTOMER_USER_ID);
+
+    expect(ratings).toHaveLength(2);
+    const vendorRating = ratings.find((r) => r.targetType === "vendor")!;
+    const riderRating = ratings.find((r) => r.targetType === "rider")!;
+    expect(vendorRating.targetName).toBe("Ada's Kitchen");
+    expect(vendorRating.orderId).toBe(orderId);
+    expect(riderRating.targetName).toBe("Scott Pippen");
+  });
+
+  it("US-C-10 — listMyRatings returns an empty list for a customer with no ratings, not an error", async () => {
+    prisma.__state.customers.set(CUSTOMER_ID, { id: CUSTOMER_ID, userId: CUSTOMER_USER_ID });
+    const ratings = await service().listMyRatings(CUSTOMER_USER_ID);
+    expect(ratings).toEqual([]);
   });
 });
 
