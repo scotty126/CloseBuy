@@ -54,15 +54,15 @@ function Chip({
   onClick: () => void;
 }) {
   return (
-    <button type="button" onClick={onClick} className="flex w-16 shrink-0 flex-col items-center gap-1.5">
+    <button type="button" onClick={onClick} className="flex w-[4.5rem] shrink-0 flex-col items-center gap-1.5">
       <span
-        className={`flex h-14 w-14 items-center justify-center rounded-full transition ${
-          isActive ? "bg-primary text-white" : "bg-surface text-ink"
+        className={`flex h-16 w-16 items-center justify-center rounded-full transition ${
+          isActive ? "bg-primary text-white shadow-md shadow-primary/25" : "bg-surface text-ink"
         }`}
       >
-        <Icon size={24} strokeWidth={2} />
+        <Icon size={26} strokeWidth={isActive ? 2.25 : 2} />
       </span>
-      <span className={`w-full truncate text-center text-[11px] font-medium ${isActive ? "text-primary" : "text-muted"}`}>
+      <span className={`w-full truncate text-center text-xs font-semibold ${isActive ? "text-primary" : "text-muted"}`}>
         {label}
       </span>
     </button>
