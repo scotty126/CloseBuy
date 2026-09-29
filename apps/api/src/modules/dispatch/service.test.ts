@@ -108,6 +108,7 @@ function createFakePrisma() {
     user: {
       findMany: async ({ where }: any) => [...users.values()].filter((u) => !where?.role || u.role === where.role),
     },
+    $transaction: async (fn: any) => fn(db),
     __state: { riders, orders, customers, users, transitions, ledgerEntries, remittances, config },
   };
 
@@ -127,8 +128,10 @@ function createFakeQueue(): OrderQueue {
   return {
     scheduleAutoReject: vi.fn().mockResolvedValue(undefined),
     scheduleEscrowRelease: vi.fn().mockResolvedValue(undefined),
+    scheduleExpirePendingPayment: vi.fn().mockResolvedValue(undefined),
     cancelAutoReject: vi.fn().mockResolvedValue(undefined),
     cancelEscrowRelease: vi.fn().mockResolvedValue(undefined),
+    cancelExpirePendingPayment: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -381,6 +384,19 @@ describe("dispatch service", () => {
     expect(order.status).toBe("DELIVERED");
     expect(prisma.__state.riders.get(RIDER_ID).cashBalanceMinor).toBe(500000); // now owed back to the platform (US-R-08)
     expect(prisma.__state.ledgerEntries).toHaveLength(2); // codCollectionEntries — debit rider_cash_float, credit customer_escrow
+  });
+
+  it("confirmDelivery: the COD ledger write and the rider balance increment go through $transaction, not two separate statements", async () => {
+    seedApprovedOnDutyRider(prisma);
+    seedOpenOrder(prisma, { status: "IN_TRANSIT", riderId: RIDER_ID, paymentMethod: "cash_on_delivery", totalMinor: 500000 });
+
+    const spy = vi.spyOn(prisma, "$transaction");
+    await service().confirmDelivery(RIDER_USER_ID, ORDER_ID, { recipientName: "John", code: "654321", cashCollectedMinor: 500000 });
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    // Both the ledger write and the balance increment happened, proving they ran inside the one transaction callback.
+    expect(prisma.__state.ledgerEntries).toHaveLength(2);
+    expect(prisma.__state.riders.get(RIDER_ID).cashBalanceMinor).toBe(500000);
   });
 
   it("rider-facing responses never include collectionCode or deliveryCode, at any stage of the job", async () => {

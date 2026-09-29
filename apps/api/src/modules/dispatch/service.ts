@@ -268,10 +268,17 @@ export function createDispatchService({ prisma, queue, notifications }: Dispatch
         if (input.cashCollectedMinor !== order.totalMinor) {
           throw new CashAmountMismatchError(order.totalMinor);
         }
-        await postLedgerEntries(prisma, codCollectionEntries(orderId, order.totalMinor));
-        await prisma.riderProfile.update({
-          where: { id: rider.id },
-          data: { cashBalanceMinor: { increment: order.totalMinor } }, // owed back to the platform — US-R-08
+        // One transaction, not two separate statements — a crash between
+        // the ledger write and the balance increment used to be able to
+        // leave them disagreeing, exactly the mismatch
+        // admin/reconciliation.ts's rider check exists to catch, rather
+        // than something that structurally can't happen.
+        await prisma.$transaction(async (tx) => {
+          await postLedgerEntries(tx, codCollectionEntries(orderId, order.totalMinor));
+          await tx.riderProfile.update({
+            where: { id: rider.id },
+            data: { cashBalanceMinor: { increment: order.totalMinor } }, // owed back to the platform — US-R-08
+          });
         });
       }
 
