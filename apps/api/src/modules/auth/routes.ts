@@ -75,8 +75,14 @@ export async function staffAuthRoutes(app: FastifyInstance) {
       const { devCode } = await authService.requestOtp(body.phone);
       // devCode is only ever set by the dev fallback (termii.ts,
       // OTP_DEV_FALLBACK) — a real Termii send never returns one, so this
-      // never appears once real credentials are configured.
-      if (devCode) return reply.code(200).send({ devCode } satisfies OtpRequestResponse);
+      // never appears once real credentials are configured. Also never
+      // handed back when NODE_ENV=production, even if OTP_DEV_FALLBACK is
+      // (mis)left on there — that combination used to let anyone who knew
+      // a staff phone number request a code and read it straight back in
+      // this response, unauthenticated (known-issue, now closed). The
+      // owner's own DEV_AUTO_SIGNIN_PHONES path above is unaffected — it's
+      // checked and returned before this gate is ever reached.
+      if (devCode && app.env.NODE_ENV !== "production") return reply.code(200).send({ devCode } satisfies OtpRequestResponse);
       return reply.code(204).send();
     });
   });
