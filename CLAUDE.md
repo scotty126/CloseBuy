@@ -539,22 +539,55 @@ other local-only feature this session.
   Verified against real live vendor data (Anishoks Supermarket, a
   deliberately stale seeded cart) — all three change kinds fired
   correctly, no overflow/errors.
-- **Home screen restyle** — the user shared reference screenshots (a red
-  food-delivery app) and asked for CloseBuy's UI to look "more defined."
-  Scoped down first (asked, not assumed): keep CloseBuy's own green/orange,
-  not the reference's red or dark theme; visual restyle only this round,
-  not the real features mixed into those screenshots that CloseBuy doesn't
-  have (packaging/container choice, Favorites, Streaks, Idea Bank,
-  WhatsApp/Snapchat links — none of that built); start with Home. Delivered:
-  the location chip is now a real bordered pill instead of bare text, the
-  search bar has more presence, the category rail is bigger/bolder
-  (`CategoryChips.tsx`), and `VendorCard.tsx` (shared with Search) now
-  carries real badges over the cover — a category pill top-left, an
-  OPEN/CLOSED pill top-right (`success`/`muted` tokens, never the
-  reference's red) — replacing the old small muted "Closed" label, plus a
-  skeleton loading state and a proper centered-icon empty state. Verified
-  against live vendor data at 390px — no overflow, no console errors, every
-  real vendor (including the closed E2E test one) renders correctly.
+- **Customer app restyle, Home then the rest of the app** — the user shared
+  reference screenshots (a red food-delivery app) and asked for CloseBuy's
+  UI to look "more defined." Scoped down first (asked, not assumed): keep
+  CloseBuy's own green/orange, not the reference's red or dark theme;
+  visual restyle only, not the real features mixed into those screenshots
+  that CloseBuy doesn't have (packaging/container choice, Favorites,
+  Streaks, Idea Bank, WhatsApp/Snapchat links — none of that built); start
+  with Home, then ("carry on until you've effected across pages") the rest
+  of the commerce surface. Same visual language everywhere: bolder section
+  headers, `rounded-2xl`/`shadow-sm` cards replacing flat `rounded-xl`
+  borders, real status badges instead of small muted labels, skeleton
+  loading states, centered icon+message empty states — all through the
+  existing brand tokens (`success`/`warning`/`danger`/`accent`), no new
+  ones added.
+  - **Home** — location chip is now a real bordered pill instead of bare
+    text, bigger/bolder category rail (`CategoryChips.tsx`), and
+    `VendorCard.tsx` (shared with Search) carries real badges over the
+    cover — category pill top-left, OPEN/CLOSED pill top-right.
+  - **Vendor storefront + Quick Buy/Menu** — OPEN/CLOSED badge over the
+    cover mirrors `VendorCard`; `ProductCard`/`QuickBuyCard` get a real
+    "Available" status dot, bold accent-colored pricing and a circular "+"
+    add button. **Deliberately no item-detail modal** — Product has no
+    modifiers in the data model, so direct-add (existing behavior) stays
+    correct; a modal would imply a customization step that doesn't exist.
+  - **Cart** — pill quantity stepper matching `ProductCard`'s, card-styled
+    subtotal, icon empty state.
+  - **Checkout** — a real radio-style selected state on `PaymentOption`,
+    card-styled order summary with the total in accent orange.
+  - **Account** — an avatar-initial circle on the profile card, and a
+    proper *non-dashed* guest ("Guest"/Sign In/Register) state — the
+    dashed `Placeholder` component means "not built yet" (a real, load-
+    bearing signal elsewhere in this app), which a normal signed-out state
+    isn't; correctly left in place for "Ratings you've given," which
+    genuinely isn't built.
+  - **Orders list** — status pills colored by outcome
+    (`success`/`warning`/`danger` over the *same* `OrderStatus` enum, no
+    new states).
+  - **Order tracking, Search** — consistent card/skeleton/empty-state
+    treatment carried through.
+  - **Left alone, on purpose**: auth pages (login/register/forgot-password/
+    reset-password/verify-email/oauth-complete) and the legal pages
+    (terms/privacy) — already minimal and appropriate for their purpose,
+    not part of the commerce surface the reference screenshots were about.
+  Verified against live vendor data at 390px across every touched screen
+  (Home, Search, vendor storefront, cart, checkout, account signed-in,
+  orders) — no overflow, no console errors; real data (missing product
+  photos, out-of-stock items, the closed E2E test vendor) all rendered
+  correctly. `pnpm typecheck`/`lint` clean across all 8 packages both
+  times (Home, then the rest).
 - **Grachi Pharmacy was closed** (`isOpen: false`) on the live DB — not a
   bug, the owner's own vendor had been toggled closed at some point.
   Flipped it back to open via a direct API call at the owner's request
@@ -569,15 +602,15 @@ other local-only feature this session.
   this file.
 
 **None of this — everything in this dated section, the saved-addresses
-section above it, and the 2026-09-27 section above that, 22 commits — is
+section above it, and the 2026-09-27 section above that, 25 commits — is
 pushed yet** (still holding off per the Netlify-credits constraint below,
 and then explicitly told not to) — all local-only commits on `main`,
 confirmed against `origin/main` (currently `3b2eafd`, see "Deployed
 2026-09-26" below — that commit and everything before it really is live;
-only these 22 are not). `pnpm typecheck` and `lint` both clean across all 8
+only these 25 are not). `pnpm typecheck` and `lint` both clean across all 8
 packages as of the last commit in this list; `test` (301 API tests) is
-current as of the addresses commit — the two commits since (cart sync,
-Home restyle) are frontend-only with no new backend tests needed. The
+current as of the addresses commit — the commits since (cart sync, the
+two restyle passes) are frontend-only with no new backend tests needed. The
 4-digit-code and geocoding changes are both genuinely untestable end-to-end
 without a deploy (see their notes above) — this is a real, active decision
 point, not an oversight: ask before pushing next, and say plainly that it
