@@ -3,7 +3,7 @@ import { Redis } from "ioredis";
 
 const QUEUE_NAME = "order-timers";
 
-type JobName = "auto-reject" | "release-escrow";
+type JobName = "auto-reject" | "release-escrow" | "expire-pending-payment";
 interface JobData {
   orderId: string;
 }
@@ -23,9 +23,12 @@ export interface OrderQueue {
   scheduleAutoReject(orderId: string, delayMinutes: number): Promise<void>;
   /** brief §4 / US-C-11 — fires if no dispute is opened within the window after delivery. */
   scheduleEscrowRelease(orderId: string, delayHours: number): Promise<void>;
+  /** Fires if an online-payment (card/transfer) order never gets a Monnify webhook within the expiry window. */
+  scheduleExpirePendingPayment(orderId: string, delayMinutes: number): Promise<void>;
   /** Cancelled when the vendor responds/a dispute is opened before the timer fires — the job would otherwise still run and no-op harmlessly, but cancelling is cleaner and cheaper. */
   cancelAutoReject(orderId: string): Promise<void>;
   cancelEscrowRelease(orderId: string): Promise<void>;
+  cancelExpirePendingPayment(orderId: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -41,12 +44,23 @@ export function createOrderQueue(redisUrl: string): OrderQueue {
     async scheduleEscrowRelease(orderId, delayHours) {
       await queue.add("release-escrow", { orderId }, { delay: delayHours * 60 * 60_000, jobId: jobId("release-escrow", orderId) });
     },
+    async scheduleExpirePendingPayment(orderId, delayMinutes) {
+      await queue.add(
+        "expire-pending-payment",
+        { orderId },
+        { delay: delayMinutes * 60_000, jobId: jobId("expire-pending-payment", orderId) },
+      );
+    },
     async cancelAutoReject(orderId) {
       const job = await queue.getJob(jobId("auto-reject", orderId));
       await job?.remove();
     },
     async cancelEscrowRelease(orderId) {
       const job = await queue.getJob(jobId("release-escrow", orderId));
+      await job?.remove();
+    },
+    async cancelExpirePendingPayment(orderId) {
+      const job = await queue.getJob(jobId("expire-pending-payment", orderId));
       await job?.remove();
     },
     async close() {
@@ -78,6 +92,7 @@ export async function scheduleTimer(label: string, orderId: string, schedule: ()
 export interface OrderTimerHandlers {
   onAutoReject(orderId: string): Promise<void>;
   onEscrowRelease(orderId: string): Promise<void>;
+  onExpirePendingPayment(orderId: string): Promise<void>;
 }
 
 /**
@@ -93,6 +108,7 @@ export function startOrderWorker(redisUrl: string, handlers: OrderTimerHandlers)
     async (job) => {
       if (job.name === "auto-reject") await handlers.onAutoReject(job.data.orderId);
       if (job.name === "release-escrow") await handlers.onEscrowRelease(job.data.orderId);
+      if (job.name === "expire-pending-payment") await handlers.onExpirePendingPayment(job.data.orderId);
     },
     { connection: createBullConnection(redisUrl) },
   );

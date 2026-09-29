@@ -86,6 +86,7 @@ export const NOTIFICATION_TYPES = [
   "order_delivered", // → customer
   "order_delivery_failed", // → customer + every admin (US-R-06 — no notification-centre UI reads the admin copy yet, but the row exists), delivery only
   "order_auto_rejected", // → customer — vendor never responded in the accept window
+  "order_payment_expired", // → customer — an online-payment order was auto-cancelled because Monnify never confirmed it within the expiry window
   "payout_paid", // → vendor
   "payout_failed", // → vendor, Monnify attempt didn't succeed
   "payout_rejected", // → vendor, admin declined before any money moved

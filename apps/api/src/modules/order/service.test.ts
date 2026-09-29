@@ -44,6 +44,7 @@ function createFakePrisma() {
     ["vendor_accept_window_minutes", 15],
     ["escrow_release_window_hours", 48],
     ["flat_delivery_fee_minor", 50000],
+    ["pending_payment_expiry_minutes", 30],
     // Simple 0-10/0-10 test square, standing in for the real Riverpark
     // polygon (prisma/seed.ts) — geometry itself is tested in lib/geo.test.ts.
     [
@@ -228,8 +229,10 @@ function createFakeQueue(): OrderQueue {
   return {
     scheduleAutoReject: vi.fn().mockResolvedValue(undefined),
     scheduleEscrowRelease: vi.fn().mockResolvedValue(undefined),
+    scheduleExpirePendingPayment: vi.fn().mockResolvedValue(undefined),
     cancelAutoReject: vi.fn().mockResolvedValue(undefined),
     cancelEscrowRelease: vi.fn().mockResolvedValue(undefined),
+    cancelExpirePendingPayment: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -377,6 +380,16 @@ describe("order service — checkout (US-C-06)", () => {
     expect(monnify.initializeTransaction).toHaveBeenCalledOnce();
     expect((result as any).checkoutUrl).toBeDefined();
     expect(result.order.status).toBe("PENDING_PAYMENT");
+  });
+
+  it("card payment schedules the pending-payment expiry timer", async () => {
+    await service().checkout({ ...baseInput(), paymentMethod: "card" as const }, null, "idem-8b");
+    expect(queue.scheduleExpirePendingPayment).toHaveBeenCalledWith(expect.any(String), 30);
+  });
+
+  it("cash on delivery never schedules a pending-payment expiry timer — it's already PAID", async () => {
+    await service().checkout(baseInput(), null, "idem-8c");
+    expect(queue.scheduleExpirePendingPayment).not.toHaveBeenCalled();
   });
 
   it("refuses online payment up front when the gateway isn't configured, without creating any order", async () => {
@@ -887,5 +900,59 @@ describe("order service — timers (US-V-05 auto-reject, brief §4 escrow releas
 
     await svc.releaseEscrow(order.id);
     expect(prisma.__state.orders.get(order.id).status).toBe("DELIVERED"); // still held, not COMPLETED
+  });
+
+  it("expirePendingPayment: cancels a still-unpaid order, fails its payment, and notifies the customer", async () => {
+    const svc = service();
+    prisma.__state.customers.set(CUSTOMER_ID, { id: CUSTOMER_ID, userId: CUSTOMER_USER_ID });
+    const { order } = await svc.checkout(
+      { vendorId: VENDOR_ID, items: [{ productId: PRODUCT_ID, quantity: 1 }], fulfilmentType: "pickup", paymentMethod: "card", contactPhone: "+2348012345678", email: "customer@example.com" },
+      { sub: CUSTOMER_USER_ID, role: "customer" },
+      "idem-timer-3",
+    );
+
+    await svc.expirePendingPayment(order.id);
+
+    expect(prisma.__state.orders.get(order.id).status).toBe("CANCELLED");
+    const payment = [...prisma.__state.payments.values()].find((p: any) => p.orderId === order.id) as any;
+    expect(payment.status).toBe("failed");
+    expect(notifications.notify).toHaveBeenCalledWith(CUSTOMER_USER_ID, "order_payment_expired", { orderId: order.id });
+  });
+
+  it("expirePendingPayment: no-ops if the order was already paid (a real webhook won the race) — never double-processes", async () => {
+    const svc = service();
+    const { order } = await svc.checkout(
+      { vendorId: VENDOR_ID, items: [{ productId: PRODUCT_ID, quantity: 1 }], fulfilmentType: "pickup", paymentMethod: "card", contactPhone: "+2348012345678" },
+      null,
+      "idem-timer-4",
+    );
+    await svc.handleMonnifyWebhook({
+      eventType: "SUCCESSFUL_TRANSACTION",
+      eventData: { paymentReference: "idem-timer-4", transactionReference: "txn_1", amountPaid: 2500, paymentStatus: "PAID" },
+    });
+
+    await svc.expirePendingPayment(order.id);
+    expect(prisma.__state.orders.get(order.id).status).toBe("PAID"); // untouched by the stale timer
+  });
+
+  it("handleMonnifyWebhook: a late webhook for an order already expired/cancelled refunds instead of reviving it", async () => {
+    const svc = service();
+    const { order } = await svc.checkout(
+      { vendorId: VENDOR_ID, items: [{ productId: PRODUCT_ID, quantity: 1 }], fulfilmentType: "pickup", paymentMethod: "card", contactPhone: "+2348012345678" },
+      null,
+      "idem-timer-5",
+    );
+    await svc.expirePendingPayment(order.id); // the timer won the race first
+    expect(prisma.__state.orders.get(order.id).status).toBe("CANCELLED");
+
+    await svc.handleMonnifyWebhook({
+      eventType: "SUCCESSFUL_TRANSACTION",
+      eventData: { paymentReference: "idem-timer-5", transactionReference: "txn_1", amountPaid: 2500, paymentStatus: "PAID" },
+    });
+
+    expect(prisma.__state.orders.get(order.id).status).toBe("CANCELLED"); // not silently resurrected to PAID
+    expect(monnify.refund).toHaveBeenCalledOnce();
+    const payment = [...prisma.__state.payments.values()].find((p: any) => p.orderId === order.id) as any;
+    expect(payment.status).toBe("refunded");
   });
 });

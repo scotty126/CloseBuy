@@ -125,6 +125,7 @@ export function createOrderService(deps: OrderServiceDeps) {
   async function markOrderPaid(orderId: string, actorType: "system") {
     const order = await prisma.order.update({ where: { id: orderId }, data: { status: "PAID" } });
     await transition(orderId, "PENDING_PAYMENT", "PAID", actorType, null);
+    await queue.cancelExpirePendingPayment(orderId); // no-op for COD, which never scheduled one
 
     const acceptWindowMinutes = await ConfigKeys.vendorAcceptWindowMinutes(prisma);
     await scheduleTimer("auto-reject", orderId, () => queue.scheduleAutoReject(orderId, acceptWindowMinutes));
@@ -281,6 +282,11 @@ export function createOrderService(deps: OrderServiceDeps) {
         throw new PaymentsUnavailableError("We couldn't start your online payment. Please try again, or choose cash on delivery.", { cause: err });
       }
 
+      const pendingPaymentExpiryMinutes = await ConfigKeys.pendingPaymentExpiryMinutes(prisma);
+      await scheduleTimer("expire-pending-payment", order.id, () =>
+        queue.scheduleExpirePendingPayment(order.id, pendingPaymentExpiryMinutes),
+      );
+
       return { order, checkoutUrl, trackingToken: order.trackingToken, replay: false as const };
     },
 
@@ -297,7 +303,20 @@ export function createOrderService(deps: OrderServiceDeps) {
       if (!payment) return; // not one of ours, or already-deleted test data — ignore, don't throw
       if (payment.status === "succeeded") return; // idempotent replay
 
-      await prisma.payment.update({ where: { id: payment.id }, data: { status: "succeeded" } });
+      const existingOrder = await prisma.order.findUniqueOrThrow({ where: { id: payment.orderId } });
+      await prisma.payment.update({ where: { id: payment.id }, data: { status: "succeeded" } }); // the charge did happen, regardless of what happens to the order below
+
+      if (existingOrder.status !== "PENDING_PAYMENT") {
+        // A late webhook — expirePendingPayment (or something else) already
+        // moved this order on before Monnify confirmed the charge. The
+        // money still needs to come back rather than silently resurrecting
+        // a cancelled order; refundIfPaid does that (it re-reads the
+        // payment row, now "succeeded", and refunds + flips it).
+        await queue.cancelExpirePendingPayment(existingOrder.id); // no-op if it already fired
+        await refundIfPaid(existingOrder);
+        return;
+      }
+
       const order = await markOrderPaid(payment.orderId, "system");
 
       await postLedgerEntries(prisma, escrowHoldEntries(order.id, order.totalMinor));
@@ -599,6 +618,22 @@ export function createOrderService(deps: OrderServiceDeps) {
       await postLedgerEntries(prisma, escrowReleaseEntries(orderId, order.totalMinor, split));
       await prisma.order.update({ where: { id: orderId }, data: { status: "COMPLETED", commissionMinor: split.commissionMinor } });
       await transition(orderId, "DELIVERED", "COMPLETED", "system", null, "Escrow released — no dispute within the window");
+    },
+
+    /** An online-payment (card/transfer) order never got a Monnify webhook within the expiry window. */
+    async expirePendingPayment(orderId: string) {
+      const order = await prisma.order.findUnique({ where: { id: orderId } });
+      if (!order || order.status !== "PENDING_PAYMENT") return; // already paid, or already cancelled some other way
+
+      await prisma.order.update({ where: { id: orderId }, data: { status: "CANCELLED" } });
+      await transition(orderId, "PENDING_PAYMENT", "CANCELLED", "system", null, "Payment was never confirmed within the expiry window");
+
+      const payment = await prisma.payment.findUnique({ where: { orderId } });
+      if (payment && payment.status === "pending") {
+        await prisma.payment.update({ where: { id: payment.id }, data: { status: "failed" } });
+      }
+
+      await notifyCustomer(order, "order_payment_expired", { orderId });
     },
   };
 

@@ -49,6 +49,7 @@ export async function orderRoutes(app: FastifyInstance) {
   const worker = startOrderWorker(app.env.REDIS_URL, {
     onAutoReject: (orderId) => order.autoRejectOrder(orderId),
     onEscrowRelease: (orderId) => order.releaseEscrow(orderId),
+    onExpirePendingPayment: (orderId) => order.expirePendingPayment(orderId),
   });
   app.addHook("onClose", async () => {
     await worker.close();

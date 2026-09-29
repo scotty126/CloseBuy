@@ -68,8 +68,26 @@ export const ConfigKeys = {
     });
     return row ? (row.value as number) : DEFAULT_RIDER_CASH_FLOAT_LIMIT_MINOR;
   },
+  /**
+   * Minutes an online-payment (card/transfer) order stays PENDING_PAYMENT
+   * before it's auto-cancelled if Monnify never confirms it — same
+   * "added after the seed ran, fall back rather than 500" precedent as
+   * riderCashFloatLimitMinor above. Not yet admin-editable (US-A-02), same
+   * status that key had before its own admin wiring existed.
+   */
+  async pendingPaymentExpiryMinutes(prisma: PrismaClient): Promise<number> {
+    const row = await prisma.config.findFirst({
+      where: { key: PENDING_PAYMENT_EXPIRY_KEY, effectiveAt: { lte: new Date() } },
+      orderBy: { version: "desc" },
+    });
+    return row ? (row.value as number) : DEFAULT_PENDING_PAYMENT_EXPIRY_MINUTES;
+  },
 };
 
 export const RIDER_CASH_FLOAT_LIMIT_KEY = "rider_cash_float_limit_minor";
 /** ₦100,000 — a placeholder, not a researched figure (same status as flat_delivery_fee_minor above): roughly ten typical grocery orders' worth of cash. */
 export const DEFAULT_RIDER_CASH_FLOAT_LIMIT_MINOR = 10_000_000;
+
+export const PENDING_PAYMENT_EXPIRY_KEY = "pending_payment_expiry_minutes";
+/** 30 minutes — a placeholder, not a researched figure: long enough for a real card/transfer attempt, short enough that an abandoned checkout doesn't sit unresolved indefinitely. */
+export const DEFAULT_PENDING_PAYMENT_EXPIRY_MINUTES = 30;
