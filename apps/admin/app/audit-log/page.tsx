@@ -20,16 +20,33 @@ export default function AuditLogPage() {
   const [actorId, setActorId] = useState("");
   const [targetType, setTargetType] = useState("");
   const [targetId, setTargetId] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
   useEffect(() => {
     if (isLoaded && !session) router.push("/login");
   }, [isLoaded, session, router]);
 
+  // Plain calendar dates in the UI (matching the metrics page's own date
+  // inputs), widened to the full local-day boundary — auditLogFilterSchema
+  // wants a full ISO datetime, not a bare date, and "to" needs the end of
+  // that day included, not its midnight start.
+  function filterArgs(extra?: { cursor?: string }) {
+    return {
+      actorId: actorId.trim() || undefined,
+      targetType: targetType.trim() || undefined,
+      targetId: targetId.trim() || undefined,
+      from: from ? new Date(`${from}T00:00:00`).toISOString() : undefined,
+      to: to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined,
+      ...extra,
+    };
+  }
+
   function search() {
     setEntries(null);
     setLoadError(null);
     adminApi
-      .searchAuditLog({ actorId: actorId.trim() || undefined, targetType: targetType.trim() || undefined, targetId: targetId.trim() || undefined })
+      .searchAuditLog(filterArgs())
       .then((res) => {
         setEntries(res.entries);
         setNextCursor(res.nextCursor);
@@ -47,12 +64,7 @@ export default function AuditLogPage() {
     if (!nextCursor) return;
     setIsLoadingMore(true);
     try {
-      const res = await adminApi.searchAuditLog({
-        actorId: actorId.trim() || undefined,
-        targetType: targetType.trim() || undefined,
-        targetId: targetId.trim() || undefined,
-        cursor: nextCursor,
-      });
+      const res = await adminApi.searchAuditLog(filterArgs({ cursor: nextCursor }));
       setEntries((prev) => [...(prev ?? []), ...res.entries]);
       setNextCursor(res.nextCursor);
     } catch (err) {
@@ -81,6 +93,8 @@ export default function AuditLogPage() {
         <Input label="Actor ID" value={actorId} onChange={(e) => setActorId(e.target.value)} placeholder="user uuid" />
         <Input label="Target type" value={targetType} onChange={(e) => setTargetType(e.target.value)} placeholder="e.g. order, vendor_profile, payout" />
         <Input label="Target ID" value={targetId} onChange={(e) => setTargetId(e.target.value)} placeholder="target uuid" />
+        <Input label="From" type="date" value={from} onChange={(e) => setFrom(e.target.value)} max={to || undefined} />
+        <Input label="To" type="date" value={to} onChange={(e) => setTo(e.target.value)} min={from || undefined} />
         <button type="submit" className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white">
           Search
         </button>
