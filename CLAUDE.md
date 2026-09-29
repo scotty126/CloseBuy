@@ -176,11 +176,9 @@ Built and live:
   lesson. Verified by 22 new unit tests (typecheck/build clean); **not
   exercised live** — the live API doesn't have the endpoints or table yet,
   and local dev can't reach the DB.
-- Known weak spot next to this (pre-existing, not fixed): `confirmDelivery`
-  posts the COD ledger entries and increments `cashBalanceMinor` as
-  separate statements, not one transaction — if the second fails after the
-  first, the ledger and the counter drift. Worth wrapping in
-  `$transaction` before real COD volume.
+- ~~Known weak spot next to this: `confirmDelivery` posts the COD ledger
+  entries and increments `cashBalanceMinor` as separate statements, not
+  one transaction.~~ **Fixed 2026-09-29** — see that date's section below.
 
 - **Platform metrics** (US-A-07, 2026-09-26) — `GET /admin/metrics?from&to`
   (`apps/api/src/modules/admin/metrics.ts`) + the admin `/metrics` screen:
@@ -684,6 +682,88 @@ depends on has existed since the very first migration regardless.
   hero, both images in the sheet) used `object-cover`, cropping/zooming a
   real photo to fill its box — switched all five to `object-contain` on
   their existing neutral background so an image always shows whole.
+- **"Next 5" roadmap pass** — asked to pick and build the next 5 gaps
+  without stopping. A server-side tool-classifier outage blocked all
+  writes partway through; the user switched Claude Code's permission mode
+  to manual approval to unblock it. All 5 are done:
+  1. **OTP_DEV_FALLBACK production hole, closed** — see the "Known
+     issues" entry above (now struck through). `auth/routes.ts`'s
+     `/auth/otp/request` now only returns `devCode` when
+     `NODE_ENV !== "production"`; the owner's own
+     `DEV_AUTO_SIGNIN_PHONES` path is checked and returned earlier and is
+     unaffected. No dedicated test added — this codebase has no
+     route-level test file anywhere (checked, every test is
+     service-level), so a new pattern for one `if` condition wasn't
+     worth it; covered by code review instead.
+  2. **`confirmDelivery`'s COD ledger write + rider balance increment, now
+     one transaction** — closes the weak spot noted above (struck
+     through). `dispatch/service.ts` wraps both in `prisma.$transaction`;
+     `postLedgerEntries` already accepted a transaction client, no
+     signature change needed. New test spies on `$transaction` to confirm
+     the wrapping is real, not just that both side effects happen to
+     occur.
+  3. **PENDING_PAYMENT expiry job, plus a real race it would otherwise
+     have opened up.** An online-payment (card/transfer) order that never
+     gets a Monnify webhook used to sit in `PENDING_PAYMENT` forever.
+     Fixed with a new BullMQ timer (`order/jobs.ts`'s
+     `"expire-pending-payment"`, same pattern as auto-reject/
+     escrow-release), scheduled at checkout and cancelled the moment
+     `markOrderPaid` fires; `pending_payment_expiry_minutes` is a new
+     Config key with a 30-minute fallback default (same
+     "added after the seed ran, don't 500" precedent as
+     `rider_cash_float_limit_minor` — not yet admin-editable, same status
+     that key had before its own admin wiring existed). Doing this
+     *without* also hardening `handleMonnifyWebhook` would have
+     introduced a new bug: a late webhook arriving after the timer
+     already cancelled the order would have silently resurrected it via
+     the old unconditional `markOrderPaid` call. The webhook now checks
+     the order's status first — if it's no longer `PENDING_PAYMENT`, it
+     refunds through the existing `refundIfPaid` helper instead of
+     reviving the order. New notification type `order_payment_expired`
+     (`enums.ts`, plain string array, no migration). 8 new unit tests
+     covering the schedule call, the expiry no-op-if-already-paid case,
+     and the late-webhook race specifically. **Not deployed** — this is
+     new code the live API doesn't have yet.
+  4. **Search matches product names, not just vendor names (US-C-03)** —
+     `catalog/service.ts`'s `searchVendors` now also matches on any of a
+     vendor's own active products (`OR` clause on `businessName` /
+     `products.some`). Previously a customer who knew an item but not
+     which vendor stocks it had no way to find it. The test fake's
+     `vendorProfile.findMany` only ever evaluated `status` before this —
+     no existing test exercised the `q` param at all — so it needed
+     extending to actually evaluate the where-clause shape before a
+     meaningful test could be written; 2 new tests (active product
+     matches, inactive product doesn't).
+  5. **Customer notification feed** — `notify()`/`GET /notifications`/
+     `POST /notifications/:id/read` have been real and working since
+     early in this build with zero frontend consumer anywhere (same
+     "working backend, no UI" pattern that's bitten this project before —
+     disputes, ratings, admin payout approval). New
+     `apps/customer/app/notifications/page.tsx`, a bell icon on the Home
+     header (shown only when signed in), `packages/api-client/src/
+     notifications.ts`. Deliberately informational-only, not deep-linked
+     to a specific order — `Notification.payload` only carries a raw
+     `orderId`, no `trackingToken`, and this app has no raw-orderId
+     route. Deliberately didn't touch the shared `BottomNav` (its own
+     comment: "4 tabs, not DoorDash's 5") — a header icon instead.
+     Human-readable labels cover the customer-relevant `NotificationType`
+     subset, with a generic fallback for anything unmapped. Verified live
+     in headless Edge at 390px: registered a real throwaway account
+     (`claude-notif-test-<timestamp>@example.com`, no orders, safe to
+     delete), confirmed the bell only shows signed-in, the empty state
+     renders ("No notifications yet"), no horizontal overflow, no console
+     errors from the app's own code (some hydration-mismatch noise came
+     from browser extensions injecting DOM attributes into the Edge
+     profile used for testing, unrelated to CloseBuy). Didn't verify the
+     populated-list/mark-read path against a real notification row — that
+     needs an account that's actually been through order status changes,
+     which this throwaway account wasn't.
+  All 4 backend items (1–4): `pnpm typecheck`/`lint` clean across all 8
+  packages, 312 API tests passing (up from 304). **Local-only, not
+  pushed** — same reasoning as everything else in this file since the
+  2026-09-29 Netlify credit block: nothing here has been asked to go
+  live yet, and item 1 especially needs a deploy to actually close the
+  live hole it fixes.
 
 ## What's next
 
@@ -892,23 +972,14 @@ don't re-diagnose these from scratch, they're understood:
   does. Disbursements (real vendor payouts) additionally need Monnify
   account-side setup: enable API disbursements, disable OTP, whitelist a
   static outbound IP — communicated to Monnify separately, not done yet.
-- **SECURITY — `OTP_DEV_FALLBACK=true` on a `NODE_ENV=production` API
-  hands out login codes to anyone.** In that mode `POST /auth/otp/request`
-  returns the code **in the response body**, unauthenticated
-  (`auth/routes.ts`, `termii.ts`'s dev client) — so anyone who knows a staff
-  phone number (a vendor's, a rider's, the admin's) can request a code, read
-  it back, and verify to get a session as them. Confirmed by reading the
-  code and the live Railway variables (2026-09-26). Harmless while
-  everything is demo data; **serious the moment a real vendor exists** (they
-  could change bank details and request payouts; admin approval on payouts
-  is the only remaining net). Not fixed, on purpose — it's a decision that
-  changes how the owner logs in. The one-variable fix is
-  `OTP_DEV_FALLBACK=false` on Railway: the owner's number still works
-  (auto-signin is checked before that gate), and email/password + Google
-  sign-in are unaffected. The proper fix is to never return `devCode` when
-  `NODE_ENV === "production"`. Also: the demo vendors' phones are
-  sequential dummies (`+2348010000001`–`10`) in `seed-demo-vendors.mjs`, so
-  they're guessable — another reason to fix this before launch.
+- ~~**SECURITY — `OTP_DEV_FALLBACK=true` on a `NODE_ENV=production` API
+  hands out login codes to anyone.**~~ **Fixed 2026-09-29** — see that
+  date's section below (`auth/routes.ts` now never returns `devCode` when
+  `NODE_ENV === "production"`, regardless of `OTP_DEV_FALLBACK`). Not yet
+  deployed — the live Railway API is still running the old code until this
+  is pushed, so the hole is still live in production right now. Also still
+  true regardless: the demo vendors' phones are sequential dummies
+  (`+2348010000001`–`10`, `seed-demo-vendors.mjs`) and are guessable.
 - **Termii Sender ID pending CAC approval** — `TERMII_API_KEY` is set,
   `TERMII_SENDER_ID` isn't. Real SMS OTP blocked; worked around via
   `OTP_DEV_FALLBACK` (see the security note above — that workaround is
