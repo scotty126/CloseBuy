@@ -674,6 +674,16 @@ depends on has existed since the very first migration regardless.
   other local-only feature this session. **Also local-only, not pushed**
   — see the Netlify note above for why another push isn't happening
   without being asked.
+- **Fixed same-day, from live feedback**: the item-detail sheet above was
+  sizing to its own content (`max-h-[85vh]`) instead of a fixed height, so
+  a short item with no description rendered as a small centered popup, not
+  the reference's large bottom sheet — now `h-[75vh]` with a drag handle,
+  plus the reference's "Your order" recap row (a real echo of the item
+  being viewed, not new data). Separately, every product/vendor image
+  across the app (`ProductCard`, `QuickBuyCard`, `VendorCard`, the vendor
+  hero, both images in the sheet) used `object-cover`, cropping/zooming a
+  real photo to fill its box — switched all five to `object-contain` on
+  their existing neutral background so an image always shows whole.
 
 ## What's next
 
