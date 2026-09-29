@@ -20,6 +20,11 @@ export class OutsideServiceAreaError extends Error {
     super(message);
   }
 }
+export class ScheduledTimeOutsideHoursError extends Error {
+  constructor(message = "That time is outside the vendor's opening hours.") {
+    super(message);
+  }
+}
 export class CartInvalidError extends Error {
   constructor(message: string) {
     super(message);
@@ -78,6 +83,29 @@ function generateShortCode(): string {
   return String(randomInt(1000, 9999)); // 4 digits — used for both collectionCode and deliveryCode
 }
 
+const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]; // index-matched to Date#getUTCDay()
+const LAGOS_OFFSET_MS = 60 * 60 * 1000; // UTC+1, fixed — Nigeria has no DST (same convention as admin/metrics.ts)
+
+function timeStringToMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
+/**
+ * US-C-05a — "Schedule for later offers a date and a time slot within the
+ * vendor's stated hours". `openingHours` is nullable (a vendor that's
+ * never set any) — nothing real to constrain against in that case, so it
+ * passes rather than blocking on absent data.
+ */
+function isWithinVendorHours(scheduledFor: Date, openingHours: Record<string, [string, string]> | null): boolean {
+  if (!openingHours) return true;
+  const lagos = new Date(scheduledFor.getTime() + LAGOS_OFFSET_MS);
+  const range = openingHours[DAY_KEYS[lagos.getUTCDay()]!];
+  if (!range) return false; // vendor doesn't open at all that day
+  const minutesOfDay = lagos.getUTCHours() * 60 + lagos.getUTCMinutes();
+  return minutesOfDay >= timeStringToMinutes(range[0]) && minutesOfDay <= timeStringToMinutes(range[1]);
+}
+
 // Shared by getOrder/getOrderByTrackingToken — exactly what the tracking
 // screen needs (screens-navigation.md §1.7) and nothing more: no pickup
 // coordinates, no rider's own userId, just enough to render "delivered by
@@ -128,7 +156,15 @@ export function createOrderService(deps: OrderServiceDeps) {
     await queue.cancelExpirePendingPayment(orderId); // no-op for COD, which never scheduled one
 
     const acceptWindowMinutes = await ConfigKeys.vendorAcceptWindowMinutes(prisma);
-    await scheduleTimer("auto-reject", orderId, () => queue.scheduleAutoReject(orderId, acceptWindowMinutes));
+    // US-V-05 — "for a scheduled order this window is relative to the
+    // slot, not to the moment it was placed". Without this, an order
+    // scheduled for tomorrow would auto-reject and refund itself within
+    // minutes of being placed today, long before any vendor would
+    // reasonably be expected to have looked at it.
+    const autoRejectDelayMinutes = order.scheduledFor
+      ? Math.max(0, (order.scheduledFor.getTime() - Date.now()) / 60_000 - acceptWindowMinutes)
+      : acceptWindowMinutes;
+    await scheduleTimer("auto-reject", orderId, () => queue.scheduleAutoReject(orderId, autoRejectDelayMinutes));
 
     const vendor = await prisma.vendorProfile.findUnique({ where: { id: order.vendorId } });
     if (vendor) {
@@ -164,6 +200,9 @@ export function createOrderService(deps: OrderServiceDeps) {
       if (!input.scheduledFor && !vendor.isOpen) throw new VendorUnavailableError("This vendor is currently closed.");
       if (input.fulfilmentType === "pickup" && !vendor.supportsPickup) {
         throw new VendorUnavailableError("This vendor doesn't offer pickup.");
+      }
+      if (input.scheduledFor && !isWithinVendorHours(new Date(input.scheduledFor), vendor.openingHours as Record<string, [string, string]> | null)) {
+        throw new ScheduledTimeOutsideHoursError();
       }
       if (
         input.fulfilmentType === "delivery" &&

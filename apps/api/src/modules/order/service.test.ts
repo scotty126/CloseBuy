@@ -5,6 +5,7 @@ import {
   createOrderService,
   VendorUnavailableError,
   OutsideServiceAreaError,
+  ScheduledTimeOutsideHoursError,
   CartInvalidError,
   InvalidOrderStateError,
   InvalidCollectionCodeError,
@@ -305,6 +306,54 @@ describe("order service — checkout (US-C-06)", () => {
   it("still completes checkout as PAID when scheduling the auto-reject timer fails (bad Redis)", async () => {
     queue.scheduleAutoReject = vi.fn().mockRejectedValue(new Error("redis down"));
     const result = await service().checkout(baseInput(), null, "idem-1b");
+    expect(result.order.status).toBe("PAID");
+  });
+
+  it("US-V-05 — a scheduled order's auto-reject window is relative to the slot, not to placement", async () => {
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    const scheduledFor = new Date(Date.now() + oneDayMs).toISOString();
+    await service().checkout({ ...baseInput(), scheduledFor }, null, "idem-1c");
+
+    expect(queue.scheduleAutoReject).toHaveBeenCalledOnce();
+    const [, delayMinutes] = (queue.scheduleAutoReject as any).mock.calls[0];
+    // ~24h minus the 15-minute accept window, not the 15-minute window itself.
+    expect(delayMinutes).toBeGreaterThan(1400);
+    expect(delayMinutes).toBeLessThan(1440);
+  });
+
+  it("US-V-05 — a scheduled order whose slot is imminent clamps the auto-reject delay to 0, never negative", async () => {
+    const scheduledFor = new Date(Date.now() + 60_000).toISOString(); // 1 minute out — inside the 15-minute accept window
+    await service().checkout({ ...baseInput(), scheduledFor }, null, "idem-1d");
+
+    expect(queue.scheduleAutoReject).toHaveBeenCalledWith(expect.any(String), 0);
+  });
+
+  const ALL_DAYS_9_TO_6 = Object.fromEntries(
+    ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map((d) => [d, ["09:00", "18:00"]]),
+  );
+  // Lagos is UTC+1, fixed (no DST) — Lagos-local hour H is UTC hour H-1 on the same day.
+  function lagosDateTime(daysFromNow: number, lagosHour: number): string {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + daysFromNow);
+    d.setUTCHours(lagosHour - 1, 0, 0, 0);
+    return d.toISOString();
+  }
+
+  it("US-C-05a — accepts a scheduled slot inside the vendor's stated opening hours", async () => {
+    seed(prisma, { vendor: { openingHours: ALL_DAYS_9_TO_6 } });
+    const result = await service().checkout({ ...baseInput(), scheduledFor: lagosDateTime(2, 12) }, null, "idem-hours-1");
+    expect(result.order.status).toBe("PAID");
+  });
+
+  it("US-C-05a — rejects a scheduled slot outside the vendor's stated opening hours", async () => {
+    seed(prisma, { vendor: { openingHours: ALL_DAYS_9_TO_6 } });
+    const result = service().checkout({ ...baseInput(), scheduledFor: lagosDateTime(2, 20) }, null, "idem-hours-2");
+    await expect(result).rejects.toThrow(ScheduledTimeOutsideHoursError);
+  });
+
+  it("US-C-05a — a vendor with no opening hours set at all doesn't block scheduling (nothing real to constrain against)", async () => {
+    seed(prisma, { vendor: { openingHours: null } });
+    const result = await service().checkout({ ...baseInput(), scheduledFor: lagosDateTime(2, 3) }, null, "idem-hours-3");
     expect(result.order.status).toBe("PAID");
   });
 

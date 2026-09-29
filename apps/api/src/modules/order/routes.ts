@@ -14,6 +14,7 @@ import {
   createOrderService,
   VendorUnavailableError,
   OutsideServiceAreaError,
+  ScheduledTimeOutsideHoursError,
   CartInvalidError,
   OrderNotFoundError,
   ForbiddenError,
@@ -85,6 +86,9 @@ export async function orderRoutes(app: FastifyInstance) {
       }
       if (err instanceof OutsideServiceAreaError) {
         return reply.code(422).send({ error: { code: "OUTSIDE_SERVICE_AREA", message: err.message } });
+      }
+      if (err instanceof ScheduledTimeOutsideHoursError) {
+        return reply.code(422).send({ error: { code: "SCHEDULED_TIME_OUTSIDE_HOURS", message: err.message } });
       }
       if (err instanceof CartInvalidError) {
         return reply.code(409).send({ error: { code: "CART_INVALID", message: err.message } });
