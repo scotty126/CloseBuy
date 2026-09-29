@@ -644,6 +644,36 @@ depends on has existed since the very first migration regardless.
   a retry can succeed. Once it does, the fix is almost certainly just
   re-triggering a deploy for each of the four sites against the same
   `4f46762` commit — nothing about the code needs to change.
+- **Item-detail sheet + a store-landing vendor page** — same reference
+  screenshots as the restyle, a further ask ("let a full picture and
+  description show with other options"). Scoped down again first: the
+  reference's "Packaging (Required)" container picker is a real, new
+  feature (Product has no modifiers in the data model at all) with real
+  money implications and a product-fit question (most CloseBuy vendors
+  are supermarkets/pharmacies, not restaurants) — asked, and the answer
+  was skip it, not fake it. Built: `ProductDetailSheet.tsx` (full image/
+  name/price/availability/description + the same Add/stepper interaction
+  ProductCard already had, opened by tapping the image or name — the
+  quick-add controls stay direct), and the vendor page restructured into
+  the reference's hero-photo-plus-overlapping-info-sheet shape, with a
+  real Hours/Days/Pickup box and Menu/Reviews tabs. Two small, real
+  backend additions behind those, not decoration: `VendorDto.openingHours`
+  is public now (was omitted for no real reason — unlike pickupLat/Lng/
+  Phone/bank details it was never actually sensitive), and
+  `GET /vendors/:id/ratings` lists the individual reviews behind the
+  existing average/count — no reviewer name in the response, since
+  CloseBuy never collects one for a customer, so the frontend labels
+  every review "Customer" rather than fabricating one.
+  `apps/customer/lib/formatHours.ts` never claims "Every day" unless
+  every day that's actually set shares the same range. 3 new catalog
+  tests, 304 API tests total. Verified against live vendor data at
+  390px — the redesigned page, both tabs, and the detail sheet (including
+  Add-to-cart → quantity-stepper) all render correctly; the reviews tab
+  and Hours box both degrade correctly against the still-undeployed API
+  (a visible error, and no box, respectively) — same pattern as every
+  other local-only feature this session. **Also local-only, not pushed**
+  — see the Netlify note above for why another push isn't happening
+  without being asked.
 
 ## What's next
 
