@@ -8,7 +8,7 @@ import { formatNaira, minor } from "@closebuy/types";
 import type { CheckoutInput } from "@closebuy/types";
 import type { GeocodeResultDto, AddressDto } from "@closebuy/types";
 import { catalogApi, customerAuthApi, geocodeApi, orderApi } from "@/lib/api";
-import { useCart } from "@/lib/cart";
+import { useCart, type CartSyncChange } from "@/lib/cart";
 import { addGuestOrder } from "@/lib/guestOrders";
 import { DeliveryLocationMap } from "@/components/DeliveryLocationMap";
 import { AddressSearch } from "@/components/AddressSearch";
@@ -35,7 +35,7 @@ type PaymentChoice = "online" | "cash_on_delivery";
 export default function CheckoutPage() {
   const router = useRouter();
   const { session, isLoaded: sessionLoaded } = useAuthSession();
-  const { cart, isLoaded: cartLoaded, subtotalMinor, clearCart } = useCart();
+  const { cart, isLoaded: cartLoaded, subtotalMinor, clearCart, syncWithLiveProducts } = useCart();
 
   // Reused across a network-level retry (so a double-tap can't place two orders), but replaced once the
   // server has answered with an error: that order wasn't placed, and replaying the key would just hand back
@@ -105,6 +105,24 @@ export default function CheckoutPage() {
     if (!cartLoaded || orderJustPlacedRef.current) return;
     if (!cart.vendor || cart.items.length === 0) router.replace("/cart");
   }, [cartLoaded, cart.vendor, cart.items.length, router]);
+
+  // US-C-04 — "re-validated for price and stock at checkout, and any
+  // change is shown before payment." Runs once against the vendor's live
+  // catalogue; syncWithLiveProducts both corrects the cart in place (so the
+  // subtotal/total below is never wrong) and reports what changed, so it's
+  // shown rather than silently applied. The actual charge is still
+  // re-validated server-side regardless (order/service.ts) — this is the
+  // "shown" half specifically.
+  const [catalogChanges, setCatalogChanges] = useState<CartSyncChange[] | null>(null);
+  const syncedRef = useRef(false);
+  useEffect(() => {
+    if (!cartLoaded || syncedRef.current || !cart.vendor || cart.items.length === 0) return;
+    syncedRef.current = true;
+    catalogApi
+      .getVendorProducts(cart.vendor.id)
+      .then((res) => setCatalogChanges(syncWithLiveProducts(res.products)))
+      .catch(() => {}); // best-effort — the server-side check at submit is still the real safety net
+  }, [cartLoaded, cart.vendor, cart.items.length, syncWithLiveProducts]);
 
   useEffect(() => {
     if (isDelivery) {
@@ -266,6 +284,23 @@ export default function CheckoutPage() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5 p-4 pb-8">
       <h1 className="text-lg font-bold text-ink">Checkout</h1>
+
+      {catalogChanges && catalogChanges.length > 0 && (
+        <section className="flex flex-col gap-1 rounded-lg bg-warning/10 p-3 text-sm text-ink" role="status">
+          <p className="font-medium">Your cart changed since you added these:</p>
+          <ul className="list-disc pl-4 text-xs text-muted">
+            {catalogChanges.map((c) => (
+              <li key={c.productId}>
+                {c.kind === "removed" && `${c.name} is no longer available and was removed.`}
+                {c.kind === "reduced" && `${c.name}: only ${c.newQuantity} left, quantity updated from ${c.oldQuantity}.`}
+                {c.kind === "price_changed" &&
+                  `${c.name}: price updated from ${formatNaira(minor(c.oldPriceMinor!))} to ${formatNaira(minor(c.newPriceMinor!))}.`}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted">The totals below already reflect this.</p>
+        </section>
+      )}
 
       {isDelivery ? (
         <section className="flex flex-col gap-2">

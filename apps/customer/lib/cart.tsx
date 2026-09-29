@@ -35,6 +35,30 @@ interface AddItemResult {
   conflictWithVendor?: string;
 }
 
+// US-C-04 — "the cart is re-validated for price and stock at checkout, and
+// any change is shown before payment". The checkout page's own submit is
+// re-validated server-side regardless (order/service.ts recomputes price
+// from the DB unconditionally, and hard-rejects insufficient stock) — this
+// is the "shown before payment" half specifically: a live re-check against
+// the vendor's current catalogue, run when the checkout page loads, so the
+// customer sees what changed instead of just being silently charged a
+// different total than the cart displayed.
+export interface CartSyncChange {
+  productId: string;
+  name: string;
+  kind: "removed" | "reduced" | "price_changed";
+  oldPriceMinor?: number;
+  newPriceMinor?: number;
+  oldQuantity?: number;
+  newQuantity?: number;
+}
+interface LiveProduct {
+  id: string;
+  priceMinor: number;
+  stock: number;
+  isActive: boolean;
+}
+
 interface CartContextValue {
   cart: CartState;
   isLoaded: boolean;
@@ -43,6 +67,7 @@ interface CartContextValue {
   addItem: (vendor: CartVendor, item: Omit<CartItem, "quantity">, quantity?: number) => AddItemResult;
   replaceCart: (vendor: CartVendor, item: Omit<CartItem, "quantity">, quantity?: number) => void;
   replaceCartItems: (vendor: CartVendor, items: CartItem[]) => void;
+  syncWithLiveProducts: (liveProducts: LiveProduct[]) => CartSyncChange[];
   updateQuantity: (productId: string, quantity: number) => void;
   removeItem: (productId: string) => void;
   clearCart: () => void;
@@ -110,6 +135,36 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
+  const syncWithLiveProducts = useCallback(
+    (liveProducts: LiveProduct[]): CartSyncChange[] => {
+      const byId = new Map(liveProducts.map((p) => [p.id, p]));
+      const changes: CartSyncChange[] = [];
+      const nextItems: CartItem[] = [];
+
+      for (const item of cart.items) {
+        const live = byId.get(item.productId);
+        if (!live || !live.isActive || live.stock === 0) {
+          changes.push({ productId: item.productId, name: item.name, kind: "removed" });
+          continue;
+        }
+        let next = item;
+        if (live.stock < item.quantity) {
+          changes.push({ productId: item.productId, name: item.name, kind: "reduced", oldQuantity: item.quantity, newQuantity: live.stock });
+          next = { ...next, quantity: live.stock };
+        }
+        if (live.priceMinor !== item.priceMinor) {
+          changes.push({ productId: item.productId, name: item.name, kind: "price_changed", oldPriceMinor: item.priceMinor, newPriceMinor: live.priceMinor });
+          next = { ...next, priceMinor: live.priceMinor };
+        }
+        nextItems.push(next);
+      }
+
+      if (changes.length > 0) persist(nextItems.length === 0 ? EMPTY_CART : { ...cart, items: nextItems });
+      return changes;
+    },
+    [cart, persist],
+  );
+
   const updateQuantity = useCallback(
     (productId: string, quantity: number) => {
       if (quantity <= 0) {
@@ -145,6 +200,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       addItem,
       replaceCart,
       replaceCartItems,
+      syncWithLiveProducts,
       updateQuantity,
       removeItem,
       clearCart,
@@ -159,6 +215,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       addItem,
       replaceCart,
       replaceCartItems,
+      syncWithLiveProducts,
       updateQuantity,
       removeItem,
       clearCart,
