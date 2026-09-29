@@ -828,6 +828,73 @@ depends on has existed since the very first migration regardless.
   covered by the mirrored, unit-tested server-side logic instead. Local-
   only, not pushed, same as everything else this session since the
   Netlify credit block.
+- **"Next 5 again" — a fourth instance of "working backend, no UI," plus
+  two smaller acceptance-criterion gaps.** Same audit method as the last
+  two passes: read the actual user-stories.md criteria and code, not this
+  file's own claims. Three of five items were `GET`/`POST` endpoints that
+  had been real and working with zero frontend consumer — the exact
+  pattern this file has flagged repeatedly (disputes, ratings, admin
+  payout approval, the notification feed) and evidently hadn't finished
+  surfacing.
+  1. **Vendor payout history + a "Request payout" button** — `GET/POST
+     /vendors/me/payouts*` (vendor-requested, admin-approved payouts,
+     built early M1) had no frontend at all; the earnings page's own
+     `Payout history` `Placeholder` claimed "no payout-run mechanism
+     exists yet," which was simply wrong — vendors have always been able
+     to request one, and admin has been able to approve/reject since
+     2026-09-27. New `packages/api-client/src/payouts.ts`, and the
+     earnings page now shows `availableToWithdrawMinor` next to a real
+     request button and lists payout history with status/reference/
+     failure-or-rejection reason.
+  2. **Customer "Ratings you've given" (US-C-10)** — genuinely new
+     backend this time, not just a missing frontend: no endpoint had ever
+     existed to list a customer's own ratings back (the account page's
+     own comment said so honestly). New `order.listMyRatings(userId)` +
+     `GET /customer/ratings`, joining through each rating's own order
+     (a rating's `targetId` always points at that order's `vendorId` or
+     `riderId` — confirmed against `rateOrder`'s own logic, not assumed)
+     to show who it was for without a second round trip. New
+     `MyRatingDto` type. Account page replaces the old Placeholder with a
+     real list linking each rating back to its order's tracking page; the
+     genuinely-still-unbuilt "Payment methods" row now says why honestly
+     (no stored payment methods exist at all — Monnify's hosted page
+     handles cards entirely) instead of the stale comment that used to
+     lump it in with ratings.
+  3. **Admin audit-log date-range filter (US-A-08)** — `searchAuditLog`
+     already accepted `from`/`to`; the page only ever exposed actor/
+     target inputs. Added two date fields, converted to full-day ISO
+     boundaries client-side.
+  4. **Admin orders page vendor/rider/date filters (US-A-03)** — same
+     shape of gap: `listOrders` already accepted `vendorId`/`riderId`/
+     `from`/`to`; the page's own comment claimed "filterable by state/
+     vendor/rider/date" while only exposing status and fulfilment type.
+     Added the missing fields (applied on explicit Search, not per
+     keystroke, matching the audit-log page's own convention) plus a
+     small extra: a vendor or rider's name in the table is now a button
+     that filters straight to their orders, since a bare free-text UUID
+     field alone would be nearly unusable for a human operator.
+  5. **Customer tracking page: explain `PENDING_PAYMENT` clearly** — an
+     order whose Monnify payment hadn't been confirmed used to render as
+     an empty, unexplained step list (its status isn't in either the
+     pickup or delivery step sequence, so nothing showed as done and
+     nothing said why). Now a distinct panel explaining payment is still
+     being confirmed, that an abandoned payment auto-cancels itself
+     (the 2026-09-29 PENDING_PAYMENT-expiry work earlier this file), and a
+     link back to the vendor to start over — deliberately not a "retry
+     this exact order" flow, which Monnify/this app doesn't build; that
+     would need a real scoping decision, not an improvised one.
+  Verified: `pnpm typecheck`/`lint` clean across all 8 packages (one
+  real lint catch along the way — two unescaped apostrophes), 319 API
+  tests passing (up from 317). Live in headless Edge against the real
+  dev server: the customer account page, signed in with a fresh
+  throwaway account — the ratings section degrades to a clean, honest
+  "That doesn't exist." rather than crashing, since `GET /customer/
+  ratings` isn't deployed yet (same pattern as every other local-only
+  feature this session), no overflow, no real console errors. **Not
+  verified live**: the vendor earnings payout section and the admin
+  orders/audit-log filter additions — this session has no vendor or
+  admin credentials for the live app, only a customer one; covered by
+  typecheck/lint/code review instead. Local-only, not pushed.
 
 ## What's next
 
