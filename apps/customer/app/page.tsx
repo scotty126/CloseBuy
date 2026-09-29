@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
-import { MapPin, ChevronDown, Search, Store } from "lucide-react";
+import { MapPin, ChevronDown, Search, Store, Bell } from "lucide-react";
 import type { CategoryDto, VendorDto } from "@closebuy/types";
 import { catalogApi } from "@/lib/api";
 import { VendorCard } from "@/components/VendorCard";
@@ -59,6 +59,15 @@ export default function HomePage() {
             className="shrink-0 rounded-full bg-primary px-3.5 py-2 text-xs font-semibold text-white shadow-sm"
           >
             Sign in
+          </Link>
+        )}
+        {isLoaded && session && (
+          <Link
+            href="/notifications"
+            aria-label="Notifications"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-ink shadow-sm"
+          >
+            <Bell size={18} />
           </Link>
         )}
       </div>
