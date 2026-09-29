@@ -9,7 +9,7 @@ const DAY_LABEL: Record<(typeof DAY_ORDER)[number], string> = {
   sun: "Sunday",
 };
 
-function formatTime(t: string): string {
+export function formatTime(t: string): string {
   const [h = 0, m = 0] = t.split(":").map(Number);
   const period = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 === 0 ? 12 : h % 12;

@@ -1,26 +1,57 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@closebuy/ui";
 import { ShoppingBag } from "lucide-react";
 import { formatNaira, minor } from "@closebuy/types";
 import { useCart } from "@/lib/cart";
+import { catalogApi } from "@/lib/api";
+import { formatTime } from "@/lib/formatHours";
+
+const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
+
+/**
+ * US-C-05a — "Schedule for later offers a date and a time slot within the
+ * vendor's stated hours." Mirrors the server-side check in
+ * order/service.ts's isWithinVendorHours — this is the "shown before
+ * payment" half, same relationship US-C-04's cart sync has to checkout's
+ * own re-validation; the server check is the real authority regardless.
+ */
+function isWithinVendorHours(iso: string, openingHours: Record<string, [string, string]> | null | undefined): boolean {
+  if (!openingHours) return true; // nothing real to constrain against
+  const d = new Date(iso);
+  const range = openingHours[DAY_KEYS[d.getDay()]!];
+  if (!range) return false;
+  const minutesOfDay = d.getHours() * 60 + d.getMinutes();
+  const toMinutes = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return (h ?? 0) * 60 + (m ?? 0);
+  };
+  return minutesOfDay >= toMinutes(range[0]) && minutesOfDay <= toMinutes(range[1]);
+}
 
 /**
  * screens-navigation.md §1.5. Delivery fee isn't shown here — it's a
  * platform Config value (flat_delivery_fee_minor) with no public read
  * endpoint, computed server-side at checkout; showing a guessed number
- * here would be worse than not showing one. Scheduling isn't constrained
- * to the vendor's actual opening hours either — VendorProfile.openingHours
- * has no admin/vendor UI to ever populate it yet (M2's Store Settings
- * screen, still unbuilt), so there's nothing real to constrain against.
+ * here would be worse than not showing one.
  */
 export default function CartPage() {
   const router = useRouter();
   const { cart, isLoaded, subtotalMinor, updateQuantity, removeItem, setFulfilmentType, setScheduledFor, clearCart } = useCart();
   const [scheduleMode, setScheduleMode] = useState<"asap" | "later">(cart.scheduledFor ? "later" : "asap");
+  const [openingHours, setOpeningHours] = useState<Record<string, [string, string]> | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (scheduleMode !== "later" || !cart.vendor) return;
+    catalogApi
+      .getVendor(cart.vendor.id)
+      .then((res) => setOpeningHours(res.vendor.openingHours))
+      .catch(() => {}); // best effort — falls back to not constraining client-side; checkout still enforces it server-side
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduleMode, cart.vendor?.id]);
 
   if (!isLoaded) return null;
 
@@ -126,13 +157,25 @@ export default function CartPage() {
           </button>
         </div>
         {scheduleMode === "later" && (
-          <input
-            type="datetime-local"
-            min={minDateTime}
-            value={cart.scheduledFor ? cart.scheduledFor.slice(0, 16) : ""}
-            onChange={(e) => setScheduledFor(e.target.value ? new Date(e.target.value).toISOString() : null)}
-            className="mt-2 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-          />
+          <>
+            <input
+              type="datetime-local"
+              min={minDateTime}
+              value={cart.scheduledFor ? cart.scheduledFor.slice(0, 16) : ""}
+              onChange={(e) => setScheduledFor(e.target.value ? new Date(e.target.value).toISOString() : null)}
+              className="mt-2 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+            />
+            {cart.scheduledFor && openingHours && !isWithinVendorHours(cart.scheduledFor, openingHours) && (
+              <p className="mt-1.5 text-xs font-medium text-danger">
+                {(() => {
+                  const range = openingHours[DAY_KEYS[new Date(cart.scheduledFor).getDay()]!];
+                  return range
+                    ? `${cart.vendor!.businessName} is only open ${formatTime(range[0])} – ${formatTime(range[1])} that day.`
+                    : `${cart.vendor!.businessName} doesn't open that day.`;
+                })()}
+              </p>
+            )}
+          </>
         )}
       </div>
 
@@ -146,7 +189,10 @@ export default function CartPage() {
 
       <Button
         onClick={() => router.push("/checkout")}
-        disabled={scheduleMode === "later" && !cart.scheduledFor}
+        disabled={
+          scheduleMode === "later" &&
+          (!cart.scheduledFor || (openingHours != null && !isWithinVendorHours(cart.scheduledFor, openingHours)))
+        }
       >
         Proceed to checkout
       </Button>
