@@ -895,6 +895,31 @@ depends on has existed since the very first migration regardless.
   orders/audit-log filter additions — this session has no vendor or
   admin credentials for the live app, only a customer one; covered by
   typecheck/lint/code review instead. Local-only, not pushed.
+- **M4's last real gap, scoped with the owner rather than guessed at.**
+  Asked directly: for a scheduled order, once the vendor accepts it, what
+  should actually happen before the slot arrives — architecture.md §3's
+  full "BullMQ holds it, activates near the slot" mechanism (new order
+  status, touches dispatch too), or a minimal fix? **Owner chose minimal.**
+  Turned out the bigger mechanism was less necessary than the roadmap
+  doc implied: the vendor already fully controls when a delivery job
+  reaches riders — `markReady` is their own manual action, never
+  automatic on accept — so nothing today actually forces early dispatch
+  for a scheduled order. The one real, honest gap was narrower: the
+  customer's own tracking page showed "Preparing" as the active step the
+  instant a vendor accepted, even for a slot days out, because
+  `acceptOrder` reaches `PREPARING` immediately regardless of
+  `scheduledFor`. Fixed in the tracking page only (no API/schema change):
+  while the order is still exactly `PREPARING` and its `scheduledFor` is
+  still in the future, the step list caps its displayed progress at
+  "accepted" rather than the raw `order.status`, with a banner explaining
+  the vendor will start preparing closer to the slot. The moment the
+  vendor takes any real next action (marks it ready — early or not,
+  their call) it's shown exactly as-is, since that's genuine progress,
+  not an artifact of `acceptOrder`'s default. `pnpm typecheck`/`lint`
+  clean across all 8 packages. **Not verified live** — needs a real
+  vendor session to accept a scheduled order, which this session doesn't
+  have; the change is presentational-only, computed entirely from fields
+  already on `OrderDto`, so nothing new to typecheck against.
 
 ## What's next
 
