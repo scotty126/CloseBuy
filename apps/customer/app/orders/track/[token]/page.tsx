@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { Star } from "lucide-react";
 import { Button, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
@@ -282,6 +283,7 @@ export default function OrderTrackingPage() {
   const currentIndex = steps.indexOf(order.status);
   const isException = TERMINAL_EXCEPTIONS.includes(order.status);
   const exceptionTransition = isException ? [...order.transitions].reverse().find((t) => t.toStatus === order.status) : undefined;
+  const isPendingPayment = order.status === "PENDING_PAYMENT";
   const canCancel = Boolean(session) && order.status === "PAID";
 
   // US-C-11 — mirrors the server's own window check (order/service.ts's
@@ -298,7 +300,24 @@ export default function OrderTrackingPage() {
         <p className="text-xs text-muted">Placed {new Date(order.createdAt).toLocaleString()}</p>
       </div>
 
-      {isException ? (
+      {isPendingPayment ? (
+        // A card/transfer order whose Monnify payment hasn't been
+        // confirmed yet — never shown as an empty, unexplained step list.
+        // It either completes shortly (the webhook lands) or auto-expires
+        // within pending_payment_expiry_minutes (order/service.ts's
+        // expirePendingPayment) and this page reflects that once it does,
+        // rather than promising a retry this app doesn't build.
+        <div className="rounded-2xl bg-warning/10 p-4">
+          <p className="font-bold text-warning">Waiting for payment confirmation</p>
+          <p className="mt-1 text-sm text-ink">
+            If you completed payment, this updates automatically within a minute or two. If you closed the payment
+            page without finishing, this order will be cancelled automatically and nothing will be charged.
+          </p>
+          <Link href={`/vendors/${order.vendorId}`} className="mt-3 inline-block text-sm font-semibold text-primary underline">
+            Start a new order with {order.vendor?.businessName ?? "this vendor"} instead
+          </Link>
+        </div>
+      ) : isException ? (
         <div className="rounded-2xl bg-danger/10 p-4">
           <p className="font-bold text-danger">{stepLabel(order.status, isPickup) || order.status}</p>
           {exceptionTransition?.reason && <p className="mt-1 text-sm text-ink">{exceptionTransition.reason}</p>}
