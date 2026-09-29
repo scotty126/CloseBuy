@@ -32,9 +32,8 @@ function addMonths(date: Date, months: number): Date {
  * produces (US-A-08). Order oversight (US-A-03) lives in ./orders.js,
  * disputes (US-A-04) in ./disputes.js, config writes (US-A-02) in
  * ./config.js, actor suspension (US-A-06) in ./actors.js, payouts in
- * ../payouts/. Still real, still not built: reconciliation, metrics
- * (M-priority, M3 — not forgotten, just genuinely lower priority than
- * the S-tagged stories above them).
+ * ../payouts/, reconciliation (US-A-05) in ./reconciliation.js, platform
+ * metrics (US-A-07) in ./metrics.js — every Admin story is built now.
  */
 export function createAdminService({ prisma, notifications }: AdminServiceDeps) {
   async function writeAuditLog(actorId: string, action: string, targetType: string, targetId: string, reason?: string) {

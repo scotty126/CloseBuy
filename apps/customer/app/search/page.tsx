@@ -11,11 +11,13 @@ import { CategoryChips } from "@/components/CategoryChips";
 import { CartBar } from "@/components/CartBar";
 
 /**
- * US-C-03. Vendor-name search + category filter — real, against
- * GET /vendors. Not built: product-level search (the API only ever
- * searches vendors, so "results list mixing vendors and products",
- * screens-navigation.md §1.2, is scoped down to vendors only here —
- * a real gap worth flagging, not a silent one).
+ * US-C-03. Vendor-name and product-name search (a vendor matches if its
+ * own name matches, or if any of its active products' names do —
+ * catalog/service.ts's searchVendors) plus category filter — the result
+ * is still one list of vendors, not the two-lists-mixed-together UI
+ * screens-navigation.md §1.2 sketched (a real, flagged scope-down, not a
+ * silent one), but the actual "find an item without knowing the vendor"
+ * need is met either way.
  */
 export default function SearchPage() {
   const [query, setQuery] = useState("");
@@ -48,7 +50,7 @@ export default function SearchPage() {
   return (
     <div className="flex flex-col gap-4 p-4">
       <Input
-        placeholder="Search vendors…"
+        placeholder="Search vendors or products…"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         autoFocus
@@ -63,7 +65,7 @@ export default function SearchPage() {
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-surface text-muted">
             <SearchIcon size={22} />
           </span>
-          <p className="text-sm font-medium text-ink">Search by vendor name</p>
+          <p className="text-sm font-medium text-ink">Search by vendor or product name</p>
           <p className="text-xs text-muted">Or pick a category above.</p>
         </div>
       ) : vendors === null ? (
