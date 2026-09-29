@@ -7,24 +7,31 @@ export function ProductCard({
   onAdd,
   onIncrement,
   onDecrement,
+  onOpenDetail,
 }: {
   product: ProductDto;
   quantity: number;
   onAdd: () => void;
   onIncrement: () => void;
   onDecrement: () => void;
+  onOpenDetail: () => void;
 }) {
   const outOfStock = product.stock === 0;
 
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
-      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-surface">
+      <button
+        type="button"
+        onClick={onOpenDetail}
+        aria-label={`View ${product.name}`}
+        className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-surface"
+      >
         {product.images[0] ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URLs
           <img src={product.images[0]} alt="" className="h-full w-full object-cover" loading="lazy" />
         ) : null}
-      </div>
-      <div className="min-w-0 flex-1">
+      </button>
+      <button type="button" onClick={onOpenDetail} className="min-w-0 flex-1 text-left">
         <p className="truncate font-semibold text-ink">{product.name}</p>
         <p className="text-sm font-bold text-accent">{formatNaira(minor(product.priceMinor))}</p>
         {outOfStock ? (
@@ -34,7 +41,7 @@ export function ProductCard({
             <span className="h-1.5 w-1.5 rounded-full bg-success" /> Available
           </p>
         )}
-      </div>
+      </button>
       {quantity > 0 ? (
         <div className="flex shrink-0 items-center gap-2 rounded-full bg-surface px-1 py-1">
           <button

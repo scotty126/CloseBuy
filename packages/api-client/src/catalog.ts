@@ -2,6 +2,7 @@ import type { ApiClient } from "./client";
 import type {
   CategoryDto,
   VendorDto,
+  VendorRatingDto,
   ProductDto,
   VendorSearchQuery,
   VendorApplicationInput,
@@ -30,6 +31,9 @@ export function createCatalogApi(client: ApiClient) {
     getVendor: (id: string) => client.request<{ vendor: VendorDto }>(`/vendors/${id}`),
 
     getVendorProducts: (id: string) => client.request<{ products: ProductDto[] }>(`/vendors/${id}/products`),
+
+    getVendorRatings: (id: string, limit = 20) =>
+      client.request<{ ratings: VendorRatingDto[] }>(`/vendors/${id}/ratings?limit=${limit}`),
 
     getDeliveryFee: () => client.request<{ feeMinor: number }>("/delivery-fee"),
 

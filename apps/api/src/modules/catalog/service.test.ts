@@ -83,6 +83,12 @@ function createFakePrisma() {
           _count: { targetId: scores.length },
         }));
       },
+      findMany: async ({ where, take }: any) =>
+        ratings
+          .filter((r) => r.targetType === where.targetType && r.targetId === where.targetId)
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+          .slice(0, take)
+          .map((r) => ({ id: r.id, score: r.score, comment: r.comment ?? null, createdAt: r.createdAt })),
     },
     config: {
       findFirst: async ({ where }: { where: { key: string } }) =>
@@ -185,6 +191,40 @@ describe("catalog service", () => {
 
     expect(fetched).not.toHaveProperty("reliabilityScore");
     expect(searched[0]).not.toHaveProperty("reliabilityScore");
+  });
+
+  it("exposes openingHours on the public detail endpoint (customer-facing display, never sensitive)", async () => {
+    const svc = createCatalogService(prisma);
+    const vendor = await svc.submitApplication(USER_A, APPLICATION);
+    const hours = { mon: ["08:00", "20:00"], sun: ["10:00", "18:00"] };
+    await prisma.vendorProfile.update({ where: { userId: USER_A }, data: { status: "approved", openingHours: hours } });
+
+    const fetched = await svc.getVendor(vendor.id);
+    expect((fetched as any).openingHours).toEqual(hours);
+  });
+
+  it("getVendorRatings — lists individual reviews for a vendor, newest first", async () => {
+    const svc = createCatalogService(prisma);
+    const vendor = await svc.submitApplication(USER_A, APPLICATION);
+    prisma.__state.ratings.push(
+      { id: "r1", targetType: "vendor", targetId: vendor.id, score: 4, comment: "Good", createdAt: new Date("2026-09-01") },
+      { id: "r2", targetType: "vendor", targetId: vendor.id, score: 5, comment: null, createdAt: new Date("2026-09-10") },
+      { id: "r3", targetType: "rider", targetId: "some_rider", score: 2, comment: "n/a", createdAt: new Date("2026-09-11") },
+    );
+
+    const ratings = await svc.getVendorRatings(vendor.id, 20);
+    expect(ratings.map((r: any) => r.id)).toEqual(["r2", "r1"]);
+    expect(ratings[1]).toMatchObject({ score: 4, comment: "Good" });
+  });
+
+  it("getVendorRatings — respects the limit", async () => {
+    const svc = createCatalogService(prisma);
+    const vendor = await svc.submitApplication(USER_A, APPLICATION);
+    for (let i = 0; i < 5; i++) {
+      prisma.__state.ratings.push({ id: `r${i}`, targetType: "vendor", targetId: vendor.id, score: 5, comment: null, createdAt: new Date(2026, 8, i + 1) });
+    }
+    const ratings = await svc.getVendorRatings(vendor.id, 2);
+    expect(ratings).toHaveLength(2);
   });
 
   it("US-C-10 — shows the real rating average and count, null/0 until the first real rating exists", async () => {

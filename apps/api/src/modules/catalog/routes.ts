@@ -60,6 +60,13 @@ export async function catalogRoutes(app: FastifyInstance) {
     return reply.send({ products: await catalog.getVendorProducts(id) });
   });
 
+  app.get("/vendors/:id/ratings", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { limit } = req.query as { limit?: string };
+    const parsedLimit = limit ? Math.min(Math.max(Number(limit) || 20, 1), 50) : 20;
+    return reply.send({ ratings: await catalog.getVendorRatings(id, parsedLimit) });
+  });
+
   app.post("/vendors", { preHandler: requireAuth(["vendor"]) }, async (req, reply) => {
     const body = vendorApplicationSchema.parse(req.body);
     try {

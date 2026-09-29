@@ -134,6 +134,22 @@ export interface VendorDto {
   pickupLandmark: string;
   avgDeliveryMinutes: number | null;
   foundingVendorCommissionWaivedUntil: string | null;
+  // Customer-facing display only (screens-navigation.md's store-landing
+  // reference) — unlike pickupLat/pickupLng/pickupPhone/bank details,
+  // opening hours were never actually sensitive, just previously omitted
+  // for no real reason. Null for a vendor that's never set any (the
+  // storefront falls back to just the isOpen/Closed badge in that case).
+  openingHours: Record<string, [string, string]> | null;
+}
+
+// US-C-10 — one entry per real Rating row, newest first. No reviewer name:
+// CloseBuy never collects one for a customer (email/phone only), so this
+// never fabricates one — the frontend labels every entry "Customer".
+export interface VendorRatingDto {
+  id: string;
+  score: number;
+  comment: string | null;
+  createdAt: string;
 }
 
 // GET/PATCH /vendors/me — the raw VendorProfile row, unlike VendorDto

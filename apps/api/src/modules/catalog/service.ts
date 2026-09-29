@@ -25,7 +25,6 @@ const PUBLIC_VENDOR_OMIT = [
   "bankCode",
   "bankAccountName",
   "status",
-  "openingHours",
   "createdAt",
   // US-C-10 — an internal ops metric (only ever decremented on a vendor's
   // own auto-reject/reject, order/service.ts), never a customer rating.
@@ -133,6 +132,22 @@ export function createCatalogService(prisma: PrismaClient) {
       return prisma.product.findMany({
         where: { vendorId, isActive: true },
         orderBy: { name: "asc" },
+      });
+    },
+
+    /**
+     * US-C-10's other public half — the average/count already shown on
+     * VendorDto is an aggregate; this is the individual reviews behind it.
+     * No reviewer name in the response — CustomerProfile/User never
+     * collects one (email/phone only) — the frontend labels every row
+     * "Customer" rather than fabricating one.
+     */
+    async getVendorRatings(vendorId: string, limit: number) {
+      return prisma.rating.findMany({
+        where: { targetType: "vendor", targetId: vendorId },
+        select: { id: true, score: true, comment: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: limit,
       });
     },
 
