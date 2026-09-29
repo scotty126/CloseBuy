@@ -1,33 +1,75 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Placeholder } from "@closebuy/ui";
+import { Button } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
 import { formatNaira, minor } from "@closebuy/types";
-import type { VendorEarningsDto } from "@closebuy/types";
-import { orderApi } from "@/lib/api";
+import type { VendorEarningsDto, PayoutDto, PayoutStatus } from "@closebuy/types";
+import { orderApi, payoutsApi } from "@/lib/api";
 import { VendorGate } from "@/components/VendorGate";
 
-/**
- * screens-navigation.md §2.4 — US-V-07. Payout history isn't built —
- * there's no read endpoint over the `Payout` table for a vendor yet
- * (Admin's `POST /admin/payouts/run` is what would create those rows,
- * and that's not built either, api-contracts.md). Flagged, not faked.
- */
+const STATUS_LABEL: Record<PayoutStatus, string> = {
+  requested: "Requested",
+  scheduled: "Scheduled",
+  paid: "Paid",
+  failed: "Failed",
+  rejected: "Rejected",
+};
+const STATUS_TONE: Record<PayoutStatus, "success" | "warning" | "danger"> = {
+  requested: "warning",
+  scheduled: "warning",
+  paid: "success",
+  failed: "danger",
+  rejected: "danger",
+};
+const TONE_CLASSES = {
+  success: "bg-success/10 text-success",
+  warning: "bg-warning/10 text-warning",
+  danger: "bg-danger/10 text-danger",
+};
+
+/** screens-navigation.md §2.4 — US-V-07. */
 export default function EarningsPage() {
   return <VendorGate>{() => <Earnings />}</VendorGate>;
 }
 
 function Earnings() {
   const [earnings, setEarnings] = useState<VendorEarningsDto | null>(null);
+  const [payouts, setPayouts] = useState<PayoutDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [payoutsError, setPayoutsError] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const [isRequesting, setIsRequesting] = useState(false);
+
+  function loadPayouts() {
+    payoutsApi
+      .listMyPayouts()
+      .then((res) => setPayouts(res.payouts))
+      .catch((err) => setPayoutsError(err instanceof ApiClientError ? err.message : "Couldn't load your payout history."));
+  }
 
   useEffect(() => {
     orderApi
       .getVendorEarnings()
       .then(setEarnings)
       .catch((err) => setError(err instanceof ApiClientError ? err.message : "Couldn't load your earnings."));
+    loadPayouts();
   }, []);
+
+  async function handleRequestPayout() {
+    setRequestError(null);
+    setIsRequesting(true);
+    try {
+      // Omitted amount = the full available balance (payoutRequestSchema).
+      await payoutsApi.requestPayout({});
+      loadPayouts();
+      orderApi.getVendorEarnings().then(setEarnings).catch(() => {});
+    } catch (err) {
+      setRequestError(err instanceof ApiClientError ? err.message : "Couldn't request a payout.");
+    } finally {
+      setIsRequesting(false);
+    }
+  }
 
   if (error) {
     return (
@@ -74,6 +116,17 @@ function Earnings() {
         Pending is a gross estimate — commission is only final once an order completes with no dispute.
       </p>
 
+      <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-3">
+        <div>
+          <p className="text-xs text-muted">Available to withdraw</p>
+          <p className="text-lg font-semibold text-ink">{formatNaira(minor(earnings.availableToWithdrawMinor))}</p>
+        </div>
+        <Button onClick={handleRequestPayout} disabled={isRequesting || earnings.availableToWithdrawMinor <= 0}>
+          {isRequesting ? "Requesting…" : "Request payout"}
+        </Button>
+      </div>
+      {requestError && <p className="-mt-2 text-sm text-danger">{requestError}</p>}
+
       <div className="flex flex-col gap-2">
         <p className="text-sm font-medium text-ink">Completed orders</p>
         {earnings.orders.length === 0 ? (
@@ -95,7 +148,38 @@ function Earnings() {
         )}
       </div>
 
-      <Placeholder title="Payout history" note="No payout-run mechanism exists yet (Admin's POST /admin/payouts/run isn't built) — nothing to list here honestly, not a hidden gap." />
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-medium text-ink">Payout history</p>
+        {payoutsError ? (
+          <p className="text-sm text-danger">{payoutsError}</p>
+        ) : payouts === null ? (
+          <p className="py-4 text-center text-sm text-muted">Loading…</p>
+        ) : payouts.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted">No payout requests yet.</p>
+        ) : (
+          <div className="flex flex-col divide-y divide-gray-200 rounded-xl border border-gray-200 bg-white">
+            {payouts.map((p) => (
+              <div key={p.id} className="flex items-center justify-between p-3 text-sm">
+                <div>
+                  <p className="text-ink">{new Date(p.createdAt).toLocaleDateString()}</p>
+                  <p className="text-xs text-muted">
+                    {p.reference ?? "No reference yet"}
+                    {(p.status === "failed" && p.failureReason) || (p.status === "rejected" && p.rejectionReason)
+                      ? ` — ${p.failureReason ?? p.rejectionReason}`
+                      : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${TONE_CLASSES[STATUS_TONE[p.status]]}`}>
+                    {STATUS_LABEL[p.status]}
+                  </span>
+                  <p className="font-semibold text-ink">{formatNaira(minor(p.amountMinor))}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

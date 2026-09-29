@@ -7,3 +7,4 @@ export * from "./order";
 export * from "./dispatch";
 export * from "./geocode";
 export * from "./notifications";
+export * from "./payouts";
