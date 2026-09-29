@@ -102,7 +102,17 @@ export function createCatalogService(prisma: PrismaClient) {
           status: "approved",
           ...(query.category ? { categoryId: query.category } : {}),
           ...(query.fulfilment === "pickup" ? { supportsPickup: true } : {}),
-          ...(query.q ? { businessName: { contains: query.q, mode: "insensitive" } } : {}),
+          // A vendor also matches if one of its own active products does —
+          // otherwise a customer who knows what they want but not which
+          // vendor stocks it has no way to find it via search at all.
+          ...(query.q
+            ? {
+                OR: [
+                  { businessName: { contains: query.q, mode: "insensitive" } },
+                  { products: { some: { isActive: true, name: { contains: query.q, mode: "insensitive" } } } },
+                ],
+              }
+            : {}),
         },
         include: { category: true },
         take: query.limit,

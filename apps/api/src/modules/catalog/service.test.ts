@@ -39,8 +39,32 @@ function createFakePrisma() {
         if (where.userId) return [...vendors.values()].find((v) => v.userId === where.userId) ?? null;
         return null;
       },
-      findMany: async ({ where }: { where?: { status?: string } } = {}) =>
-        [...vendors.values()].filter((v) => !where?.status || v.status === where.status),
+      // Minimal hand-rolled evaluator for the shapes searchVendors actually
+      // builds (status, categoryId, supportsPickup, and the businessName/
+      // product-name OR) — not a general Prisma emulator, just enough to
+      // exercise the real where-clause logic rather than only `status`.
+      findMany: async ({ where }: { where?: any } = {}) =>
+        [...vendors.values()].filter((v) => {
+          if (where?.status && v.status !== where.status) return false;
+          if (where?.categoryId && v.categoryId !== where.categoryId) return false;
+          if (where?.supportsPickup && !v.supportsPickup) return false;
+          if (where?.OR) {
+            const matches = where.OR.some((clause: any) => {
+              if (clause.businessName) {
+                return v.businessName?.toLowerCase().includes(clause.businessName.contains.toLowerCase());
+              }
+              if (clause.products?.some) {
+                const needle = clause.products.some.name.contains.toLowerCase();
+                return [...products.values()].some(
+                  (p) => p.vendorId === v.id && p.isActive === clause.products.some.isActive && p.name.toLowerCase().includes(needle),
+                );
+              }
+              return false;
+            });
+            if (!matches) return false;
+          }
+          return true;
+        }),
       create: async ({ data }: { data: any }) => {
         const vendor = { id: id(), status: "pending", ...data };
         vendors.set(vendor.id, vendor);
@@ -148,6 +172,29 @@ describe("catalog service", () => {
 
     const { vendors } = await svc.searchVendors({ limit: 20 } as any);
     expect(vendors).toHaveLength(0); // still pending, not approved
+  });
+
+  it("US-C-03 — search matches a product name even when the vendor's own name doesn't match", async () => {
+    const svc = createCatalogService(prisma);
+    const vendor = await svc.submitApplication(USER_A, APPLICATION);
+    await prisma.vendorProfile.update({ where: { userId: USER_A }, data: { status: "approved" } });
+    prisma.__state.products.set("prod_1", { id: "prod_1", vendorId: vendor.id, name: "Paracetamol", isActive: true });
+
+    const { vendors: byProduct } = await svc.searchVendors({ q: "paracet", limit: 20 } as any);
+    expect(byProduct.map((v) => v.id)).toContain(vendor.id);
+
+    const { vendors: noMatch } = await svc.searchVendors({ q: "somethingelse", limit: 20 } as any);
+    expect(noMatch).toHaveLength(0);
+  });
+
+  it("US-C-03 — an inactive product's name doesn't surface a vendor that otherwise wouldn't match", async () => {
+    const svc = createCatalogService(prisma);
+    const vendor = await svc.submitApplication(USER_A, APPLICATION);
+    await prisma.vendorProfile.update({ where: { userId: USER_A }, data: { status: "approved" } });
+    prisma.__state.products.set("prod_2", { id: "prod_2", vendorId: vendor.id, name: "Paracetamol", isActive: false });
+
+    const { vendors } = await svc.searchVendors({ q: "paracet", limit: 20 } as any);
+    expect(vendors).toHaveLength(0);
   });
 
   it("never exposes bank details or exact pickup coordinates on the public browse/detail endpoints", async () => {
