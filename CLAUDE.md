@@ -521,13 +521,63 @@ the page), no overflow at phone width either place. **Not exercised as a
 real working round-trip** — that needs this deployed, same caveat as every
 other local-only feature this session.
 
-**None of this — everything in this dated section plus the 2026-09-27
-section above it, 20 commits — is pushed yet** (still holding off per the
-Netlify-credits constraint below, and then explicitly told not to) —
-all local-only commits on `main`, confirmed against `origin/main` (currently
-`3b2eafd`, see "Deployed 2026-09-26" below — that commit and everything
-before it really is live; only these 20 are not). `pnpm typecheck`, `lint`,
-and `test` (301 tests) all green as of the last commit in this list. The
+## 2026-09-29
+
+- **US-C-04's other unbuilt half — "the cart is re-validated for price and
+  stock at checkout, and any change is shown before payment."** Stock
+  overages already hard-blocked at submit (`CartInvalidError`); price drift
+  didn't — the server always recomputed the real price silently, so a
+  customer was simply charged whatever it was with no warning if a vendor
+  had raised (or lowered) it since the item was added. `cart.tsx`'s new
+  `syncWithLiveProducts()` diffs the cart against a live
+  `getVendorProducts` fetch (same call reorder already uses) the moment
+  checkout loads, corrects the cart in place, and returns what changed;
+  checkout shows a banner naming each change (price updated / quantity
+  reduced to available stock / item removed) and the subtotal/total below
+  already reflect the correction — purely additive, no backend/schema
+  change, the server-side check stays the real authority regardless.
+  Verified against real live vendor data (Anishoks Supermarket, a
+  deliberately stale seeded cart) — all three change kinds fired
+  correctly, no overflow/errors.
+- **Home screen restyle** — the user shared reference screenshots (a red
+  food-delivery app) and asked for CloseBuy's UI to look "more defined."
+  Scoped down first (asked, not assumed): keep CloseBuy's own green/orange,
+  not the reference's red or dark theme; visual restyle only this round,
+  not the real features mixed into those screenshots that CloseBuy doesn't
+  have (packaging/container choice, Favorites, Streaks, Idea Bank,
+  WhatsApp/Snapchat links — none of that built); start with Home. Delivered:
+  the location chip is now a real bordered pill instead of bare text, the
+  search bar has more presence, the category rail is bigger/bolder
+  (`CategoryChips.tsx`), and `VendorCard.tsx` (shared with Search) now
+  carries real badges over the cover — a category pill top-left, an
+  OPEN/CLOSED pill top-right (`success`/`muted` tokens, never the
+  reference's red) — replacing the old small muted "Closed" label, plus a
+  skeleton loading state and a proper centered-icon empty state. Verified
+  against live vendor data at 390px — no overflow, no console errors, every
+  real vendor (including the closed E2E test one) renders correctly.
+- **Grachi Pharmacy was closed** (`isOpen: false`) on the live DB — not a
+  bug, the owner's own vendor had been toggled closed at some point.
+  Flipped it back to open via a direct API call at the owner's request
+  (`PATCH /vendors/me`, real write against production).
+- **Rider "Couldn't update duty status"** — root-caused to a stale/expired
+  access token in that browser session, not a real bug: a fresh session
+  hit `PATCH /riders/me/duty` successfully (verified directly against the
+  live API). Also restarted the vendor/rider/admin local dev servers while
+  investigating — they'd been running since before this session's earlier
+  `@closebuy/types` rebuild and had never been restarted (only the
+  customer server had), the same staleness gotcha documented elsewhere in
+  this file.
+
+**None of this — everything in this dated section, the saved-addresses
+section above it, and the 2026-09-27 section above that, 22 commits — is
+pushed yet** (still holding off per the Netlify-credits constraint below,
+and then explicitly told not to) — all local-only commits on `main`,
+confirmed against `origin/main` (currently `3b2eafd`, see "Deployed
+2026-09-26" below — that commit and everything before it really is live;
+only these 22 are not). `pnpm typecheck` and `lint` both clean across all 8
+packages as of the last commit in this list; `test` (301 API tests) is
+current as of the addresses commit — the two commits since (cart sync,
+Home restyle) are frontend-only with no new backend tests needed. The
 4-digit-code and geocoding changes are both genuinely untestable end-to-end
 without a deploy (see their notes above) — this is a real, active decision
 point, not an oversight: ask before pushing next, and say plainly that it
