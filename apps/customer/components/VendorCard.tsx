@@ -20,7 +20,7 @@ export function VendorCard({ vendor }: { vendor: VendorDto }) {
       <div className="relative flex h-32 w-full items-center justify-center bg-primary/10 px-4">
         {vendor.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URL
-          <img src={vendor.logoUrl} alt="" className="h-full w-full object-cover" />
+          <img src={vendor.logoUrl} alt="" className="h-full w-full object-contain" />
         ) : (
           <p className="truncate text-center text-lg font-extrabold text-primary">{vendor.businessName}</p>
         )}

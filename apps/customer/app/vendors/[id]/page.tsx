@@ -114,7 +114,7 @@ export default function VendorPage() {
         </button>
         {vendor.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URL
-          <img src={vendor.logoUrl} alt="" className="h-full w-full object-cover" />
+          <img src={vendor.logoUrl} alt="" className="h-full w-full object-contain" />
         ) : (
           // No logo yet — the business name stands in for a cover image
           // rather than leaving a blank box.

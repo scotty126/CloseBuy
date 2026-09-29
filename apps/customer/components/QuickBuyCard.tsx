@@ -21,7 +21,7 @@ export function QuickBuyCard({ product, onAdd }: { product: ProductDto; onAdd: (
       <div className="relative h-28 w-28 overflow-hidden rounded-2xl bg-surface shadow-sm">
         {product.images[0] ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URLs
-          <img src={product.images[0]} alt="" className="h-full w-full object-cover" loading="lazy" />
+          <img src={product.images[0]} alt="" className="h-full w-full object-contain" loading="lazy" />
         ) : null}
         {!outOfStock && (
           <span className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-accent text-base font-bold leading-none text-white shadow">

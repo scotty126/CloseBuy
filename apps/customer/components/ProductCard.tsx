@@ -28,7 +28,7 @@ export function ProductCard({
       >
         {product.images[0] ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URLs
-          <img src={product.images[0]} alt="" className="h-full w-full object-cover" loading="lazy" />
+          <img src={product.images[0]} alt="" className="h-full w-full object-contain" loading="lazy" />
         ) : null}
       </button>
       <button type="button" onClick={onOpenDetail} className="min-w-0 flex-1 text-left">
