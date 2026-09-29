@@ -280,11 +280,22 @@ export default function OrderTrackingPage() {
 
   const isPickup = order.fulfilmentType === "pickup";
   const steps = isPickup ? PICKUP_STEPS : DELIVERY_STEPS;
-  const currentIndex = steps.indexOf(order.status);
   const isException = TERMINAL_EXCEPTIONS.includes(order.status);
   const exceptionTransition = isException ? [...order.transitions].reverse().find((t) => t.toStatus === order.status) : undefined;
   const isPendingPayment = order.status === "PENDING_PAYMENT";
   const canCancel = Boolean(session) && order.status === "PAID";
+
+  // A scheduled order the vendor has just accepted reaches PREPARING
+  // immediately, same as any ASAP order — the vendor still fully controls
+  // when it actually becomes an active job (marking it ready is their own
+  // later action), but showing "Preparing" as already underway days
+  // before a scheduled slot would be misleading. Caps the displayed step
+  // at "accepted", not the real order.status, only while it's still
+  // exactly PREPARING and the slot hasn't arrived — any real vendor
+  // action past that (marking ready) is genuine progress and shown as-is.
+  const scheduledNotYetDue = Boolean(order.scheduledFor) && new Date(order.scheduledFor!).getTime() > Date.now();
+  const showingAsAccepted = scheduledNotYetDue && order.status === "PREPARING";
+  const currentIndex = steps.indexOf(showingAsAccepted ? "PAID" : order.status);
 
   // US-C-11 — mirrors the server's own window check (order/service.ts's
   // disputeOrder): within 48h of the DELIVERED transition, and not
@@ -323,7 +334,14 @@ export default function OrderTrackingPage() {
           {exceptionTransition?.reason && <p className="mt-1 text-sm text-ink">{exceptionTransition.reason}</p>}
         </div>
       ) : (
-        <ol className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <>
+          {showingAsAccepted && (
+            <div className="rounded-2xl bg-primary/5 p-4">
+              <p className="font-bold text-primary">Accepted — scheduled for {new Date(order.scheduledFor!).toLocaleString()}</p>
+              <p className="mt-1 text-sm text-ink">The vendor will start preparing closer to your scheduled time.</p>
+            </div>
+          )}
+          <ol className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           {steps.map((step, i) => {
             const transition = order.transitions.find((t) => t.toStatus === step);
             const done = currentIndex >= 0 && i <= currentIndex;
@@ -343,7 +361,8 @@ export default function OrderTrackingPage() {
               </li>
             );
           })}
-        </ol>
+          </ol>
+        </>
       )}
 
       {isPickup && order.collectionCode && order.status === "READY_FOR_PICKUP" && (
