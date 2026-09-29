@@ -764,6 +764,70 @@ depends on has existed since the very first migration regardless.
   2026-09-29 Netlify credit block: nothing here has been asked to go
   live yet, and item 1 especially needs a deploy to actually close the
   live hole it fixes.
+- **"Go further" pass — a real M4 bug plus a real M4 acceptance-criterion
+  gap, found by auditing scheduled ordering against user-stories.md.**
+  M4 (Scheduled delivery) turned out to be much further along than the
+  roadmap doc's own "~2 weeks, not started" framing suggests — cart-side
+  ASAP/Schedule toggle, checkout plumbing, and the vendor's separate
+  "Scheduled" queue tab were all already real and working. Two genuine
+  gaps found and fixed:
+  1. **A live bug: a scheduled order used to auto-reject and refund
+     itself within `vendor_accept_window_minutes` of being *placed*, not
+     of its *slot*** — so an order scheduled for tomorrow could
+     self-cancel within 15 minutes of checkout, long before any vendor
+     would reasonably have looked at it, silently breaking scheduled
+     ordering end to end. US-V-05 says this window has to be relative to
+     the slot. Fixed in `markOrderPaid` (`order/service.ts`): a scheduled
+     order's auto-reject timer now fires `vendor_accept_window_minutes`
+     *before* the slot, clamped to 0 (not negative) when the slot is
+     already inside that window. 2 new tests.
+  2. **US-C-05a's "a time slot within the vendor's stated hours" was
+     entirely unenforced** — the cart page's schedule picker was a bare
+     `datetime-local` input with no bounds, and checkout didn't check
+     either. The blocking comment explaining why ("`VendorProfile.
+     openingHours` has no admin/vendor UI to ever populate it yet") was
+     itself stale — vendor Settings has had real opening-hours editing
+     since the 2026-09-27 mobile-responsiveness pass; the comment was
+     just never updated, so this looked unbuildable when it wasn't.
+     Fixed at both layers: `order/service.ts`'s `checkout()` now rejects
+     (`ScheduledTimeOutsideHoursError`, 422 `SCHEDULED_TIME_OUTSIDE_HOURS`)
+     a `scheduledFor` outside the vendor's opening hours for that day,
+     reasoned in Africa/Lagos time (`LAGOS_OFFSET_MS`, same fixed-UTC+1
+     convention `admin/metrics.ts` already uses); the cart page fetches
+     the vendor's real hours when "Schedule" is selected and shows an
+     inline error + disables "Proceed to checkout" for an out-of-hours
+     pick, mirroring the server check exactly — same "shown before
+     payment, server is the real authority" relationship US-C-04's cart
+     sync already has to checkout. A vendor with no hours set at all
+     still isn't blocked (nothing real to constrain against). 3 new
+     server-side tests.
+  Also fixed two stale comments found along the way, since they actively
+  misdirect the next read: `catalog/service.ts`'s search page comment
+  claimed vendor-name-only search was still true (item 4 of the previous
+  pass fixed that); `admin/service.ts`'s module doc still said
+  reconciliation/metrics were "not built" (both shipped 2026-09-26/27).
+  **Deliberately not attempted**: the actual BullMQ "hold after
+  acceptance, activate into `PREPARING` — and dispatch, for delivery —
+  timed to land near the slot" mechanism architecture.md §3 describes.
+  What exists today has a vendor accept a scheduled order and it goes
+  straight to active `PREPARING`/dispatch immediately, same as an ASAP
+  order; the slot is currently just informational once accepted. That's
+  a materially different, larger piece of work with real design
+  questions (does the vendor's own prep timing change? does a delivery
+  job appear to riders immediately or near the slot?) that's worth
+  scoping deliberately rather than improvising mid-pass — flagged here as
+  the next real M4 gap, not silently skipped. Verified: `pnpm typecheck`/
+  `lint` clean across all 8 packages, 317 API tests passing (up from
+  312), and the cart scheduling UI checked live in headless Edge against
+  a real vendor (Anishoks Supermarket) — toggle, date picker, and
+  checkout-button state all correct. Only the "vendor has hours set and
+  blocks an out-of-window pick" branch wasn't exercised live — no vendor
+  in the live API currently has `openingHours` in its public response at
+  all yet (that field's own publication is itself still local-only, from
+  the 2026-09-29 item-detail-sheet work above) — code-reviewed and
+  covered by the mirrored, unit-tested server-side logic instead. Local-
+  only, not pushed, same as everything else this session since the
+  Netlify credit block.
 
 ## What's next
 
