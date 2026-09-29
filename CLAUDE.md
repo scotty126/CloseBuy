@@ -601,22 +601,49 @@ other local-only feature this session.
   customer server had), the same staleness gotcha documented elsewhere in
   this file.
 
-**None of this — everything in this dated section, the saved-addresses
-section above it, and the 2026-09-27 section above that, 25 commits — is
-pushed yet** (still holding off per the Netlify-credits constraint below,
-and then explicitly told not to) — all local-only commits on `main`,
-confirmed against `origin/main` (currently `3b2eafd`, see "Deployed
-2026-09-26" below — that commit and everything before it really is live;
-only these 25 are not). `pnpm typecheck` and `lint` both clean across all 8
-packages as of the last commit in this list; `test` (301 API tests) is
-current as of the addresses commit — the commits since (cart sync, the
-two restyle passes) are frontend-only with no new backend tests needed. The
-4-digit-code and geocoding changes are both genuinely untestable end-to-end
-without a deploy (see their notes above) — this is a real, active decision
-point, not an oversight: ask before pushing next, and say plainly that it
-also triggers the three auto-connected Netlify sites, not just Railway (no
-way to push to one without the other, short of disconnecting their
-auto-deploy, which hasn't been done).
+**Deployed 2026-09-29 (owner said "go live") — API only. Netlify failed on
+this push; corrected here after initially assuming (wrongly) that it had
+succeeded.** All 25 commits since `3b2eafd` pushed to `main`:
+`git push origin main` (`3b2eafd..4f46762`), no `--force`, nothing skipped
+on the git side. **No new migration this time** — checked before pushing
+(`git diff origin/main..HEAD` touched neither `schema.prisma` nor
+`prisma/migrations/`); the `addresses` table this round's biggest feature
+depends on has existed since the very first migration regardless.
+
+- **Railway (API): deployed and verified.** Polled `GET /customer/addresses`
+  until it flipped from 404 (route doesn't exist) to 401 (route exists,
+  needs auth) to confirm the rebuild had actually landed, then ran
+  `node apps/api/scripts/e2e-lifecycle.mjs run` — **all 39 checks passed**
+  against the live API, full guest-COD order loop start to finish. This
+  also confirms the 4-digit-code change is genuinely live now: the run's
+  own vendor collection code came back 4 digits (`9592`).
+- **All four Netlify sites: build failed, `error_message: "Skipped due to
+  account credit usage exceeded"`** — confirmed via `netlify api
+  listSiteDeploys`/`getSiteDeploy` for each site (`closebuy1`,
+  `closebuy-vendor`, `closebuy-rider`, `closebuy-admin`), not a code
+  problem, an account-level Netlify billing limit. This is exactly the
+  "Netlify-credits constraint" earlier sessions held off pushing over —
+  it wasn't hypothetical. **First check I ran (all four sites 200 on
+  `/login`) was misleading** — that's the CDN still serving the last
+  *successful* build, `3b2eafd` from 2026-09-27, not evidence the new
+  push landed; `curl`ing a Netlify site's HTTP status after a push proves
+  nothing about that push's own build result, only `netlify api
+  listSiteDeploys` does. Caught because the owner said "not netlify" —
+  should have checked deploy state via the API before declaring victory,
+  not after.
+- **Net effect**: the live frontends are unchanged, still `3b2eafd`,
+  same as they were before this push — not broken, just not carrying any
+  of this session's frontend work (saved addresses UI, the cart
+  price/stock banner, the whole restyle, or anything else customer/
+  vendor/rider/admin-side from the 2026-09-27/09-29 sections). The API
+  they're talking to is backward compatible with that old build (only new
+  routes were added, nothing removed or renamed), so nothing is expected
+  to be broken for a real user right now — just stale, not broken.
+- **Unresolved, not something I can fix from here**: the Netlify account's
+  credit usage needs to clear (billing-cycle reset, or a plan change) before
+  a retry can succeed. Once it does, the fix is almost certainly just
+  re-triggering a deploy for each of the four sites against the same
+  `4f46762` commit — nothing about the code needs to change.
 
 ## What's next
 
@@ -861,6 +888,24 @@ don't re-diagnose these from scratch, they're understood:
   failed attempts most likely wrote to the wrong place, though that wasn't
   isolated. `closebuy1` (customer)
   auto-deploys from `main`.
+- **NEW, 2026-09-29 — Netlify account credit usage exceeded, blocking all
+  four sites' builds.** The `4f46762` push's Netlify builds all failed
+  with `error_message: "Skipped due to account credit usage exceeded"`
+  (confirmed per-site via `netlify api getSiteDeploy`, not guessed from
+  a curl) — an account-level billing limit, not a code or config problem.
+  All four sites are still serving their last successful build (`3b2eafd`,
+  2026-09-27), not broken, just behind. **Not fixed here — outside this
+  codebase's control.** Needs the owner to either wait for the Netlify
+  billing cycle to reset or change plan/add credit; once that clears, a
+  re-trigger of the `4f46762` deploy for each of the four sites should
+  just work, no code changes expected. Check current state with
+  `netlify api listSiteDeploys --data '{"site_id":"<id>"}'` (site IDs:
+  `closebuy1` `4b868416-ba99-4157-99e6-bd02a3519358`, `closebuy-vendor`
+  `61768505-1bcb-4f4a-994f-1dbbe158c616`, `closebuy-rider`
+  `64f362d5-3d5d-439f-9e64-771d3e3c905a`, `closebuy-admin`
+  `0ab3fc21-17d3-41f6-8275-9232badf2176`) — a plain `curl` of the site only
+  shows what the CDN is currently caching, which after a failed build is
+  silently still the old one, not evidence either way about a new push.
 - **Google Cloud Billing won't complete for the account owner** — error
   `OR_BACR2_59`, "we were unable to set up your account." This blocks
   `GOOGLE_MAPS_API_KEY`/`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (Maps Platform
