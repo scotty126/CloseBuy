@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Input } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
+import { Search as SearchIcon, Store } from "lucide-react";
 import type { CategoryDto, VendorDto } from "@closebuy/types";
 import { catalogApi } from "@/lib/api";
 import { VendorCard } from "@/components/VendorCard";
@@ -58,11 +59,26 @@ export default function SearchPage() {
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {!hasSearched ? (
-        <p className="py-8 text-center text-sm text-muted">Search by vendor name, or pick a category above.</p>
+        <div className="flex flex-col items-center gap-2 py-14 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-surface text-muted">
+            <SearchIcon size={22} />
+          </span>
+          <p className="text-sm font-medium text-ink">Search by vendor name</p>
+          <p className="text-xs text-muted">Or pick a category above.</p>
+        </div>
       ) : vendors === null ? (
-        <p className="py-8 text-center text-sm text-muted">Searching…</p>
+        <div className="flex flex-col gap-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-52 animate-pulse rounded-2xl bg-surface" />
+          ))}
+        </div>
       ) : vendors.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted">No vendors match “{query || "that category"}”.</p>
+        <div className="flex flex-col items-center gap-2 py-14 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-surface text-muted">
+            <Store size={22} />
+          </span>
+          <p className="text-sm font-medium text-ink">No vendors match &ldquo;{query || "that category"}&rdquo;</p>
+        </div>
       ) : (
         <div className="flex flex-col gap-3">
           {vendors.map((vendor) => (

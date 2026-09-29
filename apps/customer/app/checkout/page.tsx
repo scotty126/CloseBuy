@@ -283,7 +283,7 @@ export default function CheckoutPage() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5 p-4 pb-8">
-      <h1 className="text-lg font-bold text-ink">Checkout</h1>
+      <h1 className="text-xl font-bold text-ink">Checkout</h1>
 
       {catalogChanges && catalogChanges.length > 0 && (
         <section className="flex flex-col gap-1 rounded-lg bg-warning/10 p-3 text-sm text-ink" role="status">
@@ -304,7 +304,7 @@ export default function CheckoutPage() {
 
       {isDelivery ? (
         <section className="flex flex-col gap-2">
-          <p className="text-sm font-medium text-ink">Delivery location</p>
+          <p className="text-base font-bold text-ink">Delivery location</p>
 
           {savedAddresses && savedAddresses.length > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -422,13 +422,13 @@ export default function CheckoutPage() {
           )}
         </section>
       ) : (
-        <section className="rounded-lg bg-surface p-3 text-sm text-ink">
-          Pickup from <span className="font-medium">{cart.vendor.businessName}</span>
+        <section className="rounded-xl bg-surface p-3.5 text-sm text-ink">
+          Pickup from <span className="font-bold">{cart.vendor.businessName}</span>
         </section>
       )}
 
       <section className="flex flex-col gap-3">
-        <p className="text-sm font-medium text-ink">Contact</p>
+        <p className="text-base font-bold text-ink">Contact</p>
         <PhoneInput label="Phone number" value={contactPhone} onChange={setContactPhone} required />
         <PhoneInput label="Alternate number (optional)" value={alternateContactPhone} onChange={setAlternateContactPhone} />
         {session && (
@@ -448,7 +448,7 @@ export default function CheckoutPage() {
       </section>
 
       <section className="flex flex-col gap-2">
-        <p className="text-sm font-medium text-ink">Payment</p>
+        <p className="text-base font-bold text-ink">Payment</p>
         <PaymentOption
           label="Pay online now (card or bank transfer)"
           selected={paymentChoice === "online"}
@@ -463,20 +463,20 @@ export default function CheckoutPage() {
         )}
       </section>
 
-      <section className="flex flex-col gap-1 border-t border-gray-200 pt-3 text-sm">
+      <section className="flex flex-col gap-1.5 rounded-2xl border border-gray-200 bg-white p-4 text-sm shadow-sm">
         <div className="flex justify-between">
-          <span className="text-muted">Subtotal</span>
-          <span className="text-ink">{formatNaira(minor(subtotalMinor))}</span>
+          <span className="font-medium text-muted">Subtotal</span>
+          <span className="font-medium text-ink">{formatNaira(minor(subtotalMinor))}</span>
         </div>
         {isDelivery && (
           <div className="flex justify-between">
-            <span className="text-muted">Delivery fee</span>
-            <span className="text-ink">{deliveryFeeMinor === null ? "…" : formatNaira(minor(deliveryFeeMinor))}</span>
+            <span className="font-medium text-muted">Delivery fee</span>
+            <span className="font-medium text-ink">{deliveryFeeMinor === null ? "…" : formatNaira(minor(deliveryFeeMinor))}</span>
           </div>
         )}
-        <div className="flex justify-between font-semibold">
+        <div className="flex justify-between border-t border-gray-100 pt-1.5 text-base font-bold">
           <span className="text-ink">Total</span>
-          <span className="text-ink">{formatNaira(minor(totalMinor))}</span>
+          <span className="text-accent">{formatNaira(minor(totalMinor))}</span>
         </div>
       </section>
 
@@ -504,12 +504,18 @@ function PaymentOption({ label, selected, onSelect }: { label: string; selected:
     <button
       type="button"
       onClick={onSelect}
-      className={`flex items-center justify-between rounded-lg border px-4 py-3 text-left text-sm transition ${
-        selected ? "border-primary bg-primary/5" : "border-gray-200"
+      className={`flex items-center justify-between rounded-xl border-2 px-4 py-3.5 text-left text-sm font-semibold transition ${
+        selected ? "border-primary bg-primary/5 text-ink shadow-sm" : "border-gray-200 text-ink"
       }`}
     >
       {label}
-      <span className={`h-4 w-4 shrink-0 rounded-full border-2 ${selected ? "border-primary bg-primary" : "border-gray-300"}`} />
+      <span
+        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
+          selected ? "border-primary bg-primary" : "border-gray-300"
+        }`}
+      >
+        {selected && <span className="h-2 w-2 rounded-full bg-white" />}
+      </span>
     </button>
   );
 }

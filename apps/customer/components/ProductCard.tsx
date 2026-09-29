@@ -17,35 +17,41 @@ export function ProductCard({
   const outOfStock = product.stock === 0;
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3">
-      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-surface">
+    <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
+      <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-surface">
         {product.images[0] ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URLs
           <img src={product.images[0]} alt="" className="h-full w-full object-cover" loading="lazy" />
         ) : null}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium text-ink">{product.name}</p>
-        <p className="text-sm text-muted">{formatNaira(minor(product.priceMinor))}</p>
-        {outOfStock && <p className="text-xs text-danger">Out of stock</p>}
+        <p className="truncate font-semibold text-ink">{product.name}</p>
+        <p className="text-sm font-bold text-accent">{formatNaira(minor(product.priceMinor))}</p>
+        {outOfStock ? (
+          <p className="text-xs font-medium text-danger">Out of stock</p>
+        ) : (
+          <p className="flex items-center gap-1 text-xs font-medium text-success">
+            <span className="h-1.5 w-1.5 rounded-full bg-success" /> Available
+          </p>
+        )}
       </div>
       {quantity > 0 ? (
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 rounded-full bg-surface px-1 py-1">
           <button
             type="button"
             onClick={onDecrement}
             aria-label={`Remove one ${product.name}`}
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-surface text-ink"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-ink shadow-sm"
           >
             −
           </button>
-          <span className="w-4 text-center text-sm font-medium text-ink">{quantity}</span>
+          <span className="w-4 text-center text-sm font-bold text-ink">{quantity}</span>
           <button
             type="button"
             onClick={onIncrement}
             disabled={quantity >= product.stock}
             aria-label={`Add one more ${product.name}`}
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white disabled:opacity-40"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white shadow-sm disabled:opacity-40"
           >
             +
           </button>
@@ -55,9 +61,10 @@ export function ProductCard({
           type="button"
           onClick={onAdd}
           disabled={outOfStock}
-          className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40"
+          aria-label={`Add ${product.name}`}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-xl font-bold leading-none text-white shadow-sm disabled:opacity-40"
         >
-          Add
+          +
         </button>
       )}
     </div>

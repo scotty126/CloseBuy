@@ -70,8 +70,12 @@ export default function VendorPage() {
 
   if (!vendor || products === null) {
     return (
-      <div className="p-4">
-        <p className="text-sm text-muted">Loading…</p>
+      <div className="flex flex-col gap-3 p-4">
+        <div className="h-44 w-full animate-pulse rounded-2xl bg-surface" />
+        <div className="h-6 w-2/3 animate-pulse rounded bg-surface" />
+        <div className="h-4 w-1/3 animate-pulse rounded bg-surface" />
+        <div className="h-20 w-full animate-pulse rounded-2xl bg-surface" />
+        <div className="h-20 w-full animate-pulse rounded-2xl bg-surface" />
       </div>
     );
   }
@@ -81,7 +85,7 @@ export default function VendorPage() {
 
   return (
     <div className="flex flex-col pb-28">
-      <div className="relative flex h-36 w-full items-center justify-center bg-primary/10">
+      <div className="relative flex h-44 w-full items-center justify-center bg-primary/10">
         <button
           type="button"
           onClick={() => router.back()}
@@ -90,48 +94,52 @@ export default function VendorPage() {
         >
           <ArrowLeft size={18} />
         </button>
+        <span
+          className={`absolute right-3 top-3 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide shadow-sm ${
+            vendor.isOpen ? "bg-success text-white" : "bg-white text-muted"
+          }`}
+        >
+          {vendor.isOpen ? "Open" : "Closed"}
+        </span>
         {vendor.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URL
           <img src={vendor.logoUrl} alt="" className="h-full w-full object-cover" />
         ) : (
           // No logo yet — the business name stands in for a cover image
           // rather than leaving a blank box.
-          <p className="px-4 text-center text-lg font-bold text-primary">{vendor.businessName}</p>
+          <p className="px-4 text-center text-xl font-extrabold text-primary">{vendor.businessName}</p>
         )}
       </div>
 
       <div className="flex flex-col gap-3 p-4">
         <div>
-          <div className="flex items-center justify-between gap-2">
-            <h1 className="text-xl font-bold text-ink">{vendor.businessName}</h1>
-            {!vendor.isOpen && (
-              <span className="shrink-0 rounded-full bg-muted/10 px-2 py-0.5 text-[10px] font-medium text-muted">Closed</span>
-            )}
-          </div>
-          <p className="text-sm text-muted">{vendor.category.name}</p>
+          <h1 className="text-2xl font-bold text-ink">{vendor.businessName}</h1>
+          <p className="text-sm font-medium text-muted">{vendor.category.name}</p>
 
-          <div className="mt-1.5 flex items-center gap-3 text-xs text-muted">
+          <div className="mt-2 flex items-center gap-3 text-xs font-medium text-muted">
             <span className="flex items-center gap-1">
-              <Star size={13} className={vendor.ratingAverage != null ? "fill-accent text-accent" : ""} />
-              {vendor.ratingAverage != null ? `${vendor.ratingAverage.toFixed(1)} (${vendor.ratingCount})` : "New"}
+              <Star size={14} className={vendor.ratingAverage != null ? "fill-accent text-accent" : "text-muted"} />
+              <span className={vendor.ratingAverage != null ? "text-ink" : ""}>
+                {vendor.ratingAverage != null ? `${vendor.ratingAverage.toFixed(1)} (${vendor.ratingCount})` : "New"}
+              </span>
             </span>
             {vendor.avgDeliveryMinutes != null && (
               <span className="flex items-center gap-1">
-                <Clock size={13} />
+                <Clock size={14} />
                 {vendor.avgDeliveryMinutes} min
               </span>
             )}
           </div>
-          <div className="mt-1 flex items-center gap-1 text-xs text-muted">
+          <div className="mt-1.5 flex items-center gap-1 text-xs text-muted">
             <MapPin size={13} className="shrink-0" />
             <span className="truncate">{vendor.pickupLandmark}</span>
           </div>
 
-          {vendor.description && <p className="mt-2 text-sm text-ink">{vendor.description}</p>}
+          {vendor.description && <p className="mt-2.5 text-sm leading-snug text-ink">{vendor.description}</p>}
         </div>
 
         {canToggleFulfilment && (
-          <div className="flex rounded-lg bg-surface p-1">
+          <div className="flex rounded-xl bg-surface p-1">
             <button type="button" onClick={() => setFulfilmentType("delivery")} className={toggleClass(cart.fulfilmentType === "delivery")}>
               Delivery
             </button>
@@ -142,14 +150,14 @@ export default function VendorPage() {
         )}
 
         {!vendor.isOpen && (
-          <p className="rounded-lg bg-warning/10 p-3 text-sm text-warning">
+          <p className="rounded-xl bg-warning/10 p-3 text-sm font-medium text-warning">
             This vendor is closed right now — you can browse, but ordering isn&apos;t available until they reopen.
           </p>
         )}
 
         {quickBuyProducts.length > 0 && (
           <div className="flex flex-col gap-2">
-            <p className="text-sm font-semibold text-ink">Quick Buy</p>
+            <p className="text-base font-bold text-ink">Quick Buy</p>
             <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1">
               {quickBuyProducts.map((product) => (
                 <QuickBuyCard key={product.id} product={product} onAdd={() => handleAdd(product)} />
@@ -159,6 +167,7 @@ export default function VendorPage() {
         )}
 
         <div className="flex flex-col gap-2">
+          <p className="text-base font-bold text-ink">Menu</p>
           {products.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted">No products listed yet.</p>
           ) : (
@@ -200,5 +209,5 @@ export default function VendorPage() {
 }
 
 function toggleClass(active: boolean): string {
-  return `flex-1 rounded-md py-2 text-sm font-medium transition ${active ? "bg-white text-ink shadow-sm" : "text-muted"}`;
+  return `flex-1 rounded-lg py-2 text-sm font-semibold transition ${active ? "bg-white text-ink shadow-sm" : "text-muted"}`;
 }

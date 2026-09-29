@@ -18,14 +18,21 @@ export function QuickBuyCard({ product, onAdd }: { product: ProductDto; onAdd: (
       disabled={outOfStock}
       className="flex w-28 shrink-0 flex-col gap-1 text-left disabled:opacity-50"
     >
-      <div className="h-28 w-28 overflow-hidden rounded-xl bg-surface">
+      <div className="relative h-28 w-28 overflow-hidden rounded-2xl bg-surface shadow-sm">
         {product.images[0] ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URLs
           <img src={product.images[0]} alt="" className="h-full w-full object-cover" loading="lazy" />
         ) : null}
+        {!outOfStock && (
+          <span className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-accent text-base font-bold leading-none text-white shadow">
+            +
+          </span>
+        )}
       </div>
-      <p className="truncate text-xs font-medium text-ink">{product.name}</p>
-      <p className="text-xs text-muted">{outOfStock ? "Out of stock" : formatNaira(minor(product.priceMinor))}</p>
+      <p className="truncate text-xs font-semibold text-ink">{product.name}</p>
+      <p className={`text-xs font-bold ${outOfStock ? "text-danger" : "text-accent"}`}>
+        {outOfStock ? "Out of stock" : formatNaira(minor(product.priceMinor))}
+      </p>
     </button>
   );
 }

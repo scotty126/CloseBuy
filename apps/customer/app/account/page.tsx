@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, Card, Input, Placeholder, PhoneInput, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
+import { ClipboardList, ChevronRight, UserRound } from "lucide-react";
 import type { AddressDto, GeocodeResultDto } from "@closebuy/types";
 import { customerAuthApi } from "@/lib/api";
 import { AddressSearch } from "@/components/AddressSearch";
@@ -45,13 +46,18 @@ export default function AccountPage() {
   // through here — this screen is specifically for a signed-in account.
   if (!session) {
     return (
-      <div className="flex flex-col items-center gap-4 p-4 text-center">
-        <Placeholder
-          title="No account yet"
-          note="Sign in for order history, saved addresses and editable ratings — none of it required just to order."
-        />
-        <Button onClick={() => router.push("/login")}>Sign in</Button>
-        <p className="text-xs text-muted">
+      <div className="flex flex-col items-center gap-3 p-6 pt-16 text-center">
+        <span className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <UserRound size={36} />
+        </span>
+        <h1 className="text-lg font-bold text-ink">Guest</h1>
+        <p className="max-w-xs text-sm text-muted">
+          Sign in for order history, saved addresses and editable ratings — none of it required just to order.
+        </p>
+        <Button onClick={() => router.push("/login")} className="mt-2">
+          Sign In / Register
+        </Button>
+        <p className="mt-4 text-xs text-muted">
           <Link href="/terms" className="underline">Terms of Service</Link> ·{" "}
           <Link href="/privacy" className="underline">Privacy Policy</Link>
         </p>
@@ -76,18 +82,29 @@ export default function AccountPage() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <Card>
-        <p className="text-sm text-muted">Signed in as</p>
-        <p className="text-lg font-semibold text-ink">{session.user.email}</p>
+      <Card className="flex items-center gap-3">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-lg font-bold text-white">
+          {session.user.email!.charAt(0).toUpperCase()}
+        </span>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-muted">Signed in as</p>
+          <p className="truncate text-base font-bold text-ink">{session.user.email}</p>
+        </div>
       </Card>
 
-      <Link href="/orders" className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4">
-        <span className="text-sm font-medium text-ink">Order history</span>
-        <span className="text-muted">›</span>
+      <Link
+        href="/orders"
+        className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-4 shadow-sm active:bg-surface"
+      >
+        <span className="flex items-center gap-2.5 text-sm font-semibold text-ink">
+          <ClipboardList size={18} className="text-primary" />
+          Order history
+        </span>
+        <ChevronRight size={18} className="text-muted" />
       </Link>
 
-      <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4">
-        <p className="text-sm font-medium text-ink">Default contact number</p>
+      <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <p className="text-sm font-bold text-ink">Default contact number</p>
         <p className="text-xs text-muted">Presets the phone field at checkout — never verified, never used to sign in (brief §3.1b).</p>
         <PhoneInput
           value={defaultPhone}
@@ -165,8 +182,8 @@ function AddressManager() {
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4">
-      <p className="text-sm font-medium text-ink">Saved addresses</p>
+    <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <p className="text-sm font-bold text-ink">Saved addresses</p>
       {error && <p className="text-xs text-danger">{error}</p>}
 
       {addresses === null ? (

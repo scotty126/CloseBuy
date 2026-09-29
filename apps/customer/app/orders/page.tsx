@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, Placeholder, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
+import { ClipboardList, ChevronRight } from "lucide-react";
 import { formatNaira, minor } from "@closebuy/types";
 import type { OrderSummaryDto, OrderStatus } from "@closebuy/types";
 import { orderApi } from "@/lib/api";
@@ -22,6 +23,27 @@ const STATUS_LABEL: Partial<Record<OrderStatus, string>> = {
   CANCELLED: "Cancelled",
   REFUNDED: "Refunded",
   COMPLETED: "Completed",
+};
+
+// Purely a visual grouping of the same OrderStatus enum — no new states,
+// just which of the existing badge tokens (success/warning/danger) a
+// status reads as "good", "in progress" or "stopped".
+const STATUS_TONE: Partial<Record<OrderStatus, "success" | "warning" | "danger">> = {
+  DELIVERED: "success",
+  COMPLETED: "success",
+  PREPARING: "warning",
+  READY_FOR_PICKUP: "warning",
+  RIDER_ASSIGNED: "warning",
+  IN_TRANSIT: "warning",
+  PENDING_PAYMENT: "warning",
+  DELIVERY_FAILED: "danger",
+  CANCELLED: "danger",
+  REFUNDED: "danger",
+};
+const TONE_CLASSES: Record<"success" | "warning" | "danger", string> = {
+  success: "bg-success/10 text-success",
+  warning: "bg-warning/10 text-warning",
+  danger: "bg-danger/10 text-danger",
 };
 
 /**
@@ -76,12 +98,20 @@ export default function OrdersPage() {
   if (!isLoaded) return null;
 
   if (!session) {
-    if (guestOrders === null) return <p className="py-8 text-center text-sm text-muted">Loading…</p>;
+    if (guestOrders === null) {
+      return (
+        <div className="flex flex-col gap-3 p-4">
+          {[0, 1].map((i) => (
+            <div key={i} className="h-16 animate-pulse rounded-2xl bg-surface" />
+          ))}
+        </div>
+      );
+    }
 
     return (
       <div className="flex flex-col gap-4 p-4">
         <div>
-          <h1 className="text-lg font-bold text-ink">Your orders</h1>
+          <h1 className="text-xl font-bold text-ink">Your orders</h1>
           <p className="text-xs text-muted">
             {guestOrders.length > 0
               ? "Remembered on this device only — a different phone or browser won't show these. Sign in for a permanent history instead."
@@ -108,16 +138,23 @@ export default function OrdersPage() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <h1 className="text-lg font-bold text-ink">Your orders</h1>
+      <h1 className="text-xl font-bold text-ink">Your orders</h1>
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {orders === null ? (
-        <p className="py-8 text-center text-sm text-muted">Loading…</p>
+        <div className="flex flex-col gap-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-16 animate-pulse rounded-2xl bg-surface" />
+          ))}
+        </div>
       ) : orders.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-8 text-center">
-          <p className="text-sm text-muted">No orders yet.</p>
-          <Link href="/">
+        <div className="flex flex-col items-center gap-3 py-14 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-surface text-muted">
+            <ClipboardList size={22} />
+          </span>
+          <p className="text-sm font-medium text-ink">No orders yet</p>
+          <Link href="/" className="mt-1">
             <Button>Browse vendors</Button>
           </Link>
         </div>
@@ -131,19 +168,27 @@ export default function OrdersPage() {
 function OrderList({ orders }: { orders: OrderSummaryDto[] }) {
   return (
     <div className="flex flex-col gap-3">
-      {orders.map((order) => (
-        <Link
-          key={order.id}
-          href={`/orders/track/${order.trackingToken}`}
-          className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-3 shadow-sm"
-        >
-          <div>
-            <p className="text-sm font-medium text-ink">{STATUS_LABEL[order.status] ?? order.status}</p>
-            <p className="text-xs text-muted">{new Date(order.createdAt).toLocaleDateString()}</p>
-          </div>
-          <p className="text-sm font-semibold text-ink">{formatNaira(minor(order.totalMinor))}</p>
-        </Link>
-      ))}
+      {orders.map((order) => {
+        const tone = STATUS_TONE[order.status] ?? "warning";
+        return (
+          <Link
+            key={order.id}
+            href={`/orders/track/${order.trackingToken}`}
+            className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-4 shadow-sm active:bg-surface"
+          >
+            <div className="flex flex-col gap-1">
+              <span className={`w-fit rounded-full px-2.5 py-0.5 text-[11px] font-bold ${TONE_CLASSES[tone]}`}>
+                {STATUS_LABEL[order.status] ?? order.status}
+              </span>
+              <p className="text-xs text-muted">{new Date(order.createdAt).toLocaleDateString()}</p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-bold text-ink">{formatNaira(minor(order.totalMinor))}</p>
+              <ChevronRight size={16} className="text-muted" />
+            </div>
+          </Link>
+        );
+      })}
     </div>
   );
 }

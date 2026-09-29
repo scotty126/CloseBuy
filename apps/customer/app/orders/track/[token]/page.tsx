@@ -52,8 +52,8 @@ function RatingForm({
 
   if (isLocked) {
     return (
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <p className="text-sm font-medium text-ink">{label}</p>
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <p className="text-sm font-bold text-ink">{label}</p>
         <div className="mt-1 flex gap-0.5">
           {[1, 2, 3, 4, 5].map((n) => (
             <Star key={n} size={16} className={n <= existing!.score ? "fill-accent text-accent" : "text-gray-300"} />
@@ -78,8 +78,8 @@ function RatingForm({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <p className="text-sm font-medium text-ink">{label}</p>
+    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <p className="text-sm font-bold text-ink">{label}</p>
       {error && <p className="mt-1 text-sm text-danger">{error}</p>}
       <div className="mt-2 flex gap-1">
         {[1, 2, 3, 4, 5].map((n) => (
@@ -269,8 +269,10 @@ export default function OrderTrackingPage() {
 
   if (!order) {
     return (
-      <div className="p-4">
-        <p className="text-sm text-muted">Loading…</p>
+      <div className="flex flex-col gap-3 p-4">
+        <div className="h-6 w-1/2 animate-pulse rounded bg-surface" />
+        <div className="h-32 w-full animate-pulse rounded-2xl bg-surface" />
+        <div className="h-20 w-full animate-pulse rounded-2xl bg-surface" />
       </div>
     );
   }
@@ -291,18 +293,18 @@ export default function OrderTrackingPage() {
   return (
     <div className="flex flex-col gap-5 p-4 pb-8">
       <div>
-        <p className="text-xs text-muted">Order</p>
-        <h1 className="text-lg font-bold text-ink">{order.vendor?.businessName ?? "Your order"}</h1>
+        <p className="text-xs font-medium text-muted">Order</p>
+        <h1 className="text-xl font-bold text-ink">{order.vendor?.businessName ?? "Your order"}</h1>
         <p className="text-xs text-muted">Placed {new Date(order.createdAt).toLocaleString()}</p>
       </div>
 
       {isException ? (
-        <div className="rounded-xl bg-danger/10 p-4">
-          <p className="font-semibold text-danger">{stepLabel(order.status, isPickup) || order.status}</p>
+        <div className="rounded-2xl bg-danger/10 p-4">
+          <p className="font-bold text-danger">{stepLabel(order.status, isPickup) || order.status}</p>
           {exceptionTransition?.reason && <p className="mt-1 text-sm text-ink">{exceptionTransition.reason}</p>}
         </div>
       ) : (
-        <ol className="flex flex-col gap-4">
+        <ol className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           {steps.map((step, i) => {
             const transition = order.transitions.find((t) => t.toStatus === step);
             const done = currentIndex >= 0 && i <= currentIndex;
@@ -311,12 +313,12 @@ export default function OrderTrackingPage() {
               <li key={step} className="flex gap-3">
                 <div className="flex flex-col items-center">
                   <span
-                    className={`h-3 w-3 rounded-full ${done ? (active ? "bg-accent" : "bg-primary") : "border-2 border-gray-300 bg-white"}`}
+                    className={`h-3.5 w-3.5 shrink-0 rounded-full ${done ? (active ? "bg-accent" : "bg-primary") : "border-2 border-gray-300 bg-white"}`}
                   />
                   {i < steps.length - 1 && <span className={`w-0.5 flex-1 ${done ? "bg-primary" : "bg-gray-200"}`} />}
                 </div>
                 <div className="pb-2">
-                  <p className={`text-sm font-medium ${done ? "text-ink" : "text-muted"}`}>{stepLabel(step, isPickup)}</p>
+                  <p className={`text-sm font-semibold ${done ? "text-ink" : "text-muted"}`}>{stepLabel(step, isPickup)}</p>
                   {transition && <p className="text-xs text-muted">{new Date(transition.createdAt).toLocaleTimeString()}</p>}
                 </div>
               </li>
@@ -326,52 +328,52 @@ export default function OrderTrackingPage() {
       )}
 
       {isPickup && order.collectionCode && order.status === "READY_FOR_PICKUP" && (
-        <div className="rounded-xl border-2 border-dashed border-primary p-4 text-center">
-          <p className="text-xs text-muted">Show this code at the counter</p>
-          <p className="text-3xl font-bold tracking-widest text-primary">{order.collectionCode}</p>
+        <div className="rounded-2xl border-2 border-dashed border-primary bg-primary/5 p-4 text-center">
+          <p className="text-xs font-medium text-muted">Show this code at the counter</p>
+          <p className="text-3xl font-extrabold tracking-widest text-primary">{order.collectionCode}</p>
         </div>
       )}
 
       {!isPickup && order.deliveryCode && ["READY_FOR_PICKUP", "RIDER_ASSIGNED", "IN_TRANSIT"].includes(order.status) && (
-        <div className="rounded-xl border-2 border-dashed border-primary p-4 text-center">
-          <p className="text-xs text-muted">Read this to your rider when they arrive</p>
-          <p className="text-3xl font-bold tracking-widest text-primary">{order.deliveryCode}</p>
+        <div className="rounded-2xl border-2 border-dashed border-primary bg-primary/5 p-4 text-center">
+          <p className="text-xs font-medium text-muted">Read this to your rider when they arrive</p>
+          <p className="text-3xl font-extrabold tracking-widest text-primary">{order.deliveryCode}</p>
         </div>
       )}
 
       {!isPickup && order.rider && (
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <p className="text-xs text-muted">Your rider</p>
-          <p className="font-medium text-ink">{order.rider.fullName}</p>
-          <a href={`tel:${order.rider.user.phone}`} className="text-sm text-primary underline">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-medium text-muted">Your rider</p>
+          <p className="font-bold text-ink">{order.rider.fullName}</p>
+          <a href={`tel:${order.rider.user.phone}`} className="text-sm font-semibold text-primary underline">
             {order.rider.user.phone}
           </a>
         </div>
       )}
 
       {isPickup && order.vendor && (
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <p className="text-xs text-muted">Pickup from</p>
-          <p className="font-medium text-ink">{order.vendor.pickupLandmark}</p>
-          <a href={`tel:${order.vendor.pickupPhone}`} className="text-sm text-primary underline">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-medium text-muted">Pickup from</p>
+          <p className="font-bold text-ink">{order.vendor.pickupLandmark}</p>
+          <a href={`tel:${order.vendor.pickupPhone}`} className="text-sm font-semibold text-primary underline">
             {order.vendor.pickupPhone}
           </a>
         </div>
       )}
 
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <p className="mb-2 text-sm font-medium text-ink">Items</p>
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <p className="mb-2 text-sm font-bold text-ink">Items</p>
         <div className="flex flex-col gap-1.5">
           {order.items.map((item) => (
             <div key={item.id} className="flex justify-between text-sm">
-              <span className="text-ink">
+              <span className="font-medium text-ink">
                 {item.quantity}× {item.nameSnapshot}
               </span>
               <span className="text-muted">{formatNaira(minor(item.priceMinorSnapshot * item.quantity))}</span>
             </div>
           ))}
         </div>
-        <div className="mt-3 flex flex-col gap-1 border-t border-gray-200 pt-2 text-sm">
+        <div className="mt-3 flex flex-col gap-1 border-t border-gray-100 pt-2 text-sm">
           <div className="flex justify-between text-muted">
             <span>Subtotal</span>
             <span>{formatNaira(minor(order.subtotalMinor))}</span>
@@ -382,9 +384,9 @@ export default function OrderTrackingPage() {
               <span>{formatNaira(minor(order.deliveryFeeMinor))}</span>
             </div>
           )}
-          <div className="flex justify-between font-semibold text-ink">
+          <div className="flex justify-between text-base font-bold text-ink">
             <span>Total</span>
-            <span>{formatNaira(minor(order.totalMinor))}</span>
+            <span className="text-accent">{formatNaira(minor(order.totalMinor))}</span>
           </div>
         </div>
       </div>
@@ -399,7 +401,7 @@ export default function OrderTrackingPage() {
       )}
 
       {reorderConflict ? (
-        <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4">
+        <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-sm text-ink">
             Your cart has items from another vendor. Reordering replaces it with this order&apos;s items.
           </p>
@@ -428,7 +430,7 @@ export default function OrderTrackingPage() {
       )}
 
       {order.dispute ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <p className="text-sm font-semibold text-ink">
             {order.dispute.status === "open" ? "Dispute under review" : "Dispute resolved"}
           </p>
@@ -443,7 +445,7 @@ export default function OrderTrackingPage() {
         </div>
       ) : canDispute && (
         showDisputeForm ? (
-          <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4">
+          <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
             <p className="text-sm font-medium text-ink">What went wrong?</p>
             {disputeError && <p className="text-sm text-danger">{disputeError}</p>}
             <textarea
