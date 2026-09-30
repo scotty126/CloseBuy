@@ -921,6 +921,47 @@ depends on has existed since the very first migration regardless.
   have; the change is presentational-only, computed entirely from fields
   already on `OrderDto`, so nothing new to typecheck against.
 
+## 2026-09-30
+
+- **Notification UI, extended to vendor/rider/admin — it only existed for
+  customer.** `notify()` has always fired at vendor, rider and admin
+  users too (`order_paid`, `vendor_application_approved/rejected`,
+  `payout_paid/failed/rejected`, `vendor_suspended/unsuspended` →
+  vendor; `rider_application_approved/rejected`,
+  `rider_suspended/unsuspended`, `rider_cash_remitted`,
+  `order_reassigned` → rider; `order_delivery_failed` broadcast to every
+  admin via `notifyAllAdmins`) but none of those three apps had ever had
+  a single line of notification UI — confirmed by grep, not assumed.
+  Same shared `@closebuy/api-client` `notifications.ts` from the customer
+  build (`list`/`markRead`, generic across roles already), wired into
+  each app's `lib/api.ts`. New `/notifications` page per app, each with
+  its own label map covering only the `NotificationType`s that role
+  actually receives (a generic fallback covers anything unmapped). Nav
+  integration follows each app's own existing pattern rather than a
+  shared new one: a `Notifications` entry in `VendorSidebar`/
+  `AdminSidebar` (both already list-driven), and a header link next to
+  the rider app's existing lone `Earnings` link — deliberately not a
+  persistent tab bar, matching that app's own documented "single-task by
+  design" choice. Dropped `lucide-react` from all three pages after
+  typecheck caught it: only the customer app declares that dependency;
+  vendor/rider genuinely don't have it installed (admin's own typecheck
+  passed by accident, via pnpm hoisting from customer — not something to
+  rely on), so all three use plain-text empty states instead, matching
+  what these three apps already do everywhere else (none of their
+  existing empty states use decorative icons).
+  `pnpm typecheck`/`lint` clean across all 8 packages; 319 API tests
+  still green (backend untouched this pass). **Live-checked in headless
+  Edge**, all three apps: this session's local dev servers had been
+  silently stopped between sessions (confirmed via `netstat` — a
+  background-task lifecycle detail, not a code issue), so all four were
+  restarted first. With no vendor/rider/admin credentials available,
+  verified what's actually checkable without one: each `/notifications`
+  route compiles and renders with no console errors, and the new nav
+  entry shows correctly in each app's own chrome (`VendorSidebar`,
+  `AdminSidebar`, the rider header) — the signed-in list/mark-read view
+  itself is code-reviewed only, same limitation as the vendor-payout and
+  admin-filter work two passes ago. Local-only, not pushed.
+
 ## What's next
 
 **Every Admin story is now built (US-A-01 through US-A-08)** — reconciliation
