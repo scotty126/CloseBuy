@@ -961,6 +961,59 @@ depends on has existed since the very first migration regardless.
   `AdminSidebar`, the rider header) — the signed-in list/mark-read view
   itself is code-reviewed only, same limitation as the vendor-payout and
   admin-filter work two passes ago. Local-only, not pushed.
+- **Real brand logo, real vendor storefront photos — deployed, not
+  local-only this time.** The owner supplied real assets in two folders
+  (`Logos/`, `StoreFront Pictures/`) and asked for the placeholder
+  storefront text to become real pictures.
+  - **Logo**: the shopping-bag icon and generic wordmark were themselves
+    placeholders from early in the build. Replaced `logo-icon.png`/
+    `logo-wordmark.png` across all four apps (confirmed byte-identical
+    across apps before replacing, so one swap covers all four) with the
+    real mark — the C/signal-wave symbol (icon), the full green-and-
+    orange wordmark on white (wordmark). Same filenames, zero code
+    changes.
+  - **Storefront photos**: no real image host exists (R2 isn't
+    configured, ADR-0001) — tried the Artifact tool's `assets` capability
+    first and it was the wrong tool for this: that store is
+    organization-internal, never a URL a real customer's browser could
+    load, so nothing built on it would actually work for real visitors.
+    Asked the owner and built the real thing instead: `@fastify/static`
+    added to the API, serving `apps/api/public/storefronts/*.jpg` at
+    `/static/storefronts/`. 8 of 9 supplied photos matched cleanly to
+    real live vendors by filename; 2 genuinely didn't — `beauty.jpg` and
+    `Rhomat.jpg` — **asked rather than guessed**: confirmed `beauty.jpg`
+    is PureGlow Skincare, and `Rhomat.jpg` doesn't correspond to any real
+    vendor at all (no "Rhomat" anywhere in the live list or
+    `seed-demo-vendors.mjs`) — left unused rather than force it onto
+    E&E or Offiong's Restaurant, CloseBuy's two vendors that still don't
+    have a photo and correctly still show the text-based cover.
+    `VendorCard.tsx`'s own comment ("no vendor photos yet") was stale the
+    moment this landed — fixed.
+  - **This push actually went to production** — `git push origin main`
+    was itself blocked by the auto-mode classifier as a "Production
+    Deploy" needing explicit confirmation at the point of the push, not
+    just the earlier decision to build it; went through once the owner
+    said so directly ("push it"). Railway rebuilt within the usual
+    window — verified by polling all 8 photo URLs directly (200,
+    `image/jpeg`), not assumed from the push succeeding. **Netlify hit
+    the same known account-credit block** (`netlify api
+    listSiteDeploys`, not a curl guess) — doesn't matter for this feature
+    specifically, since local dev always talks to the live Railway API
+    directly regardless of Netlify's state.
+  - **The 8 vendors' `logoUrl` values are a real, live production write**
+    — a `railway ssh`-piped Prisma script (same pattern as every other
+    direct-DB fix this session), each row's business name checked
+    against the target id before writing so a mismatch fails loud rather
+    than silently mislabeling a real vendor's storefront. Verified via
+    `GET /vendors` (all 8 URLs present, the 2 without photos and the
+    E2E test vendor correctly still `null`) and live in headless Edge at
+    390px against the actual local dev server: real photos render on
+    both the Home vendor cards and the Grachi Pharmacy storefront hero
+    (`naturalWidth: 547`, `complete: true` — genuinely loaded pixel
+    data, not a broken-image icon), new logo visible top-left, no
+    overflow. A stray `Unconfirmed *.crdownload` and a `symbol white
+    bg.png` sitting at the repo root weren't part of what was asked for
+    and were left alone, not committed.
 
 ## What's next
 
