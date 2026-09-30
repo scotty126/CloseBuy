@@ -21,6 +21,7 @@
     "@fastify/cors": "^11.3.0",
     "@fastify/rate-limit": "^10.1.0",
     "@fastify/sensible": "^6.0.0",
+    "@fastify/static": "^10.1.5",
     "@prisma/client": "^6.1.0",
     "argon2": "^0.41.0",
     "bullmq": "^5.34.0",

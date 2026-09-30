@@ -1,7 +1,10 @@
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import Fastify from "fastify";
 import sensible from "@fastify/sensible";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
+import fastifyStatic from "@fastify/static";
 import { envPlugin } from "./plugins/env.js";
 import { prismaPlugin } from "./plugins/prisma.js";
 import { redisPlugin } from "./plugins/redis.js";
@@ -70,6 +73,14 @@ export async function buildApp() {
     credentials: false,
   });
   await app.register(rateLimit, { max: 100, timeWindow: "1 minute", global: true });
+  // Real vendor storefront photos — R2 isn't configured (ADR-0001), so
+  // this is the actual image host for now: static files committed into
+  // the repo, served straight off this API. Compiles to dist/app.js, one
+  // level below apps/api/ either way (dev: src/app.ts; prod: dist/app.js).
+  await app.register(fastifyStatic, {
+    root: path.join(path.dirname(fileURLToPath(import.meta.url)), "../public"),
+    prefix: "/static/",
+  });
   await app.register(prismaPlugin);
   await app.register(redisPlugin);
   await app.register(notificationsPlugin);
