@@ -15,6 +15,7 @@ const NAV = [
   { href: "/payouts", label: "Payouts & reconciliation" },
   { href: "/metrics", label: "Metrics" },
   { href: "/audit-log", label: "Audit log" },
+  { href: "/notifications", label: "Notifications" },
 ];
 
 export function AdminSidebar() {

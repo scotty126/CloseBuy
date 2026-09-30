@@ -16,9 +16,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <header className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
           <span className="text-lg font-bold text-primary">CloseBuy Rider</span>
-          <Link href="/earnings" className="text-sm font-medium text-muted">
-            Earnings
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/notifications" className="text-sm font-medium text-muted">
+              Notifications
+            </Link>
+            <Link href="/earnings" className="text-sm font-medium text-muted">
+              Earnings
+            </Link>
+          </div>
         </header>
         <main className="mx-auto min-h-screen max-w-lg">{children}</main>
       </body>

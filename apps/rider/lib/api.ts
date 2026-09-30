@@ -1,6 +1,6 @@
 "use client";
 
-import { createApiClient, createAuthApi, createDispatchApi } from "@closebuy/api-client";
+import { createApiClient, createAuthApi, createDispatchApi, createNotificationsApi } from "@closebuy/api-client";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -56,6 +56,7 @@ function onSessionExpired() {
 const client = createApiClient({ baseUrl, getAccessToken, getRefreshToken, onAccessTokenRefreshed, onSessionExpired });
 export const authApi = createAuthApi(client);
 export const dispatchApi = createDispatchApi(client);
+export const notificationsApi = createNotificationsApi(client);
 
 // Plain browser navigations, not fetch calls — the API redirects to
 // Google/Apple itself. `role=rider` tells the shared OAuth callback

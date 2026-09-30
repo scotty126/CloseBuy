@@ -10,6 +10,7 @@ const NAV = [
   { href: "/products", label: "Products" },
   { href: "/settings", label: "Store settings" },
   { href: "/earnings", label: "Earnings & payouts" },
+  { href: "/notifications", label: "Notifications" },
 ];
 
 export function VendorSidebar() {

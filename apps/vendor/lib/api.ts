@@ -1,6 +1,6 @@
 "use client";
 
-import { createApiClient, createAuthApi, createCatalogApi, createOrderApi, createPayoutsApi } from "@closebuy/api-client";
+import { createApiClient, createAuthApi, createCatalogApi, createOrderApi, createPayoutsApi, createNotificationsApi } from "@closebuy/api-client";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -58,6 +58,7 @@ export const authApi = createAuthApi(client);
 export const catalogApi = createCatalogApi(client);
 export const orderApi = createOrderApi(client);
 export const payoutsApi = createPayoutsApi(client);
+export const notificationsApi = createNotificationsApi(client);
 
 // Plain browser navigations, not fetch calls — the API redirects to
 // Google/Apple itself. `role=vendor` tells the shared OAuth callback
