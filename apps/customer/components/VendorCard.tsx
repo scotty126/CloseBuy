@@ -5,9 +5,11 @@ import type { VendorDto } from "@closebuy/types";
 /**
  * Vertical, image-forward card — DoorDash's "Saved Stores"/search-result
  * card shape (reference kit), not the old horizontal thumbnail row. Cover
- * is the business name as text for now (product decision — no vendor
- * photos yet), same treatment as the storefront hero (vendors/[id]/page.tsx)
- * so a card and its own detail page never look like two different vendors.
+ * is the real storefront photo when `logoUrl` is set (2026-09-30 —
+ * apps/api/public/storefronts/, real photos of real vendors), falling
+ * back to the business name as text for the vendors that don't have one
+ * yet — same treatment as the storefront hero (vendors/[id]/page.tsx) so
+ * a card and its own detail page never look like two different vendors.
  * Badges (status, category) are real pills over the cover — same idea as
  * Foodys' reference screens, CloseBuy's own green/orange, never their red.
  */
