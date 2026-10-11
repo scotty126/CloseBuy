@@ -27,6 +27,24 @@ module.exports = {
         // the instant before it loads.
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
       },
+      keyframes: {
+        // A quantity changing is otherwise a silent text swap — this gives
+        // it a small tactile "received" pulse. Re-triggered by remounting
+        // the element on a `key={quantity}` change (animation-fill-mode
+        // alone doesn't replay on a value change, only on a fresh mount).
+        bump: {
+          "0%": { transform: "scale(1.3)" },
+          "100%": { transform: "scale(1)" },
+        },
+        "fade-in": {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+      },
+      animation: {
+        bump: "bump 0.2s ease-out",
+        "fade-in": "fade-in 0.15s ease-out",
+      },
     },
   },
 };

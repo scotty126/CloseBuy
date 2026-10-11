@@ -1,8 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { formatNaira, minor } from "@closebuy/types";
 import type { ProductDto } from "@closebuy/types";
+
+// Matches the transition-duration below — the parent's onClose (which
+// unmounts this) is deferred by exactly this long so the slide-down/fade
+// actually gets to play instead of the sheet just vanishing mid-animation.
+const CLOSE_MS = 200;
 
 /**
  * The Foodys reference's item sheet, adapted: full image + name + price +
@@ -36,10 +42,30 @@ export function ProductDetailSheet({
 }) {
   const outOfStock = product.stock === 0;
 
+  // Mounts hidden, flips to shown on the next frame so the transition has a
+  // starting point to animate *from* instead of popping straight in; closing
+  // reverses that and holds the real unmount until the animation finishes.
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setShown(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  function handleClose() {
+    setShown(false);
+    setTimeout(onClose, CLOSE_MS);
+  }
+
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/50 sm:items-center" onClick={onClose}>
+    <div
+      className={`fixed inset-0 z-30 flex items-end justify-center transition-colors duration-200 sm:items-center ${
+        shown ? "bg-black/50" : "bg-black/0"
+      }`}
+      onClick={handleClose}
+    >
       <div
-        className="flex h-[75vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white sm:h-auto sm:max-h-[85vh] sm:rounded-3xl"
+        className={`flex h-[75vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white transition-all duration-200 ease-out sm:h-auto sm:max-h-[85vh] sm:rounded-3xl ${
+          shown ? "translate-y-0 opacity-100 sm:scale-100" : "translate-y-full opacity-0 sm:translate-y-4 sm:scale-95"
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 justify-center pb-1 pt-2.5 sm:hidden">
@@ -54,9 +80,9 @@ export function ProductDetailSheet({
             ) : null}
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               aria-label="Close"
-              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white"
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white transition-transform active:scale-90"
             >
               <X size={18} />
             </button>
@@ -96,17 +122,19 @@ export function ProductDetailSheet({
                 type="button"
                 onClick={onDecrement}
                 aria-label={`Remove one ${product.name}`}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-ink shadow-sm"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-ink shadow-sm transition-transform active:scale-90"
               >
                 −
               </button>
-              <span className="w-5 text-center text-base font-bold text-ink">{quantity}</span>
+              <span key={quantity} className="w-5 animate-bump text-center text-base font-bold text-ink">
+                {quantity}
+              </span>
               <button
                 type="button"
                 onClick={onIncrement}
                 disabled={quantity >= product.stock}
                 aria-label={`Add one more ${product.name}`}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white shadow-sm disabled:opacity-40"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white shadow-sm transition-transform active:scale-90 disabled:opacity-40 disabled:active:scale-100"
               >
                 +
               </button>
@@ -114,9 +142,9 @@ export function ProductDetailSheet({
           )}
           <button
             type="button"
-            onClick={quantity > 0 ? onClose : onAdd}
+            onClick={quantity > 0 ? handleClose : onAdd}
             disabled={outOfStock}
-            className="flex-1 rounded-xl bg-accent py-3 text-sm font-bold text-white shadow-sm disabled:opacity-40"
+            className="flex-1 rounded-xl bg-accent py-3 text-sm font-bold text-white shadow-sm transition-transform active:scale-[0.98] disabled:opacity-40"
           >
             {quantity > 0 ? "Done" : "Add to cart"}
           </button>
