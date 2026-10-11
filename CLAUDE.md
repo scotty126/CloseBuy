@@ -1015,6 +1015,122 @@ depends on has existed since the very first migration regardless.
     bg.png` sitting at the repo root weren't part of what was asked for
     and were left alone, not committed.
 
+## 2026-10-11
+
+- **Two real, live bugs fixed from direct user testing, carried over from
+  the previous session and committed here** (were sitting uncommitted):
+  checkout's manual latitude/longitude inputs were bound straight to the
+  numeric `lat`/`lng` state, so every keystroke round-tripped through
+  `Number(e.target.value)` — typing `8.` silently became `8` the instant
+  it was typed, meaning a decimal point could never actually be entered.
+  Fixed with separate `latText`/`lngText` draft state that only pushes a
+  parsed number up once it parses (`apps/customer/app/checkout/page.tsx`).
+  Separately, the vendor storefront cover photo (`VendorCard.tsx`, the
+  storefront hero) used `object-contain`, which on a real (non-square)
+  photo left visible gray letterboxing instead of filling the frame —
+  switched both to `object-cover`, verified live.
+- **Pre-launch UI polish pass — "make it look like it was designed for
+  $10M," the owner's own framing.** Scoped as a foundation-first pass:
+  fix the handful of things that silently degrade *every* screen at once,
+  rather than hand-tuning individual pages one at a time (there wasn't
+  time to audit all four apps pixel-by-pixel before launch, and a
+  systemic fix is lower-risk than a page-by-page rewrite this close to
+  shipping).
+  - **Real brand font, finally actually loading.** `packages/ui/
+    tailwind-preset.js` has declared `fontFamily.sans: ["Inter", …]`
+    since early in the build, but nothing ever loaded the Inter font
+    files — no `next/font`, no stylesheet link, nowhere, in any of the
+    four apps. Every screen has been silently rendering in the OS's
+    default UI font (Segoe UI / San Francisco / Roboto) this entire time,
+    not the actual brand typeface. Fixed by wiring `next/font/google`'s
+    `Inter` into each app's root `layout.tsx` (self-hosted at build time,
+    no runtime Google Fonts request) via a `--font-inter` CSS variable,
+    which the shared preset now points `font-sans` at instead of the bare
+    string "Inter". Verified via the browser's own computed style
+    (`getComputedStyle(body).fontFamily` → `"Inter, \"Inter Fallback\",
+    system-ui, sans-serif"`), not just that the code looks right.
+  - **Real favicons, also missing in all four apps.** No
+    `app/icon.png`/`favicon.ico` existed anywhere, so every app was
+    silently serving Next.js's own default triangle icon in the browser
+    tab — about as strong an "unfinished" signal as a product can send.
+    Added `app/icon.png` (copied from each app's own already-real
+    `public/logo-icon.png`) — Next's App Router file convention picks
+    this up with zero code.
+  - **Shared primitives (`packages/ui/src/components/`) tightened for a
+    more considered, less default-Tailwind feel**, deliberately *without*
+    changing the brand palette (still exactly green/orange per
+    `tokens.ts` — this was an execution-quality pass, not a redesign):
+    `Button` — `rounded-lg` → `rounded-xl`, a real shadow (colour-matched
+    to the variant, `shadow-accent/20` etc.), `active:scale-[0.98]` press
+    feedback, `focus-visible` ring (an accessibility gap that also reads
+    as more "finished" for keyboard/tab users). `Card` — `rounded-xl` →
+    `rounded-2xl`, flat `shadow-sm` → a softer two-layer shadow
+    (`0_1px_2px_rgba(0,0,0,.04),0_8px_20px_-12px_rgba(0,0,0,.1)`), border
+    softened from `gray-200` to `gray-100` — this primitive had quietly
+    drifted from the customer app's own hand-rolled card look (the
+    2026-09-29 restyle's `rounded-2xl` decision never actually made it
+    into this shared component, so only the admin app — the primitive's
+    main consumer — was still showing the old flatter shape). `Input` /
+    `PhoneInput` — `rounded-lg` → `rounded-xl`, softer border + a wider,
+    softer `focus:ring-4` glow instead of a hard 2px ring, explicit
+    `bg-white`. `StatusBadge` — added a small colour-matched dot + a
+    subtle `ring-inset` border, a common "considered dashboard" touch
+    that was previously just a flat tinted pill.
+  - **The same richer card shadow/border applied everywhere a card is
+    hand-rolled instead of going through the shared `Card` component** —
+    which is most of the customer app's own surface (`VendorCard`,
+    `ProductCard`, the vendor storefront hero, cart, checkout, orders,
+    account, order tracking) plus `vendor/components/OrderCard.tsx`. A
+    scripted sweep (every line containing `border-gray-200` +
+    `bg-white` + `shadow-sm` together, i.e. the exact repeated card
+    idiom — 24 lines across 11 files) rather than hand-editing each one,
+    verified afterward with `pnpm typecheck`/`lint` across all 8
+    packages (clean) since a blind sweep like this is exactly the kind
+    of change a stray match could quietly break.
+  - **A genuine bug, not just a style nitpick: the full authenticated
+    sidebar/header rendered on the sign-in screen itself, in all three
+    staff apps.** `AdminSidebar`/`VendorSidebar`/the rider app's header
+    bar were unconditional in each app's root `layout.tsx` — so
+    `/login`, before anyone had signed in, showed the complete internal
+    nav (every admin section name — Disputes, Payouts & reconciliation,
+    Audit log, etc. — fully visible to a signed-out visitor) above a
+    login form squeezed into the remaining space. Fixed by having each
+    (`AdminSidebar`/`VendorSidebar` already `"use client"` with
+    `usePathname`; added a new `RiderHeader` component for the rider app,
+    which didn't have an equivalent extraction yet) return `null` on
+    `/login` and `/oauth-complete` — not a routing/App-Router
+    restructure, just the existing pathname check these components
+    already had for "which nav item is active," extended to "don't
+    render at all here." The admin login screen specifically went from
+    "internal nav list visible, cramped/off-balance form" to a properly
+    centered, chrome-free sign-in page — confirmed via a real
+    before/after screenshot, not assumed from the code alone.
+  - **`OAuthButtons` (duplicated per app, 4 near-identical files) and the
+    Phone/Email segmented-toggle control (5 call sites, same repeated
+    `toggleClass` helper) brought in line with the refined Button/Input
+    language** — `rounded-lg` → `rounded-xl`/`rounded-lg` respectively,
+    real shadow, smoother `transition-all duration-150` instead of the
+    bare `transition` utility, hover states on previously-static text.
+  - **Deliberately not attempted in this pass**: a full page-by-page
+    visual audit of all four apps — the surface area (dozens of screens
+    across customer/vendor/rider/admin) is too large to responsibly
+    rewrite in one sitting right before launch without real regression
+    risk. This pass is the foundation layer (font, elevation, buttons,
+    inputs, the login-chrome bug) that every screen inherits for free;
+    a follow-up pass auditing individual screens for layout/spacing/
+    imagery issues is a reasonable next round, not something silently
+    skipped.
+  Verified: `pnpm typecheck` and `pnpm lint` clean across all 8 packages.
+  Visually confirmed live (headless Edge, real running dev servers, not
+  assumed from the diff) on: customer Home (vendor cards — real Inter
+  font confirmed via computed style, visible card elevation, photos now
+  filling their frame), the Grachi Pharmacy vendor detail page, and the
+  admin login page before/after (sidebar removal, button/input
+  refinement). Not individually screenshotted: every other screen this
+  touches — the primitive-level changes mean they inherit the same
+  treatment, but that's inference from the shared component, not a
+  per-screen visual check.
+
 ## What's next
 
 **Every Admin story is now built (US-A-01 through US-A-08)** — reconciliation
