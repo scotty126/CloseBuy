@@ -93,10 +93,10 @@ export function AddressSearch({ onSelect }: { onSelect: (result: GeocodeResultDt
           onFocus={() => results && results.length > 0 && setOpen(true)}
           placeholder="e.g. Cluster 2 Road, Riverpark"
           autoComplete="off"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+          className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none transition-all duration-150 ease-out hover:border-gray-300 focus:border-primary focus:ring-4 focus:ring-primary/10"
         />
         {open && results && results.length > 0 && (
-          <ul className="absolute top-full z-10 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+          <ul className="absolute top-full z-10 mt-1 w-full animate-fade-in overflow-hidden rounded-xl border border-gray-100 bg-white shadow-lg">
             {results.map((r) => (
               <li key={`${r.lat},${r.lng}`}>
                 <button
@@ -106,7 +106,7 @@ export function AddressSearch({ onSelect }: { onSelect: (result: GeocodeResultDt
                     setQuery(r.label);
                     setOpen(false);
                   }}
-                  className="block w-full px-3 py-2 text-left text-sm text-ink hover:bg-surface"
+                  className="block w-full px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-surface"
                 >
                   {r.label}
                 </button>

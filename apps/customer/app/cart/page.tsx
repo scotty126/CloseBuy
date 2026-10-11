@@ -95,22 +95,24 @@ export default function CartPage() {
                 type="button"
                 onClick={() => updateQuantity(item.productId, item.quantity - 1)}
                 aria-label={`Remove one ${item.name}`}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-ink shadow-sm"
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-ink shadow-sm transition-transform active:scale-90"
               >
                 −
               </button>
-              <span className="w-4 text-center text-sm font-bold text-ink">{item.quantity}</span>
+              <span key={item.quantity} className="w-4 animate-bump text-center text-sm font-bold text-ink">
+                {item.quantity}
+              </span>
               <button
                 type="button"
                 onClick={() => updateQuantity(item.productId, item.quantity + 1)}
                 disabled={item.quantity >= item.stock}
                 aria-label={`Add one more ${item.name}`}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white shadow-sm disabled:opacity-40"
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white shadow-sm transition-transform active:scale-90 disabled:opacity-40 disabled:active:scale-100"
               >
                 +
               </button>
             </div>
-            <button type="button" onClick={() => removeItem(item.productId)} className="text-xs font-semibold text-muted underline">
+            <button type="button" onClick={() => removeItem(item.productId)} className="text-xs font-semibold text-muted underline underline-offset-2 transition-colors hover:text-danger">
               Remove
             </button>
           </div>

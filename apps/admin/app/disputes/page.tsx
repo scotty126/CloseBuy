@@ -84,7 +84,7 @@ export default function DisputesPage() {
             </thead>
             <tbody>
               {disputes?.map((dispute) => (
-                <tr key={dispute.id} className="border-b border-gray-100 last:border-0 hover:bg-surface">
+                <tr key={dispute.id} className="border-b border-gray-100 transition-colors last:border-0 hover:bg-surface">
                   <td className="px-4 py-2">
                     <Link href={`/disputes/${dispute.id}`} className="font-medium text-primary underline">
                       {dispute.orderId.slice(0, 8)}

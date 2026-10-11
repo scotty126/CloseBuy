@@ -182,20 +182,20 @@ export default function OrdersPage() {
             </thead>
             <tbody>
               {orders?.map((order) => (
-                <tr key={order.id} className="border-b border-gray-100 last:border-0 hover:bg-surface">
+                <tr key={order.id} className="border-b border-gray-100 transition-colors last:border-0 hover:bg-surface">
                   <td className="px-4 py-2">
-                    <Link href={`/orders/${order.id}`} className="font-medium text-primary underline">
+                    <Link href={`/orders/${order.id}`} className="font-medium text-primary underline underline-offset-2 transition-opacity hover:opacity-70">
                       {order.id.slice(0, 8)}
                     </Link>
                   </td>
                   <td className="px-4 py-2 text-ink">
-                    <button type="button" onClick={() => filterByVendor(order.vendorId)} className="underline decoration-dotted">
+                    <button type="button" onClick={() => filterByVendor(order.vendorId)} className="underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-70">
                       {order.vendor.businessName}
                     </button>
                   </td>
                   <td className="px-4 py-2 text-ink">
                     {order.rider ? (
-                      <button type="button" onClick={() => filterByRider(order.riderId!)} className="underline decoration-dotted">
+                      <button type="button" onClick={() => filterByRider(order.riderId!)} className="underline decoration-dotted underline-offset-2 transition-opacity hover:opacity-70">
                         {order.rider.fullName}
                       </button>
                     ) : (

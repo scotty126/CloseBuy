@@ -16,15 +16,15 @@ export function QuickBuyCard({ product, onAdd }: { product: ProductDto; onAdd: (
       type="button"
       onClick={onAdd}
       disabled={outOfStock}
-      className="flex w-28 shrink-0 flex-col gap-1 text-left disabled:opacity-50"
+      className="flex w-28 shrink-0 flex-col gap-1 text-left transition-transform active:scale-95 disabled:opacity-50 disabled:active:scale-100"
     >
-      <div className="relative h-28 w-28 overflow-hidden rounded-2xl bg-surface shadow-sm">
+      <div className="relative h-28 w-28 overflow-hidden rounded-2xl bg-surface shadow-sm transition-shadow hover:shadow-md">
         {product.images[0] ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URLs
           <img src={product.images[0]} alt="" className="h-full w-full object-contain" loading="lazy" />
         ) : null}
         {!outOfStock && (
-          <span className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-accent text-base font-bold leading-none text-white shadow">
+          <span className="absolute bottom-1.5 right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-accent text-base font-bold leading-none text-white shadow transition-transform">
             +
           </span>
         )}

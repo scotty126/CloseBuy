@@ -76,7 +76,7 @@ export function Sidebar({
           aria-label="Open menu"
           aria-expanded={open}
           aria-controls="app-menu"
-          className="-ml-2 flex h-10 w-10 items-center justify-center rounded-lg text-ink hover:bg-surface"
+          className="-ml-2 flex h-10 w-10 items-center justify-center rounded-lg text-ink transition-colors active:scale-95 hover:bg-surface"
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <path d="M4 7h16M4 12h16M4 17h16" />
@@ -85,7 +85,7 @@ export function Sidebar({
         <span className="text-base font-bold text-primary">{title}</span>
       </header>
 
-      {open && <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setOpen(false)} aria-hidden="true" />}
+      {open && <div className="fixed inset-0 z-40 animate-fade-in bg-black/40 lg:hidden" onClick={() => setOpen(false)} aria-hidden="true" />}
 
       <aside
         id="app-menu"
@@ -101,7 +101,7 @@ export function Sidebar({
             type="button"
             onClick={() => setOpen(false)}
             aria-label="Close menu"
-            className="-mr-2 flex h-10 w-10 items-center justify-center rounded-lg text-muted hover:bg-surface lg:hidden"
+            className="-mr-2 flex h-10 w-10 items-center justify-center rounded-lg text-muted transition-colors active:scale-95 hover:bg-surface lg:hidden"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <path d="M6 6l12 12M18 6L6 18" />
@@ -114,8 +114,8 @@ export function Sidebar({
             renderLink(
               item,
               <span
-                className={`block rounded-lg px-3 py-2.5 text-sm font-medium ${
-                  item.active ? "bg-primary/10 text-primary" : "text-muted hover:bg-surface"
+                className={`block rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150 ${
+                  item.active ? "bg-primary/10 text-primary" : "text-muted hover:bg-surface hover:text-ink"
                 }`}
               >
                 {item.label}

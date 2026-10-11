@@ -24,7 +24,7 @@ export function ProductCard({
         type="button"
         onClick={onOpenDetail}
         aria-label={`View ${product.name}`}
-        className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-surface"
+        className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-surface transition-transform active:scale-95"
       >
         {product.images[0] ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URLs
@@ -48,17 +48,19 @@ export function ProductCard({
             type="button"
             onClick={onDecrement}
             aria-label={`Remove one ${product.name}`}
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-ink shadow-sm"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-ink shadow-sm transition-transform active:scale-90"
           >
             −
           </button>
-          <span className="w-4 text-center text-sm font-bold text-ink">{quantity}</span>
+          <span key={quantity} className="w-4 animate-bump text-center text-sm font-bold text-ink">
+            {quantity}
+          </span>
           <button
             type="button"
             onClick={onIncrement}
             disabled={quantity >= product.stock}
             aria-label={`Add one more ${product.name}`}
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white shadow-sm disabled:opacity-40"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white shadow-sm transition-transform active:scale-90 disabled:opacity-40 disabled:active:scale-100"
           >
             +
           </button>
@@ -69,7 +71,7 @@ export function ProductCard({
           onClick={onAdd}
           disabled={outOfStock}
           aria-label={`Add ${product.name}`}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-xl font-bold leading-none text-white shadow-sm disabled:opacity-40"
+          className="flex h-10 w-10 shrink-0 animate-fade-in items-center justify-center rounded-full bg-accent text-xl font-bold leading-none text-white shadow-sm transition-transform active:scale-90 disabled:opacity-40 disabled:active:scale-100"
         >
           +
         </button>
