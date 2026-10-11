@@ -19,7 +19,7 @@ export function ProductCard({
   const outOfStock = product.stock === 0;
 
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
+    <div className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
       <button
         type="button"
         onClick={onOpenDetail}

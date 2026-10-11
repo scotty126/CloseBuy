@@ -42,7 +42,7 @@ export default function HomePage() {
             addresses + a maps integration, neither built yet (a
             deliberate M1 simplification, not a silent gap). Styled as a
             defined pill, not bare text, so it reads as a real control. */}
-        <div className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white py-1.5 pl-1.5 pr-3 shadow-sm">
+        <div className="flex items-center gap-1.5 rounded-full border border-gray-100 bg-white py-1.5 pl-1.5 pr-3 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
           {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, not vendor-supplied */}
           <img src="/logo-icon.png" alt="" className="h-7 w-7 shrink-0 rounded-full" />
           <MapPin size={15} className="shrink-0 text-primary" />
@@ -65,7 +65,7 @@ export default function HomePage() {
           <Link
             href="/notifications"
             aria-label="Notifications"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-200 bg-white text-ink shadow-sm"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-100 bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]"
           >
             <Bell size={18} />
           </Link>
@@ -74,7 +74,7 @@ export default function HomePage() {
 
       <Link
         href="/search"
-        className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-sm font-medium text-muted shadow-sm active:bg-surface"
+        className="flex items-center gap-2 rounded-xl border border-gray-100 bg-white px-4 py-3.5 text-sm font-medium text-muted shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)] active:bg-surface"
       >
         <Search size={19} className="shrink-0 text-muted" />
         Search vendors or products

@@ -50,6 +50,21 @@ export default function CheckoutPage() {
 
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
+  // Separate draft text for the manual-entry inputs below — binding them
+  // directly to lat/lng (numbers) meant every keystroke round-tripped
+  // through Number(e.target.value), which silently drops a trailing "."
+  // the instant it's typed ("8." -> Number -> 8 -> re-renders as "8").
+  // These stay free text while being edited and only push a parsed number
+  // up to lat/lng once it's valid; the effects below resync them whenever
+  // lat/lng change from elsewhere (map drag, geolocation, address search).
+  const [latText, setLatText] = useState("");
+  const [lngText, setLngText] = useState("");
+  useEffect(() => {
+    setLatText(lat !== null ? String(lat) : "");
+  }, [lat]);
+  useEffect(() => {
+    setLngText(lng !== null ? String(lng) : "");
+  }, [lng]);
   const [accuracyMeters, setAccuracyMeters] = useState<number | null>(null);
   // Set by picking an AddressSearch result, or by a best-effort reverse-geocode after "Use my current
   // location" succeeds. Cleared by anything that changes the pin WITHOUT a known label for the new spot
@@ -380,23 +395,33 @@ export default function CheckoutPage() {
               <Input
                 placeholder="Latitude"
                 inputMode="decimal"
-                value={lat ?? ""}
+                value={latText}
                 onChange={(e) => {
-                  setLat(e.target.value ? Number(e.target.value) : null);
-                  setAccuracyMeters(null);
-                  setAddressLabel(null);
-                  setSelectedAddressId(null);
+                  const raw = e.target.value;
+                  setLatText(raw);
+                  const parsed = raw === "" ? null : Number(raw);
+                  if (raw === "" || !Number.isNaN(parsed)) {
+                    setLat(parsed);
+                    setAccuracyMeters(null);
+                    setAddressLabel(null);
+                    setSelectedAddressId(null);
+                  }
                 }}
               />
               <Input
                 placeholder="Longitude"
                 inputMode="decimal"
-                value={lng ?? ""}
+                value={lngText}
                 onChange={(e) => {
-                  setLng(e.target.value ? Number(e.target.value) : null);
-                  setAccuracyMeters(null);
-                  setAddressLabel(null);
-                  setSelectedAddressId(null);
+                  const raw = e.target.value;
+                  setLngText(raw);
+                  const parsed = raw === "" ? null : Number(raw);
+                  if (raw === "" || !Number.isNaN(parsed)) {
+                    setLng(parsed);
+                    setAccuracyMeters(null);
+                    setAddressLabel(null);
+                    setSelectedAddressId(null);
+                  }
                 }}
               />
             </div>
@@ -463,7 +488,7 @@ export default function CheckoutPage() {
         )}
       </section>
 
-      <section className="flex flex-col gap-1.5 rounded-2xl border border-gray-200 bg-white p-4 text-sm shadow-sm">
+      <section className="flex flex-col gap-1.5 rounded-2xl border border-gray-100 bg-white p-4 text-sm shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
         <div className="flex justify-between">
           <span className="font-medium text-muted">Subtotal</span>
           <span className="font-medium text-ink">{formatNaira(minor(subtotalMinor))}</span>

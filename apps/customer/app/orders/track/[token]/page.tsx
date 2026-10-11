@@ -53,7 +53,7 @@ function RatingForm({
 
   if (isLocked) {
     return (
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
         <p className="text-sm font-bold text-ink">{label}</p>
         <div className="mt-1 flex gap-0.5">
           {[1, 2, 3, 4, 5].map((n) => (
@@ -79,7 +79,7 @@ function RatingForm({
   }
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
       <p className="text-sm font-bold text-ink">{label}</p>
       {error && <p className="mt-1 text-sm text-danger">{error}</p>}
       <div className="mt-2 flex gap-1">
@@ -341,7 +341,7 @@ export default function OrderTrackingPage() {
               <p className="mt-1 text-sm text-ink">The vendor will start preparing closer to your scheduled time.</p>
             </div>
           )}
-          <ol className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+          <ol className="flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
           {steps.map((step, i) => {
             const transition = order.transitions.find((t) => t.toStatus === step);
             const done = currentIndex >= 0 && i <= currentIndex;
@@ -380,7 +380,7 @@ export default function OrderTrackingPage() {
       )}
 
       {!isPickup && order.rider && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
           <p className="text-xs font-medium text-muted">Your rider</p>
           <p className="font-bold text-ink">{order.rider.fullName}</p>
           <a href={`tel:${order.rider.user.phone}`} className="text-sm font-semibold text-primary underline">
@@ -390,7 +390,7 @@ export default function OrderTrackingPage() {
       )}
 
       {isPickup && order.vendor && (
-        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
           <p className="text-xs font-medium text-muted">Pickup from</p>
           <p className="font-bold text-ink">{order.vendor.pickupLandmark}</p>
           <a href={`tel:${order.vendor.pickupPhone}`} className="text-sm font-semibold text-primary underline">
@@ -399,7 +399,7 @@ export default function OrderTrackingPage() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
         <p className="mb-2 text-sm font-bold text-ink">Items</p>
         <div className="flex flex-col gap-1.5">
           {order.items.map((item) => (
@@ -439,7 +439,7 @@ export default function OrderTrackingPage() {
       )}
 
       {reorderConflict ? (
-        <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
           <p className="text-sm text-ink">
             Your cart has items from another vendor. Reordering replaces it with this order&apos;s items.
           </p>
@@ -468,7 +468,7 @@ export default function OrderTrackingPage() {
       )}
 
       {order.dispute ? (
-        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
           <p className="text-sm font-semibold text-ink">
             {order.dispute.status === "open" ? "Dispute under review" : "Dispute resolved"}
           </p>
@@ -483,7 +483,7 @@ export default function OrderTrackingPage() {
         </div>
       ) : canDispute && (
         showDisputeForm ? (
-          <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
             <p className="text-sm font-medium text-ink">What went wrong?</p>
             {disputeError && <p className="text-sm text-danger">{disputeError}</p>}
             <textarea

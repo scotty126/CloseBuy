@@ -46,7 +46,7 @@ export function OrderCard({ order, onChanged }: { order: OrderDto; onChanged: ()
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+    <div className="flex flex-col gap-2 rounded-xl border border-gray-100 bg-white p-3 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-sm font-semibold text-ink">

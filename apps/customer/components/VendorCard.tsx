@@ -17,12 +17,12 @@ export function VendorCard({ vendor }: { vendor: VendorDto }) {
   return (
     <Link
       href={`/vendors/${vendor.id}`}
-      className="block overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition active:scale-[0.99] active:bg-surface"
+      className="block overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)] transition active:scale-[0.99] active:bg-surface"
     >
       <div className="relative flex h-32 w-full items-center justify-center bg-primary/10 px-4">
         {vendor.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URL
-          <img src={vendor.logoUrl} alt="" className="h-full w-full object-contain" />
+          <img src={vendor.logoUrl} alt="" className="h-full w-full object-cover" />
         ) : (
           <p className="truncate text-center text-lg font-extrabold text-primary">{vendor.businessName}</p>
         )}

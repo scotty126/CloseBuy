@@ -174,7 +174,7 @@ function OrderList({ orders }: { orders: OrderSummaryDto[] }) {
           <Link
             key={order.id}
             href={`/orders/track/${order.trackingToken}`}
-            className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-4 shadow-sm active:bg-surface"
+            className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)] active:bg-surface"
           >
             <div className="flex flex-col gap-1">
               <span className={`w-fit rounded-full px-2.5 py-0.5 text-[11px] font-bold ${TONE_CLASSES[tone]}`}>

@@ -96,7 +96,7 @@ export default function AccountPage() {
 
       <Link
         href="/orders"
-        className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-4 shadow-sm active:bg-surface"
+        className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)] active:bg-surface"
       >
         <span className="flex items-center gap-2.5 text-sm font-semibold text-ink">
           <ClipboardList size={18} className="text-primary" />
@@ -105,7 +105,7 @@ export default function AccountPage() {
         <ChevronRight size={18} className="text-muted" />
       </Link>
 
-      <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
         <p className="text-sm font-bold text-ink">Default contact number</p>
         <p className="text-xs text-muted">Presets the phone field at checkout — never verified, never used to sign in (brief §3.1b).</p>
         <PhoneInput
@@ -186,7 +186,7 @@ function AddressManager() {
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
       <p className="text-sm font-bold text-ink">Saved addresses</p>
       {error && <p className="text-xs text-danger">{error}</p>}
 
@@ -279,7 +279,7 @@ function RatingsGiven() {
   }, []);
 
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
       <p className="text-sm font-bold text-ink">Ratings you&apos;ve given</p>
       {error ? (
         <p className="text-xs text-danger">{error}</p>
