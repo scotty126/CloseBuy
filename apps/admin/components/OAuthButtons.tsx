@@ -7,13 +7,13 @@ export function OAuthButtons() {
     <div className="flex flex-col gap-2">
       <a
         href={googleSignInUrl}
-        className="flex items-center justify-center gap-2 rounded-lg border border-gray-300 py-2.5 text-sm font-medium text-ink hover:bg-surface"
+        className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-medium text-ink shadow-sm transition-all duration-150 ease-out hover:border-gray-300 hover:bg-surface active:scale-[0.98]"
       >
         Continue with Google
       </a>
       <a
         href={appleSignInUrl}
-        className="flex items-center justify-center gap-2 rounded-lg border border-gray-300 py-2.5 text-sm font-medium text-ink hover:bg-surface"
+        className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-2.5 text-sm font-medium text-ink shadow-sm transition-all duration-150 ease-out hover:border-gray-300 hover:bg-surface active:scale-[0.98]"
       >
         Continue with Apple
       </a>

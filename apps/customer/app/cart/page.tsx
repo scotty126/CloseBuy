@@ -83,7 +83,7 @@ export default function CartPage() {
 
       <p className="text-sm font-medium text-muted">From {cart.vendor.businessName}</p>
 
-      <div className="flex flex-col divide-y divide-gray-100 rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex flex-col divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
         {cart.items.map((item) => (
           <div key={item.productId} className="flex items-center gap-3 p-3.5">
             <div className="min-w-0 flex-1">
@@ -179,7 +179,7 @@ export default function CartPage() {
         )}
       </div>
 
-      <div className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-3.5 shadow-sm">
+      <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
         <span className="text-sm font-medium text-muted">Subtotal</span>
         <span className="text-base font-bold text-ink">{formatNaira(minor(subtotalMinor))}</span>
       </div>
@@ -201,5 +201,5 @@ export default function CartPage() {
 }
 
 function toggleClass(active: boolean): string {
-  return `flex-1 rounded-lg py-2 text-sm font-semibold transition ${active ? "bg-white text-ink shadow-sm" : "text-muted"}`;
+  return `flex-1 rounded-lg py-2 text-sm font-semibold transition-all duration-150 ease-out ${active ? "bg-white text-ink shadow-sm" : "text-muted hover:text-ink"}`;
 }

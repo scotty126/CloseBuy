@@ -114,7 +114,7 @@ export default function VendorPage() {
         </button>
         {vendor.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URL
-          <img src={vendor.logoUrl} alt="" className="h-full w-full object-contain" />
+          <img src={vendor.logoUrl} alt="" className="h-full w-full object-cover" />
         ) : (
           // No logo yet — the business name stands in for a cover image
           // rather than leaving a blank box.
@@ -254,7 +254,7 @@ export default function VendorPage() {
               <p className="py-8 text-center text-sm text-muted">No reviews yet.</p>
             ) : (
               ratings.map((r) => (
-                <div key={r.id} className="rounded-2xl border border-gray-200 bg-white p-3.5 shadow-sm">
+                <div key={r.id} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-semibold text-ink">Customer</p>
                     <div className="flex gap-0.5">
@@ -307,5 +307,5 @@ export default function VendorPage() {
 }
 
 function toggleClass(active: boolean): string {
-  return `flex-1 rounded-lg py-2 text-sm font-semibold transition ${active ? "bg-white text-ink shadow-sm" : "text-muted"}`;
+  return `flex-1 rounded-lg py-2 text-sm font-semibold transition-all duration-150 ease-out ${active ? "bg-white text-ink shadow-sm" : "text-muted hover:text-ink"}`;
 }

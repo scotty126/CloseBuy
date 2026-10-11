@@ -210,5 +210,5 @@ export default function LoginPage() {
 }
 
 function toggleClass(active: boolean): string {
-  return `flex-1 rounded-md py-2 text-sm font-medium transition ${active ? "bg-white text-ink shadow-sm" : "text-muted"}`;
+  return `flex-1 rounded-lg py-2 text-sm font-medium transition-all duration-150 ease-out ${active ? "bg-white text-ink shadow-sm" : "text-muted hover:text-ink"}`;
 }
