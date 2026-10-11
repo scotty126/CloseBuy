@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Inter } from "next/font/google";
+import { RiderHeader } from "@/components/RiderHeader";
 import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 export const metadata: Metadata = {
   title: "CloseBuy Rider",
@@ -12,19 +15,9 @@ export const metadata: Metadata = {
 // where to tap. Just a minimal top bar with an escape hatch to Earnings.
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={inter.variable}>
       <body>
-        <header className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
-          <span className="text-lg font-bold text-primary">CloseBuy Rider</span>
-          <div className="flex items-center gap-4">
-            <Link href="/notifications" className="text-sm font-medium text-muted">
-              Notifications
-            </Link>
-            <Link href="/earnings" className="text-sm font-medium text-muted">
-              Earnings
-            </Link>
-          </div>
-        </header>
+        <RiderHeader />
         <main className="mx-auto min-h-screen max-w-lg">{children}</main>
       </body>
     </html>

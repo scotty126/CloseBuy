@@ -16,8 +16,8 @@ export function Input({ label, error, id, className = "", ...props }: InputProps
       )}
       <input
         id={inputId}
-        className={`rounded-lg border px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-primary/30 ${
-          error ? "border-danger" : "border-gray-300 focus:border-primary"
+        className={`rounded-xl border bg-white px-3 py-2.5 text-sm text-ink outline-none transition-all duration-150 ease-out placeholder:text-muted/60 focus:ring-4 ${
+          error ? "border-danger focus:ring-danger/10" : "border-gray-200 hover:border-gray-300 focus:border-primary focus:ring-primary/10"
         } ${className}`}
         aria-invalid={Boolean(error)}
         {...props}

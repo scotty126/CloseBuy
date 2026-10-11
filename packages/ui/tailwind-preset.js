@@ -18,7 +18,14 @@ module.exports = {
         surface: "#F7F7F5",
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        // Set by next/font/google in each app's layout.tsx (--font-inter CSS
+        // variable) — was literally "Inter" here before, which Tailwind can
+        // only resolve to a font actually present on the system, so every
+        // screen silently fell back to system-ui the whole time. next/font
+        // self-hosts the real files (no runtime Google Fonts request) and
+        // sets the variable; system-ui/sans-serif stay as the fallback for
+        // the instant before it loads.
+        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
       },
     },
   },

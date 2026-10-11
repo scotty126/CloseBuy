@@ -46,11 +46,11 @@ export function PhoneInput({ label, value, onChange, required, id, name, placeho
         </label>
       )}
       <div
-        className={`flex items-stretch overflow-hidden rounded-lg border bg-white transition focus-within:ring-2 focus-within:ring-primary/30 ${
-          error ? "border-danger" : "border-gray-300 focus-within:border-primary"
+        className={`flex items-stretch overflow-hidden rounded-xl border bg-white transition-all duration-150 ease-out focus-within:ring-4 ${
+          error ? "border-danger focus-within:ring-danger/10" : "border-gray-200 hover:border-gray-300 focus-within:border-primary focus-within:ring-primary/10"
         }`}
       >
-        <span className="flex select-none items-center border-r border-gray-300 bg-surface px-3 text-sm font-medium text-muted" aria-hidden="true">
+        <span className="flex select-none items-center border-r border-gray-200 bg-surface px-3 text-sm font-medium text-muted" aria-hidden="true">
           +234
         </span>
         <input
