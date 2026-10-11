@@ -1130,6 +1130,65 @@ depends on has existed since the very first migration regardless.
   touches — the primitive-level changes mean they inherit the same
   treatment, but that's inference from the shared component, not a
   per-screen visual check.
+- **Interaction pass — the same screens, now with real feedback on every
+  tap instead of static state swaps.** Follow-up to the polish pass above,
+  same session. The single biggest miss: `ProductDetailSheet` (the
+  item-detail bottom sheet) had **zero open/close animation at all** — a
+  fixed overlay that just popped in and out, on what's probably the most-
+  opened piece of UI in the customer app. Fixed with a local shown/closing
+  state (mount hidden → flip to shown next frame so the transition has a
+  start point; closing reverses that and defers the real unmount — passed
+  from the parent as `onClose` — by `CLOSE_MS` so the slide-down/fade
+  actually gets to play instead of the element just vanishing mid-
+  transition). No animation library added — CSS transitions plus that
+  mount-delay pattern, consistent with this codebase's existing "no
+  dependency we don't need" convention. Verified behaviourally in headless
+  Edge, not just read from the diff: clicked a real product, confirmed the
+  sheet actually reaches `opacity:1`/`transform:none` (not stuck mid-
+  transition), clicked close, confirmed it actually unmounts afterward.
+  - **Quantity changes now have a tactile "received" pulse** — a `bump`
+    keyframe (new in `packages/ui/tailwind-preset.js`'s `theme.extend`,
+    alongside a `fade-in` one used for drawer backdrops/dropdowns)
+    triggered by `key={quantity}` forcing a remount on change, applied
+    everywhere a quantity number is shown: `ProductCard`, the cart page's
+    stepper, `ProductDetailSheet`.
+  - **Every stepper/icon button that had zero press feedback now does** —
+    `active:scale-90`/`95` plus a real `transition-transform`, across
+    `ProductCard`, `QuickBuyCard`, the cart stepper, `ProductDetailSheet`,
+    `CategoryChips`, `Sidebar`'s menu/close buttons. Several of these had
+    `disabled:opacity-40` with no transition, so the fade-out on going
+    out-of-stock was an instant snap — now actually fades.
+  - **`BottomNav`** — zero transitions before (the active tab's colour and
+    icon stroke-width just snapped on navigation); added
+    `transition-colors`/`transition-[stroke-width]` plus a thin sliding
+    indicator bar above the active tab (`translateX` in quarters of the
+    nav's own width, computed from the tab's index — no pixel math, no
+    library).
+  - **`VendorCard`** (the single highest-traffic clickable element in the
+    app — every vendor on Home/Search is one of these) gets a hover lift
+    (`-translate-y-0.5` + a deeper shadow) and a subtle `group-hover`
+    image zoom, desktop-only in effect since touch has no hover, but
+    costs nothing on mobile either.
+  - **Admin's orders/disputes tables** — row `hover:bg-surface` existed
+    already but with no `transition-colors` (instant snap); the
+    vendor/rider-name filter buttons and order-id links got the same
+    treatment plus `hover:opacity-70` so they read as clickable.
+  - **`AddressSearch`'s result dropdown** — brought the input up to the
+    same `rounded-xl`/`focus:ring-4` language as the shared `Input`
+    (it had drifted to the old `rounded-lg`/`ring-2` look pre-dating that
+    refinement), added `animate-fade-in` on the dropdown appearing and a
+    hover transition on each result row.
+  Verified: `pnpm typecheck`/`lint` clean across all 8 packages. The sheet
+  open/close behaviourally confirmed live (above); the rest is CSS-only
+  changes to already-working click handlers (no logic changed, only
+  `className`s), lower-risk than the sheet change and covered by
+  typecheck/lint + code review rather than individually screenshotted.
+  **Not attempted**: a global toast/snackbar system for transient
+  feedback ("Added to cart", "Payout requested") — genuinely new UI
+  surface (a context provider, stacking, auto-dismiss) rather than
+  polishing an existing interaction, which felt like a bigger, riskier
+  addition to scope in unprompted this close to launch; worth asking
+  about explicitly before building it, not assumed into this pass.
 
 ## What's next
 
