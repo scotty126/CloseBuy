@@ -47,7 +47,7 @@ export default function NotificationsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-bold text-ink">Notifications</h1>
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">Notifications</h1>
         <p className="text-sm text-muted">Broadcast alerts every admin receives — currently just failed deliveries (US-R-06).</p>
       </div>
 
@@ -56,7 +56,7 @@ export default function NotificationsPage() {
       {notifications === null ? (
         <p className="text-sm text-muted">Loading…</p>
       ) : notifications.length === 0 ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-6 text-center">
+        <div className="rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-6 text-center">
           <p className="text-sm text-muted">No notifications yet.</p>
         </div>
       ) : (
@@ -69,10 +69,10 @@ export default function NotificationsPage() {
                 type="button"
                 onClick={() => unread && markRead(n.id)}
                 className={`flex items-start gap-3 rounded-xl border p-3 text-left shadow-sm transition ${
-                  unread ? "border-primary/20 bg-primary/5" : "border-gray-200 bg-white"
+                  unread ? "border-accent/30 bg-accent/5" : "border-line bg-card"
                 }`}
               >
-                {unread && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}
+                {unread && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />}
                 <div className="flex flex-col gap-0.5">
                   <p className={`text-sm ${unread ? "font-bold text-ink" : "font-medium text-ink"}`}>
                     {LABELS[n.type] ?? "You have an update"}

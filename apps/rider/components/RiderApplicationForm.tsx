@@ -37,7 +37,7 @@ export function RiderApplicationForm({ onSubmitted }: { onSubmitted: () => void 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-5 p-6">
       <div>
-        <h1 className="text-xl font-bold text-ink">Become a CloseBuy rider</h1>
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">Become a CloseBuy rider</h1>
         <p className="mt-1 text-sm text-muted">Applications are reviewed by an operator — approval is manual, US-A-01.</p>
       </div>
 
@@ -49,7 +49,7 @@ export function RiderApplicationForm({ onSubmitted }: { onSubmitted: () => void 
           <select
             value={vehicleType}
             onChange={(e) => setVehicleType(e.target.value as (typeof VEHICLE_TYPES)[number])}
-            className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+            className="rounded-xl border border-line bg-card px-3 py-2.5 text-sm text-ink outline-none focus:border-primary focus:ring-4 focus:ring-primary/10"
           >
             {VEHICLE_TYPES.map((v) => (
               <option key={v} value={v}>

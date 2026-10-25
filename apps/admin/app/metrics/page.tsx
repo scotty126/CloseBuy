@@ -90,7 +90,7 @@ export default function MetricsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-bold text-ink">Metrics</h1>
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">Metrics</h1>
         <p className="text-sm text-muted">
           How the platform is doing over a date range (US-A-07). Days are Africa/Lagos calendar days; every figure
           counts orders placed in the range unless it says &ldquo;right now&rdquo;.
@@ -112,7 +112,7 @@ export default function MetricsPage() {
               className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
                 preset === p.key
                   ? "border-primary bg-primary text-white"
-                  : "border-gray-300 bg-white text-ink hover:bg-surface"
+                  : "border-line bg-card text-ink hover:bg-surface"
               }`}
             >
               {p.label}
@@ -234,7 +234,7 @@ export default function MetricsPage() {
             </>
           )}
 
-          <details className="rounded-xl border border-gray-200 bg-white p-4 text-sm">
+          <details className="rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-4 text-sm">
             <summary className="cursor-pointer font-medium text-ink">How these are counted</summary>
             <ul className="mt-3 flex list-disc flex-col gap-1.5 pl-5 text-muted">
               <li>
@@ -269,7 +269,7 @@ export default function MetricsPage() {
 /** A stat tile: label, value, and one line of context. Proportional figures for the value — tabular digits only belong in aligned columns. */
 function Tile({ label, value, note }: { label: string; value: string; note: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-gray-200 bg-white p-4">
+    <div className="flex flex-col gap-1 rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-4">
       <p className="text-xs text-muted">{label}</p>
       <p className="text-2xl font-semibold text-ink">{value}</p>
       <p className="text-xs text-muted">{note}</p>

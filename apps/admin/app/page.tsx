@@ -66,7 +66,7 @@ export default function ApplicationsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-bold text-ink">Vendor & rider applications</h1>
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">Vendor & rider applications</h1>
         <p className="text-sm text-muted">
           Approving a vendor while the Founding Vendor Program is open starts their commission-free window
           automatically (US-A-01, brief §3.2a). Rejecting requires a reason — both are written to the audit log.
@@ -120,7 +120,7 @@ export default function ApplicationsPage() {
               </div>
 
               {rejectingKey === key ? (
-                <div className="flex flex-col gap-2 border-t border-gray-200 pt-3">
+                <div className="flex flex-col gap-2 border-t border-line pt-3">
                   <Input
                     label="Reason for rejection"
                     value={reason}
@@ -150,7 +150,7 @@ export default function ApplicationsPage() {
                   </div>
                 </div>
               ) : (
-                <div className="flex gap-2 border-t border-gray-200 pt-3">
+                <div className="flex gap-2 border-t border-line pt-3">
                   <Button type="button" disabled={isDeciding} onClick={() => handleApprove(app)}>
                     {isDeciding ? "Approving…" : "Approve"}
                   </Button>

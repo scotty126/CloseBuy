@@ -102,7 +102,7 @@ export default function AdminOrderDetailPage() {
 
       <Card>
         <p className="mb-2 text-sm font-semibold text-ink">Items</p>
-        <div className="flex flex-col divide-y divide-gray-100">
+        <div className="flex flex-col divide-y divide-line">
           {order.items.map((item) => (
             <div key={item.id} className="flex justify-between py-1.5 text-sm">
               <span className="text-ink">{item.quantity}× {item.nameSnapshot}</span>
@@ -110,7 +110,7 @@ export default function AdminOrderDetailPage() {
             </div>
           ))}
         </div>
-        <div className="mt-2 flex flex-col gap-1 border-t border-gray-200 pt-2 text-sm">
+        <div className="mt-2 flex flex-col gap-1 border-t border-line pt-2 text-sm">
           <Money label="Subtotal" value={order.subtotalMinor} />
           <Money label="Delivery fee" value={order.deliveryFeeMinor} />
           <Money label="Discount" value={-order.discountMinor} />

@@ -79,7 +79,7 @@ export default function AuditLogPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-bold text-ink">Audit log</h1>
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">Audit log</h1>
         <p className="text-sm text-muted">Every consequential action, append-only — who did what, to what, and why (US-A-08).</p>
       </div>
 
@@ -108,9 +108,9 @@ export default function AuditLogPage() {
         <Card><p className="text-sm text-muted">No entries match this filter.</p></Card>
       ) : (
         // Scrolls sideways inside its own card on a phone rather than clipping columns (or stretching the page).
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <div className="overflow-x-auto rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
           <table className="w-full min-w-[44rem] text-left text-sm">
-            <thead className="border-b border-gray-200 bg-surface text-xs uppercase text-muted">
+            <thead className="border-b border-line bg-surface text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-2">When</th>
                 <th className="px-4 py-2">Actor</th>
@@ -121,7 +121,7 @@ export default function AuditLogPage() {
             </thead>
             <tbody>
               {entries?.map((entry) => (
-                <tr key={entry.id} className="border-b border-gray-100 last:border-0">
+                <tr key={entry.id} className="border-b border-line last:border-0">
                   <td className="whitespace-nowrap px-4 py-2 text-muted">{new Date(entry.createdAt).toLocaleString()}</td>
                   <td className="px-4 py-2 text-ink">{entry.actorId ?? "system"}</td>
                   <td className="px-4 py-2 text-ink">{entry.action}</td>

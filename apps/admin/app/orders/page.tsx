@@ -104,7 +104,7 @@ export default function OrdersPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-bold text-ink">Orders</h1>
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">Orders</h1>
         <p className="text-sm text-muted">Every order on the platform. Open one to see its full history and step in if something&apos;s stalled (US-A-03).</p>
       </div>
 
@@ -112,7 +112,7 @@ export default function OrdersPage() {
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value as OrderStatus | "")}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          className="rounded-lg border border-line px-3 py-2 text-sm"
         >
           <option value="">All statuses</option>
           {ORDER_STATUSES.map((s) => (
@@ -122,7 +122,7 @@ export default function OrdersPage() {
         <select
           value={fulfilmentType}
           onChange={(e) => setFulfilmentType(e.target.value as FulfilmentType | "")}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          className="rounded-lg border border-line px-3 py-2 text-sm"
         >
           <option value="">Delivery + pickup</option>
           {FULFILMENT_TYPES.map((f) => (
@@ -167,9 +167,9 @@ export default function OrdersPage() {
         <Card><p className="text-sm text-muted">No orders match this filter.</p></Card>
       ) : (
         // Scrolls sideways inside its own card on a phone rather than clipping columns (or stretching the page).
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <div className="overflow-x-auto rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
           <table className="w-full min-w-[44rem] text-left text-sm">
-            <thead className="border-b border-gray-200 bg-surface text-xs uppercase text-muted">
+            <thead className="border-b border-line bg-surface text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-2">Order</th>
                 <th className="px-4 py-2">Vendor</th>
@@ -182,7 +182,7 @@ export default function OrdersPage() {
             </thead>
             <tbody>
               {orders?.map((order) => (
-                <tr key={order.id} className="border-b border-gray-100 transition-colors last:border-0 hover:bg-surface">
+                <tr key={order.id} className="border-b border-line transition-colors last:border-0 hover:bg-surface">
                   <td className="px-4 py-2">
                     <Link href={`/orders/${order.id}`} className="font-medium text-primary underline underline-offset-2 transition-opacity hover:opacity-70">
                       {order.id.slice(0, 8)}

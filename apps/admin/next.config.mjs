@@ -2,6 +2,7 @@
 const nextConfig = {
   transpilePackages: ["@closebuy/ui", "@closebuy/types", "@closebuy/api-client"],
   reactStrictMode: true,
+  devIndicators: false, // the dev-only "N" badge sits over the bottom nav and photobombs every screenshot
   webpack: (config) => {
     // @closebuy/types ships TypeScript source with NodeNext-style relative
     // imports (e.g. "./money.js" resolving to money.ts) -- required so

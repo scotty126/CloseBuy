@@ -42,7 +42,7 @@ export default function DisputesPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-bold text-ink">Disputes</h1>
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">Disputes</h1>
         <p className="text-sm text-muted">
           Every order a customer has disputed, oldest first. Opening a dispute holds its escrow release (US-C-11)
           until resolved here — full refund, partial refund, or rejected (US-A-04).
@@ -53,7 +53,7 @@ export default function DisputesPage() {
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value as DisputeStatus | "")}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          className="rounded-lg border border-line px-3 py-2 text-sm"
         >
           <option value="">All disputes</option>
           {DISPUTE_STATUSES.map((s) => (
@@ -70,9 +70,9 @@ export default function DisputesPage() {
         <Card><p className="text-sm text-muted">No disputes match this filter.</p></Card>
       ) : (
         // Scrolls sideways inside its own card on a phone rather than clipping columns (or stretching the page).
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <div className="overflow-x-auto rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
           <table className="w-full min-w-[42rem] text-left text-sm">
-            <thead className="border-b border-gray-200 bg-surface text-xs uppercase text-muted">
+            <thead className="border-b border-line bg-surface text-xs uppercase text-muted">
               <tr>
                 <th className="px-4 py-2">Order</th>
                 <th className="px-4 py-2">Vendor</th>
@@ -84,7 +84,7 @@ export default function DisputesPage() {
             </thead>
             <tbody>
               {disputes?.map((dispute) => (
-                <tr key={dispute.id} className="border-b border-gray-100 transition-colors last:border-0 hover:bg-surface">
+                <tr key={dispute.id} className="border-b border-line transition-colors last:border-0 hover:bg-surface">
                   <td className="px-4 py-2">
                     <Link href={`/disputes/${dispute.id}`} className="font-medium text-primary underline">
                       {dispute.orderId.slice(0, 8)}

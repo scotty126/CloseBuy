@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Input, PhoneInput, useAuthSession } from "@closebuy/ui";
+import { Button, Input, PhoneInput, useAuthSession, AuthShell, AuthDivider } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
 import { authApi } from "@/lib/api";
 import { OAuthButtons } from "@/components/OAuthButtons";
@@ -89,22 +89,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-6">
-      <div className="flex flex-col items-center gap-1">
-        {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, not vendor-supplied */}
-        <img src="/logo-wordmark.png" alt="CloseBuy" className="h-10 w-auto" />
-        <p className="text-sm font-medium text-muted">Vendor portal</p>
-      </div>
-
-      <div className="flex w-full max-w-xs flex-col gap-4">
-        <OAuthButtons />
-
-        <div className="flex items-center gap-3 text-xs text-muted">
-          <div className="h-px flex-1 bg-gray-200" />
-          or
-          <div className="h-px flex-1 bg-gray-200" />
-        </div>
-
+    <AuthShell app="vendor" route="login" title="Sign in" subtitle="Use the account your CloseBuy contact set up, or create one.">
+      <div className="flex flex-col gap-4">
         <div className="flex rounded-lg bg-surface p-1">
           <button
             type="button"
@@ -204,11 +190,13 @@ export default function LoginPage() {
             </button>
           </form>
         )}
+        <AuthDivider />
+        <OAuthButtons />
       </div>
-    </div>
+    </AuthShell>
   );
 }
 
 function toggleClass(active: boolean): string {
-  return `flex-1 rounded-lg py-2 text-sm font-medium transition-all duration-150 ease-out ${active ? "bg-white text-ink shadow-sm" : "text-muted hover:text-ink"}`;
+  return `flex-1 rounded-lg py-2 text-sm font-medium transition-all duration-150 ease-out ${active ? "bg-card text-ink shadow-sm" : "text-muted hover:text-ink"}`;
 }

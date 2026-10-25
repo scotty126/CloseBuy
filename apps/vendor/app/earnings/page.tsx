@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
 import { formatNaira, minor } from "@closebuy/types";
-import type { VendorEarningsDto, PayoutDto, PayoutStatus } from "@closebuy/types";
+import type { VendorEarningsDto, PayoutDto, PayoutStatus, OwnVendorProfileDto } from "@closebuy/types";
 import { orderApi, payoutsApi } from "@/lib/api";
 import { VendorGate } from "@/components/VendorGate";
+import { PageHeader } from "@/components/PageHeader";
 
 const STATUS_LABEL: Record<PayoutStatus, string> = {
   requested: "Requested",
@@ -30,10 +30,10 @@ const TONE_CLASSES = {
 
 /** screens-navigation.md §2.4 — US-V-07. */
 export default function EarningsPage() {
-  return <VendorGate>{() => <Earnings />}</VendorGate>;
+  return <VendorGate>{(vendor, refetch) => <Earnings vendor={vendor} refetch={refetch} />}</VendorGate>;
 }
 
-function Earnings() {
+function Earnings({ vendor, refetch }: { vendor: OwnVendorProfileDto; refetch: () => void }) {
   const [earnings, setEarnings] = useState<VendorEarningsDto | null>(null);
   const [payouts, setPayouts] = useState<PayoutDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,8 +92,8 @@ function Earnings() {
   const waiverActive = waivedUntil !== null && waivedUntil.getTime() > Date.now();
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h1 className="text-lg font-bold text-ink">Earnings</h1>
+    <div className="flex max-w-3xl flex-col gap-4">
+      <PageHeader title="Earnings" subtitle="Balance · payouts · history" vendor={vendor} onVendorChanged={refetch} />
 
       {waiverActive && (
         <div className="rounded-xl bg-accent/10 p-3 text-sm text-ink">
@@ -103,36 +103,41 @@ function Earnings() {
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
-          <p className="text-xs text-muted">Cleared</p>
-          <p className="text-lg font-semibold text-success">{formatNaira(minor(earnings.clearedMinor))}</p>
+        <div className="rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-3">
+          <p className="font-mono text-[10px] uppercase text-muted">Cleared</p>
+          <p className="font-mono text-xl font-semibold text-success">{formatNaira(minor(earnings.clearedMinor))}</p>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
-          <p className="text-xs text-muted">Pending (estimate)</p>
-          <p className="text-lg font-semibold text-warning">{formatNaira(minor(earnings.pendingMinor))}</p>
+        <div className="rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-3">
+          <p className="font-mono text-[10px] uppercase text-muted">Pending (estimate)</p>
+          <p className="font-mono text-xl font-semibold text-warning">{formatNaira(minor(earnings.pendingMinor))}</p>
         </div>
       </div>
       <p className="-mt-2 text-xs text-muted">
         Pending is a gross estimate — commission is only final once an order completes with no dispute.
       </p>
 
-      <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-3">
+      <div className="flex items-center justify-between rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-3">
         <div>
-          <p className="text-xs text-muted">Available to withdraw</p>
-          <p className="text-lg font-semibold text-ink">{formatNaira(minor(earnings.availableToWithdrawMinor))}</p>
+          <p className="font-mono text-[10px] uppercase text-muted">Available to withdraw</p>
+          <p className="font-mono text-2xl font-semibold text-ink">{formatNaira(minor(earnings.availableToWithdrawMinor))}</p>
         </div>
-        <Button onClick={handleRequestPayout} disabled={isRequesting || earnings.availableToWithdrawMinor <= 0}>
+        <button
+          type="button"
+          onClick={handleRequestPayout}
+          disabled={isRequesting || earnings.availableToWithdrawMinor <= 0}
+          className="flex h-11 items-center rounded-xl bg-accent px-5 text-sm font-semibold text-night transition-transform active:scale-[0.98] disabled:opacity-50"
+        >
           {isRequesting ? "Requesting…" : "Request payout"}
-        </Button>
+        </button>
       </div>
       {requestError && <p className="-mt-2 text-sm text-danger">{requestError}</p>}
 
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-medium text-ink">Completed orders</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Completed orders</p>
         {earnings.orders.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted">Nothing completed yet.</p>
         ) : (
-          <div className="flex flex-col divide-y divide-gray-200 rounded-xl border border-gray-200 bg-white">
+          <div className="flex flex-col divide-y divide-line rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
             {earnings.orders.map((o) => (
               <div key={o.orderId} className="flex items-center justify-between p-3 text-sm">
                 <div>
@@ -149,7 +154,7 @@ function Earnings() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <p className="text-sm font-medium text-ink">Payout history</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Payout history</p>
         {payoutsError ? (
           <p className="text-sm text-danger">{payoutsError}</p>
         ) : payouts === null ? (
@@ -157,7 +162,7 @@ function Earnings() {
         ) : payouts.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted">No payout requests yet.</p>
         ) : (
-          <div className="flex flex-col divide-y divide-gray-200 rounded-xl border border-gray-200 bg-white">
+          <div className="flex flex-col divide-y divide-line rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
             {payouts.map((p) => (
               <div key={p.id} className="flex items-center justify-between p-3 text-sm">
                 <div>

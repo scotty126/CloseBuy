@@ -118,7 +118,7 @@ export default function PayoutsPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-xl font-bold text-ink">Payouts & reconciliation</h1>
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">Payouts & reconciliation</h1>
         <p className="text-sm text-muted">
           Admin never pushes money unprompted — a vendor requests a withdrawal, you review and approve or reject it
           (US-A-05). Reconciliation below checks the books balance, independent of any single payout.
@@ -150,7 +150,7 @@ export default function PayoutsPage() {
                 </div>
 
                 {rejecting === r.id ? (
-                  <div className="flex flex-col gap-2 border-t border-gray-200 pt-3">
+                  <div className="flex flex-col gap-2 border-t border-line pt-3">
                     <Input
                       label="Reason for rejection (written to the audit log, sent to the vendor)"
                       value={reason}
@@ -214,7 +214,7 @@ export default function PayoutsPage() {
                   </thead>
                   <tbody>
                     {report.ledgerByAccount.map((a) => (
-                      <tr key={a.account} className="border-t border-gray-100">
+                      <tr key={a.account} className="border-t border-line">
                         <td className="py-1.5 pr-3 text-ink">{ACCOUNT_LABEL[a.account] ?? a.account}</td>
                         <td className="py-1.5 pr-3 text-right tabular-nums text-muted">{formatWholeNaira(a.debitMinor)}</td>
                         <td className="py-1.5 pr-3 text-right tabular-nums text-muted">{formatWholeNaira(a.creditMinor)}</td>
@@ -258,7 +258,7 @@ function DiscrepancyPanel({ discrepancies }: { discrepancies: ReconciliationDisc
         {discrepancies.length} discrepanc{discrepancies.length === 1 ? "y" : "ies"} found — real money, investigate before trusting any balance above.
       </p>
       {discrepancies.map((d, i) => (
-        <div key={i} className="rounded-lg bg-white p-3 text-sm">
+        <div key={i} className="rounded-lg bg-card p-3 text-sm">
           <p className="font-medium text-ink">{d.message}</p>
           <dl className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted">
             {Object.entries(d.details).map(([k, v]) => (
@@ -276,7 +276,7 @@ function DiscrepancyPanel({ discrepancies }: { discrepancies: ReconciliationDisc
 
 function Tile({ label, value, note }: { label: string; value: string; note: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-gray-200 bg-white p-4">
+    <div className="flex flex-col gap-1 rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-4">
       <p className="text-xs text-muted">{label}</p>
       <p className="text-2xl font-semibold text-ink">{value}</p>
       <p className="text-xs text-muted">{note}</p>

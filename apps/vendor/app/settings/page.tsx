@@ -6,6 +6,7 @@ import { ApiClientError } from "@closebuy/api-client";
 import type { OwnVendorProfileDto } from "@closebuy/types";
 import { catalogApi } from "@/lib/api";
 import { VendorGate } from "@/components/VendorGate";
+import { PageHeader } from "@/components/PageHeader";
 
 const DAYS = [
   { key: "mon", label: "Monday" },
@@ -64,15 +65,15 @@ function StoreSettings({ vendor, refetch }: { vendor: OwnVendorProfileDto; refet
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h1 className="text-lg font-bold text-ink">Store settings</h1>
+    <div className="flex max-w-2xl flex-col gap-1">
+      <PageHeader title="Settings" subtitle="Profile · opening hours" vendor={vendor} onVendorChanged={refetch} />
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input label="Business name" value={businessName} onChange={(e) => { setBusinessName(e.target.value); setSaved(false); }} required />
         <Input label="Description" value={description} onChange={(e) => { setDescription(e.target.value); setSaved(false); }} />
         <Input label="Logo URL" value={logoUrl} onChange={(e) => { setLogoUrl(e.target.value); setSaved(false); }} placeholder="https://…" />
 
-        <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-3">
+        <div className="flex items-center justify-between rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-3">
           <div>
             <p className="text-sm font-medium text-ink">Open for orders</p>
             <p className="text-xs text-muted">Toggle off any time you can&apos;t take new orders.</p>
@@ -80,7 +81,7 @@ function StoreSettings({ vendor, refetch }: { vendor: OwnVendorProfileDto; refet
           <ToggleSwitch checked={isOpen} onChange={(v) => { setIsOpen(v); setSaved(false); }} />
         </div>
 
-        <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-3">
+        <div className="flex items-center justify-between rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-3">
           <div>
             <p className="text-sm font-medium text-ink">Offer pickup</p>
             <p className="text-xs text-muted">Customers can collect in person instead of ordering delivery — independent of the toggle above.</p>
@@ -88,7 +89,7 @@ function StoreSettings({ vendor, refetch }: { vendor: OwnVendorProfileDto; refet
           <ToggleSwitch checked={supportsPickup} onChange={(v) => { setSupportsPickup(v); setSaved(false); }} />
         </div>
 
-        <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-3">
+        <div className="flex flex-col gap-3 rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-3">
           <p className="text-sm font-medium text-ink">Opening hours</p>
           {DAYS.map((day) => (
             // The day label used to share a row with both native time inputs — a native <input type="time">
@@ -97,7 +98,7 @@ function StoreSettings({ vendor, refetch }: { vendor: OwnVendorProfileDto; refet
             // phone-width render). Stacking the label above its controls, rather than beside them, is what
             // actually frees enough width — shrinking the inputs further isn't really an option, their intrinsic
             // size is the browser's, not ours to style much past this.
-            <div key={day.key} className="flex flex-col gap-1.5 border-b border-gray-100 pb-3 last:border-0 last:pb-0">
+            <div key={day.key} className="flex flex-col gap-1.5 border-b border-line pb-3 last:border-0 last:pb-0">
               <span className="text-sm font-medium text-ink">{day.label}</span>
               {hours[day.key] ? (
                 <div className="flex flex-wrap items-center gap-2">
@@ -108,7 +109,7 @@ function StoreSettings({ vendor, refetch }: { vendor: OwnVendorProfileDto; refet
                       setHours((h) => ({ ...h, [day.key]: [e.target.value, h[day.key]![1]] }));
                       setSaved(false);
                     }}
-                    className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+                    className="rounded-lg border border-line bg-card px-2 py-1.5 text-sm text-ink"
                   />
                   <span className="text-muted">–</span>
                   <input
@@ -118,7 +119,7 @@ function StoreSettings({ vendor, refetch }: { vendor: OwnVendorProfileDto; refet
                       setHours((h) => ({ ...h, [day.key]: [h[day.key]![0], e.target.value] }));
                       setSaved(false);
                     }}
-                    className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+                    className="rounded-lg border border-line bg-card px-2 py-1.5 text-sm text-ink"
                   />
                   <button
                     type="button"
@@ -158,9 +159,9 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: b
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`relative h-6 w-11 shrink-0 rounded-full transition ${checked ? "bg-primary" : "bg-gray-300"}`}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition ${checked ? "bg-primary" : "bg-muted/40"}`}
     >
-      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${checked ? "left-5" : "left-0.5"}`} />
+      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-card shadow transition ${checked ? "left-5" : "left-0.5"}`} />
     </button>
   );
 }

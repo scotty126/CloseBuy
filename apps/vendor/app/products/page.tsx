@@ -1,19 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Input } from "@closebuy/ui";
+import { Input } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
 import { formatNaira, minor } from "@closebuy/types";
-import type { ProductDto, CategoryDto } from "@closebuy/types";
+import type { ProductDto, CategoryDto, OwnVendorProfileDto } from "@closebuy/types";
 import { catalogApi } from "@/lib/api";
 import { VendorGate } from "@/components/VendorGate";
+import { PageHeader } from "@/components/PageHeader";
 
 /** screens-navigation.md §2.2 — US-V-03/04. Deactivate, never delete (order history references it). */
 export default function ProductsPage() {
-  return <VendorGate>{() => <ProductsManager />}</VendorGate>;
+  return <VendorGate>{(vendor, refetch) => <ProductsManager vendor={vendor} refetch={refetch} />}</VendorGate>;
 }
 
-function ProductsManager() {
+const LOW_STOCK = 10;
+
+const field = "rounded-xl border-0 bg-card px-3 py-2.5 text-sm text-ink shadow-[inset_0_0_0_1px_rgb(var(--c-line))] outline-none focus:shadow-[inset_0_0_0_2px_#FF5A19]";
+
+function ProductsManager({ vendor, refetch }: { vendor: OwnVendorProfileDto; refetch: () => void }) {
   const [products, setProducts] = useState<ProductDto[] | null>(null);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -56,52 +61,72 @@ function ProductsManager() {
     );
   }
 
+  const lowCount = products?.filter((p) => p.isActive && p.stock <= LOW_STOCK).length ?? 0;
+
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-bold text-ink">Products</h1>
-        <Button onClick={() => setEditing("new")}>Add product</Button>
+    <div className="flex flex-col">
+      <PageHeader
+        title="Products"
+        subtitle={products ? `${products.length} items · ${lowCount} need attention` : undefined}
+        vendor={vendor}
+        onVendorChanged={refetch}
+      />
+
+      <div className="flex flex-col gap-3">
+        <button
+          type="button"
+          onClick={() => setEditing("new")}
+          className="flex h-11 items-center justify-center self-start rounded-xl bg-accent px-5 text-sm font-semibold text-night transition-transform active:scale-[0.98]"
+        >
+          + Add product
+        </button>
+
+        {error && <p className="text-sm text-danger">{error}</p>}
+
+        {products === null ? (
+          <p className="py-8 text-center text-sm text-muted">Loading…</p>
+        ) : products.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted">No products yet — add your first one.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
+            {products.map((product) => {
+              const low = product.isActive && product.stock <= LOW_STOCK;
+              const onSale = product.compareAtPriceMinor != null && product.compareAtPriceMinor > product.priceMinor;
+              return (
+                <div key={product.id} className={`flex items-center gap-3 rounded-[14px] bg-card p-3 shadow-[inset_0_0_0_1px_rgb(var(--c-line))] ${product.isActive ? "" : "opacity-70"}`}>
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-raised">
+                    {product.images[0] && (
+                      // eslint-disable-next-line @next/next/no-img-element -- vendor-supplied URLs, no fixed domain to allowlist
+                      <img src={product.images[0]} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-ink">{product.name}</p>
+                    <p className="flex items-baseline gap-1.5 font-mono text-xs">
+                      <span className={onSale ? "text-sale" : "text-ink"}>{formatNaira(minor(product.priceMinor))}</span>
+                      {onSale && <span className="text-[10px] text-muted line-through">{formatNaira(minor(product.compareAtPriceMinor!))}</span>}
+                    </p>
+                    <p className="mt-0.5 flex items-center gap-1.5 font-mono text-[11px]">
+                      <span className={low ? "rounded bg-accent px-1.5 py-px text-night" : "text-muted"}>
+                        {product.stock === 0 ? "Sold out" : `${product.stock} in stock`}
+                      </span>
+                      {!product.isActive && <span className="text-muted">· inactive</span>}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end">
+                    <button type="button" onClick={() => setEditing(product)} className="flex h-9 items-center px-2 text-xs font-medium text-ink underline underline-offset-2">
+                      Edit
+                    </button>
+                    <button type="button" onClick={() => handleToggleActive(product)} className="flex h-9 items-center px-2 text-xs text-muted underline underline-offset-2">
+                      {product.isActive ? "Deactivate" : "Reactivate"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-
-      {error && <p className="text-sm text-danger">{error}</p>}
-
-      {products === null ? (
-        <p className="py-8 text-center text-sm text-muted">Loading…</p>
-      ) : products.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted">No products yet — add your first one.</p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {products.map((product) => (
-            <div key={product.id} className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3">
-              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-surface">
-                {product.images[0] && (
-                  // eslint-disable-next-line @next/next/no-img-element -- vendor-supplied URLs, no fixed domain to allowlist
-                  <img src={product.images[0]} alt="" className="h-full w-full object-cover" loading="lazy" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-ink">{product.name}</p>
-                <p className="text-sm text-muted">
-                  {formatNaira(minor(product.priceMinor))} · Stock: {product.stock}
-                </p>
-              </div>
-              <span
-                className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                  product.isActive ? "bg-success/10 text-success" : "bg-muted/10 text-muted"
-                }`}
-              >
-                {product.isActive ? "Active" : "Inactive"}
-              </span>
-              <button type="button" onClick={() => setEditing(product)} className="shrink-0 text-xs text-primary underline">
-                Edit
-              </button>
-              <button type="button" onClick={() => handleToggleActive(product)} className="shrink-0 text-xs text-muted underline">
-                {product.isActive ? "Deactivate" : "Reactivate"}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -122,6 +147,8 @@ function ProductForm({
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? categories[0]?.id ?? "");
   const [priceNaira, setPriceNaira] = useState(product ? String(product.priceMinor / 100) : "");
   const [stock, setStock] = useState(product ? String(product.stock) : "0");
+  // The struck-through "was" price. Empty = not on sale. Display only — customers are always charged the price above.
+  const [wasNaira, setWasNaira] = useState(product?.compareAtPriceMinor != null ? String(product.compareAtPriceMinor / 100) : "");
   const [imagesText, setImagesText] = useState(product?.images.join("\n") ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -140,6 +167,11 @@ function ProductForm({
       setError("Enter a valid price.");
       return;
     }
+    const compareAtPriceMinor = wasNaira.trim() === "" ? null : Math.round(Number(wasNaira) * 100);
+    if (compareAtPriceMinor !== null && (!Number.isFinite(compareAtPriceMinor) || compareAtPriceMinor <= priceMinor)) {
+      setError("The original price has to be higher than the selling price — or leave it empty if this isn't on sale.");
+      return;
+    }
     if (images.length === 0) {
       setError("Add at least one image URL.");
       return;
@@ -154,6 +186,7 @@ function ProductForm({
         priceMinor,
         images,
         stock: Number(stock),
+        compareAtPriceMinor,
       };
       if (product) await catalogApi.updateProduct(product.id, input);
       else await catalogApi.createProduct(input);
@@ -165,10 +198,10 @@ function ProductForm({
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <h1 className="text-lg font-bold text-ink">{product ? "Edit product" : "Add product"}</h1>
+    <div className="flex max-w-xl flex-col gap-4">
+      <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">{product ? "Edit product" : "Add product"}</h1>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-[14px] bg-card p-4 shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
         <Input label="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} />
 
@@ -178,7 +211,7 @@ function ProductForm({
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
             required
-            className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+            className={field}
           >
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
@@ -189,6 +222,7 @@ function ProductForm({
         </div>
 
         <Input label="Price (₦)" inputMode="decimal" value={priceNaira} onChange={(e) => setPriceNaira(e.target.value)} required />
+        <Input label="Original price (₦) — optional, shows as a sale" inputMode="decimal" value={wasNaira} onChange={(e) => setWasNaira(e.target.value)} placeholder="e.g. 9500" />
         <Input label="Stock" inputMode="numeric" value={stock} onChange={(e) => setStock(e.target.value)} required />
 
         <div className="flex flex-col gap-1.5">
@@ -199,19 +233,19 @@ function ProductForm({
             onChange={(e) => setImagesText(e.target.value)}
             rows={3}
             placeholder="https://…"
-            className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+            className={field}
           />
         </div>
 
         {error && <p className="text-sm text-danger">{error}</p>}
 
         <div className="flex gap-2">
-          <Button type="submit" disabled={isSaving}>
+          <button type="submit" disabled={isSaving} className="flex h-11 flex-1 items-center justify-center rounded-xl bg-accent text-sm font-semibold text-night disabled:opacity-60">
             {isSaving ? "Saving…" : "Save"}
-          </Button>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          </button>
+          <button type="button" onClick={onClose} className="flex h-11 flex-1 items-center justify-center rounded-xl bg-card text-sm font-semibold text-ink shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
             Cancel
-          </Button>
+          </button>
         </div>
       </form>
     </div>

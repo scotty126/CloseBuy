@@ -16,6 +16,39 @@ function mapsLink(lat: number, lng: number): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
 }
 
+/** The redesign's duty card: one big switch at the top of the Jobs screen. */
+function DutyCard({ onDuty, busy, onToggle }: { onDuty: boolean; busy: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={onDuty}
+      onClick={onToggle}
+      disabled={busy}
+      className={`flex w-full items-center justify-between rounded-[14px] p-3.5 text-left transition-colors disabled:opacity-70 ${
+        onDuty ? "bg-primary text-[#FFF7F1]" : "bg-card text-ink shadow-[inset_0_0_0_1px_rgb(var(--c-line))]"
+      }`}
+    >
+      <span className="flex flex-col gap-0.5">
+        <span className="font-mono text-[10px] uppercase opacity-80">Duty status</span>
+        <span className="text-lg font-semibold">{busy ? "Updating…" : onDuty ? "On duty" : "Off duty"}</span>
+      </span>
+      <span className={`flex h-7 w-12 items-center rounded-full p-0.5 transition-colors ${onDuty ? "bg-accent" : "bg-muted/40"}`}>
+        <span className={`h-6 w-6 rounded-full bg-white shadow transition-transform ${onDuty ? "translate-x-5" : ""}`} />
+      </span>
+    </button>
+  );
+}
+
+function ScreenTitle({ title, subtitle, tone }: { title: string; subtitle?: string; tone?: "on" | "off" }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">{title}</h1>
+      {subtitle && <span className={`font-mono text-[11px] uppercase ${tone === "on" ? "text-success" : "text-muted"}`}>{subtitle}</span>}
+    </div>
+  );
+}
+
 /** screens-navigation.md §3.1/3.2 — one screen, shaped by state: off duty / waiting / offer / active job. No persistent tab bar (layout.tsx) — a rider mid-delivery should never have to think about where to tap. */
 export default function HomePage() {
   return <RiderGate>{(rider, refetch) => <DutyScreen rider={rider} refetchRider={refetch} />}</RiderGate>;
@@ -65,13 +98,16 @@ function DutyScreen({ rider, refetchRider }: { rider: RiderProfileDto; refetchRi
 
   if (!rider.onDuty) {
     return (
-      <div className="flex min-h-[80vh] flex-col items-center justify-center gap-4 p-6 text-center">
-        <p className="text-lg font-semibold text-ink">You&apos;re off duty</p>
-        <p className="text-sm text-muted">Go on duty to start seeing delivery jobs.</p>
+      <div className="flex flex-col gap-3.5 px-4 pb-6 pt-3.5">
+        <ScreenTitle title="Jobs" subtitle="Off duty" />
+        <DutyCard onDuty={false} busy={togglingDuty} onToggle={handleToggleDuty} />
         {error && <p className="text-sm text-danger">{error}</p>}
-        <Button onClick={handleToggleDuty} disabled={togglingDuty}>
-          {togglingDuty ? "Going on duty…" : "Go on duty"}
-        </Button>
+        <div className="flex flex-col items-center gap-2 rounded-[14px] px-[18px] py-8 text-center shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+          <img src="/logo-mark.png" alt="" className="object-contain h-[46px] w-11 opacity-50" />
+          <span className="font-semibold text-ink">You&apos;re off duty</span>
+          <span className="text-[13px] leading-normal text-muted">Go on duty to start receiving delivery offers near you.</span>
+        </div>
       </div>
     );
   }
@@ -107,14 +143,16 @@ function DutyScreen({ rider, refetchRider }: { rider: RiderProfileDto; refetchRi
   }
 
   return (
-    <div className="flex min-h-[80vh] flex-col items-center justify-center gap-4 p-6 text-center">
-      <p className="text-lg font-semibold text-ink">On duty — waiting for a job</p>
-      <p className="text-sm text-muted">You&apos;ll see an offer here as soon as one opens up nearby.</p>
+    <div className="flex flex-col gap-3.5 px-4 pb-6 pt-3.5">
+      <ScreenTitle title="Jobs" subtitle="On duty · looking for offers" tone="on" />
+      <DutyCard onDuty busy={togglingDuty} onToggle={handleToggleDuty} />
       <CashPausedNotice />
       {error && <p className="text-sm text-danger">{error}</p>}
-      <Button variant="secondary" onClick={handleToggleDuty} disabled={togglingDuty}>
-        {togglingDuty ? "Going off duty…" : "Go off duty"}
-      </Button>
+      <div className="flex flex-col items-center gap-2 rounded-[14px] px-[18px] py-8 text-center shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
+        <span className="h-9 w-9 animate-spin rounded-full border-4 border-line border-t-accent" aria-hidden="true" />
+        <span className="font-semibold text-ink">Waiting for a job</span>
+        <span className="text-[13px] leading-normal text-muted">You&apos;ll see an offer here as soon as one opens up nearby.</span>
+      </div>
     </div>
   );
 }
@@ -136,7 +174,7 @@ function CashPausedNotice() {
   if (!earnings || earnings.cashFloatLimitMinor == null || earnings.cashBalanceMinor <= earnings.cashFloatLimitMinor) return null;
 
   return (
-    <div className="w-full max-w-sm rounded-xl border border-danger/30 bg-danger/5 p-3 text-left">
+    <div className="w-full rounded-[14px] bg-danger/10 p-3.5 text-left shadow-[inset_0_0_0_1px_rgb(var(--c-danger)/0.3)]">
       <p className="text-sm font-semibold text-danger">Cash-on-delivery jobs are paused</p>
       <p className="mt-0.5 text-xs text-ink">
         You owe {formatNaira(minor(earnings.cashBalanceMinor))}, over your {formatNaira(minor(earnings.cashFloatLimitMinor))} limit.
@@ -187,38 +225,50 @@ function OfferScreen({
   }
 
   return (
-    <div className="flex min-h-[80vh] flex-col justify-between gap-4 p-6">
-      <div>
-        <p className="text-center text-xs font-medium uppercase tracking-wide text-accent">New delivery job</p>
-        <p className="mt-4 text-center text-2xl font-bold text-ink">{formatNaira(minor(offer.deliveryFeeMinor))}</p>
-        <p className="text-center text-sm text-muted">Delivery fee</p>
-
-        <div className="mt-6 flex flex-col gap-3">
-          <div className="rounded-xl border border-gray-200 bg-white p-3">
-            <p className="text-xs text-muted">Pick up from</p>
-            <p className="font-medium text-ink">{offer.vendor.businessName}</p>
-            <p className="text-sm text-muted">{offer.vendor.pickupLandmark}</p>
-          </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-3">
-            <p className="text-xs text-muted">Deliver to</p>
-            <p className="font-medium text-ink">{offer.deliveryLandmark}</p>
-          </div>
-          {offer.paymentMethod === "cash_on_delivery" && (
-            <p className="text-center text-xs text-warning">Cash on delivery — collect {formatNaira(minor(offer.totalMinor))}</p>
-          )}
+    <div className="flex flex-col gap-3.5 px-4 pb-6 pt-3.5">
+      <ScreenTitle title="Jobs" subtitle="On duty · 1 offer nearby" tone="on" />
+      <article className="flex flex-col gap-3 rounded-[14px] bg-card p-3.5 shadow-[inset_0_0_0_2px_#FF5A19]">
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-[22px] font-semibold text-ink">{formatNaira(minor(offer.deliveryFeeMinor))}</span>
+          <span className="rounded-md bg-raised px-1.5 py-0.5 font-mono text-[11px] uppercase text-muted">New job</span>
         </div>
-      </div>
-
-      {error && <p className="text-center text-sm text-danger">{error}</p>}
-
-      <div className="flex flex-col gap-2">
-        <Button onClick={handleAccept} disabled={busy}>
-          {busy ? "Accepting…" : "Accept"}
-        </Button>
-        <Button variant="secondary" onClick={handleDecline} disabled={busy}>
-          Not this one
-        </Button>
-      </div>
+        <div className="grid grid-cols-[14px_1fr] gap-x-2.5 gap-y-2 text-[13px]">
+          <span className="mt-1 h-2.5 w-2.5 rounded-[3px] bg-primary" />
+          <span>
+            <span className="font-mono text-[10px] uppercase text-muted">Pickup</span>
+            <br />
+            <span className="font-medium text-ink">{offer.vendor.businessName}</span> · {offer.vendor.pickupLandmark}
+          </span>
+          <span className="mt-1 h-2.5 w-2.5 rounded-full bg-accent" />
+          <span>
+            <span className="font-mono text-[10px] uppercase text-muted">Drop-off</span>
+            <br />
+            {offer.deliveryLandmark}
+          </span>
+        </div>
+        {offer.paymentMethod === "cash_on_delivery" && (
+          <span className="self-start rounded-md bg-warning/15 px-2 py-1 font-mono text-[11px] uppercase text-warning">Collect {formatNaira(minor(offer.totalMinor))} cash</span>
+        )}
+        {error && <p className="text-sm text-danger">{error}</p>}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleDecline}
+            disabled={busy}
+            className="flex h-11 flex-1 items-center justify-center rounded-[10px] text-[13px] text-ink shadow-[inset_0_0_0_1px_rgb(var(--c-line))] disabled:opacity-50"
+          >
+            Skip
+          </button>
+          <button
+            type="button"
+            onClick={handleAccept}
+            disabled={busy}
+            className="flex h-11 flex-[2] items-center justify-center rounded-[10px] bg-accent text-sm font-semibold text-night transition-transform active:scale-[0.98] disabled:opacity-60"
+          >
+            {busy ? "Accepting…" : "Accept job"}
+          </button>
+        </div>
+      </article>
     </div>
   );
 }
@@ -234,10 +284,10 @@ function ActiveJob({ order, onChanged, onFailed }: { order: RiderJobDto; onChang
 /** US-R-06's own acceptance criterion: after a failed delivery, the rider is instructed whether to return the goods — every current failure reason (customer unreachable, wrong address, customer refused, other) leaves the rider still physically holding them with nowhere else they can reasonably go, so this always points back to the vendor rather than branching on the reason. Acknowledging here is local UI state only — nothing server-side tracks "returned" (no field exists for it), so this never claims to have recorded anything it hasn't. */
 function ReturnGoodsScreen({ order, onDone }: { order: RiderJobDto; onDone: () => void }) {
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <p className="text-xs font-medium uppercase tracking-wide text-danger">Delivery reported failed</p>
+    <div className="flex flex-col gap-3.5 px-4 pb-6 pt-3.5">
+      <p className="font-mono text-[11px] uppercase tracking-[0.06em] text-danger">Delivery reported failed</p>
 
-      <div className="rounded-xl border border-warning/30 bg-warning/5 p-4">
+      <div className="rounded-[14px] bg-card p-4 shadow-[inset_0_0_0_1px_rgb(var(--c-danger))]">
         <p className="text-lg font-semibold text-ink">Return these goods to {order.vendor.businessName}</p>
         <p className="mt-1 text-sm text-muted">
           This order couldn&apos;t be delivered. Take what you&apos;re carrying back to the vendor now — don&apos;t
@@ -278,11 +328,11 @@ function PickupStep({ order, onChanged }: { order: RiderJobDto; onChanged: () =>
   }
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <p className="text-xs font-medium uppercase tracking-wide text-accent">Step 1 of 2 — Pick up</p>
+    <div className="flex flex-col gap-3.5 px-4 pb-6 pt-3.5">
+      <p className="font-mono text-[11px] uppercase tracking-[0.06em] text-accent">Step 1 of 2 — Pick up</p>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <p className="text-lg font-semibold text-ink">{order.vendor.businessName}</p>
+      <div className="rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-4">
+        <p className="text-lg font-semibold tracking-[-0.01em] text-ink">{order.vendor.businessName}</p>
         <p className="text-sm text-muted">{order.vendor.pickupLandmark}</p>
         <div className="mt-3 flex gap-2">
           <LinkButton href={mapsLink(order.vendor.pickupLat, order.vendor.pickupLng)} target="_blank" rel="noreferrer" className="flex-1">
@@ -367,14 +417,14 @@ function DeliveryStep({ order, onChanged, onFailed }: { order: RiderJobDto; onCh
 
   if (reportingFailed) {
     return (
-      <form onSubmit={handleReportFailed} className="flex flex-col gap-4 p-6">
+      <form onSubmit={handleReportFailed} className="flex flex-col gap-3.5 px-4 pb-6 pt-3.5">
         <p className="text-lg font-semibold text-ink">Report delivery failed</p>
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-ink">Reason</label>
           <select
             value={failReason}
             onChange={(e) => setFailReason(e.target.value as typeof failReason)}
-            className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+            className="rounded-xl border border-line bg-card px-3 py-2.5 text-sm text-ink outline-none focus:border-primary focus:ring-4 focus:ring-primary/10"
           >
             <option value="customer_unreachable">Customer unreachable</option>
             <option value="wrong_address">Wrong address</option>
@@ -395,10 +445,10 @@ function DeliveryStep({ order, onChanged, onFailed }: { order: RiderJobDto; onCh
   }
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <p className="text-xs font-medium uppercase tracking-wide text-accent">Step 2 of 2 — Deliver</p>
+    <div className="flex flex-col gap-3.5 px-4 pb-6 pt-3.5">
+      <p className="font-mono text-[11px] uppercase tracking-[0.06em] text-accent">Step 2 of 2 — Deliver</p>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-4">
         <p className="text-lg font-semibold text-ink">{order.deliveryLandmark}</p>
         <div className="mt-3 flex gap-2">
           <LinkButton href={mapsLink(order.deliveryLat, order.deliveryLng)} target="_blank" rel="noreferrer" className="flex-1">

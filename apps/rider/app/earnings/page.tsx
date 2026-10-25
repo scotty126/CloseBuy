@@ -60,14 +60,14 @@ function Earnings() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <h1 className="text-lg font-bold text-ink">Earnings</h1>
+      <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">Earnings</h1>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
+        <div className="rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-3">
           <p className="text-xs text-muted">Cleared</p>
           <p className="text-lg font-semibold text-success">{formatNaira(minor(earnings.clearedMinor))}</p>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
+        <div className="rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-3">
           <p className="text-xs text-muted">Pending</p>
           <p className="text-lg font-semibold text-warning">{formatNaira(minor(earnings.pendingMinor))}</p>
         </div>
@@ -101,7 +101,7 @@ function Earnings() {
         {earnings.deliveries.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted">No completed deliveries yet.</p>
         ) : (
-          <div className="flex flex-col divide-y divide-gray-200 rounded-xl border border-gray-200 bg-white">
+          <div className="flex flex-col divide-y divide-line rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
             {earnings.deliveries.map((d) => (
               <div key={d.orderId} className="flex items-center justify-between p-3 text-sm">
                 <p className="text-ink">{new Date(d.completedAt).toLocaleDateString()}</p>
@@ -119,7 +119,7 @@ function Earnings() {
         ) : remittances.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">No remittances recorded yet.</p>
         ) : (
-          <div className="flex flex-col divide-y divide-gray-200 rounded-xl border border-gray-200 bg-white">
+          <div className="flex flex-col divide-y divide-line rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
             {remittances.map((r) => (
               <div key={r.id} className="flex items-center justify-between gap-3 p-3 text-sm">
                 <div className="min-w-0">

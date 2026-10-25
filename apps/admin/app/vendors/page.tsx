@@ -81,7 +81,7 @@ export default function VendorsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-bold text-ink">Vendors</h1>
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">Vendors</h1>
         <p className="text-sm text-muted">
           Suspending a vendor blocks new orders immediately; anything already in flight is left for you to handle
           deliberately, not auto-cancelled (US-A-06).
@@ -129,7 +129,7 @@ export default function VendorsPage() {
               )}
 
               {actingKey === vendor.id ? (
-                <div className="flex flex-col gap-2 border-t border-gray-200 pt-3">
+                <div className="flex flex-col gap-2 border-t border-line pt-3">
                   <Input
                     label={`Reason for ${mode} (written to the audit log, sent to the vendor)`}
                     value={reason}

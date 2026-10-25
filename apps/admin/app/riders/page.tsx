@@ -82,7 +82,7 @@ export default function RidersPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-bold text-ink">Riders</h1>
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">Riders</h1>
         <p className="text-sm text-muted">
           Suspending a rider blocks new job offers immediately and takes them off duty; anything already in flight
           is left for you to handle deliberately, not auto-cancelled (US-A-06).
@@ -137,7 +137,7 @@ export default function RidersPage() {
               )}
 
               {actingKey === rider.id ? (
-                <div className="flex flex-col gap-2 border-t border-gray-200 pt-3">
+                <div className="flex flex-col gap-2 border-t border-line pt-3">
                   <Input
                     label={`Reason for ${mode} (written to the audit log, sent to the rider)`}
                     value={reason}
@@ -226,7 +226,7 @@ function RemittancePanel({ rider, onRiderUpdated }: { rider: AdminRiderDto; onRi
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-gray-200 p-3 text-sm">
+    <div className="flex flex-col gap-2 rounded-lg border border-line p-3 text-sm">
       <div className="flex items-center justify-between">
         <p className="text-ink">
           Cash owed to the platform:{" "}
@@ -240,7 +240,7 @@ function RemittancePanel({ rider, onRiderUpdated }: { rider: AdminRiderDto; onRi
       </div>
 
       {isOpen && (
-        <div className="flex flex-col gap-3 border-t border-gray-200 pt-3">
+        <div className="flex flex-col gap-3 border-t border-line pt-3">
           {error && <p className="text-sm text-danger">{error}</p>}
 
           {owes && (

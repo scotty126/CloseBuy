@@ -43,7 +43,7 @@ function Notifications() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <h1 className="text-lg font-bold text-ink">Notifications</h1>
+      <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">Notifications</h1>
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
@@ -61,10 +61,10 @@ function Notifications() {
                 type="button"
                 onClick={() => unread && markRead(n.id)}
                 className={`flex items-start gap-3 rounded-xl border p-3 text-left shadow-sm transition ${
-                  unread ? "border-primary/20 bg-primary/5" : "border-gray-200 bg-white"
+                  unread ? "border-accent/30 bg-accent/5" : "border-line bg-card"
                 }`}
               >
-                {unread && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}
+                {unread && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />}
                 <div className="flex flex-col gap-0.5">
                   <p className={`text-sm ${unread ? "font-bold text-ink" : "font-medium text-ink"}`}>
                     {LABELS[n.type] ?? "You have an update"}

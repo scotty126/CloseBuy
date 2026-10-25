@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { ApiClientError } from "@closebuy/api-client";
-import type { NotificationDto, NotificationType } from "@closebuy/types";
+import type { NotificationDto, NotificationType, OwnVendorProfileDto } from "@closebuy/types";
 import { notificationsApi } from "@/lib/api";
 import { VendorGate } from "@/components/VendorGate";
+import { PageHeader } from "@/components/PageHeader";
 
 // Only the types a vendor session actually receives (notify() is
 // per-user, not per-role, so this is defensive, not exhaustive) — a
@@ -24,10 +25,10 @@ const LABELS: Partial<Record<NotificationType, string>> = {
 };
 
 export default function NotificationsPage() {
-  return <VendorGate>{() => <Notifications />}</VendorGate>;
+  return <VendorGate>{(vendor, refetch) => <Notifications vendor={vendor} refetch={refetch} />}</VendorGate>;
 }
 
-function Notifications() {
+function Notifications({ vendor, refetch }: { vendor: OwnVendorProfileDto; refetch: () => void }) {
   const [notifications, setNotifications] = useState<NotificationDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,8 +49,8 @@ function Notifications() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-bold text-ink">Notifications</h1>
+    <div className="flex max-w-2xl flex-col gap-1">
+      <PageHeader title="Notifications" subtitle={`${notifications?.filter((n) => !n.readAt).length ?? 0} unread`} vendor={vendor} onVendorChanged={refetch} />
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
@@ -67,10 +68,10 @@ function Notifications() {
                 type="button"
                 onClick={() => unread && markRead(n.id)}
                 className={`flex items-start gap-3 rounded-xl border p-3 text-left shadow-sm transition ${
-                  unread ? "border-primary/20 bg-primary/5" : "border-gray-200 bg-white"
+                  unread ? "border-accent/30 bg-accent/5" : "border-line bg-card"
                 }`}
               >
-                {unread && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}
+                {unread && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" />}
                 <div className="flex flex-col gap-0.5">
                   <p className={`text-sm ${unread ? "font-bold text-ink" : "font-medium text-ink"}`}>
                     {LABELS[n.type] ?? "You have an update"}

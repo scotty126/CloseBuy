@@ -64,7 +64,7 @@ export function ColumnChart({ title, periodHeading, valueHeading, data, formatVa
   const activePct = active === null ? 0 : (slotCentre(active) / W) * 100;
 
   return (
-    <figure className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4">
+    <figure className="flex flex-col gap-3 rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] p-4">
       <div className="flex items-center justify-between gap-3">
         <figcaption className="text-sm font-semibold text-ink">{title}</figcaption>
         {max > 0 && (
@@ -82,7 +82,7 @@ export function ColumnChart({ title, periodHeading, valueHeading, data, formatVa
       {max === 0 ? (
         <p className="py-10 text-center text-sm text-muted">{emptyMessage}</p>
       ) : showTable ? (
-        <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-100">
+        <div className="max-h-64 overflow-y-auto rounded-lg border border-line">
           <table className="w-full text-left text-sm">
             <thead className="sticky top-0 bg-surface text-xs uppercase text-muted">
               <tr>
@@ -92,7 +92,7 @@ export function ColumnChart({ title, periodHeading, valueHeading, data, formatVa
             </thead>
             <tbody>
               {data.map((d) => (
-                <tr key={d.key} className="border-t border-gray-100">
+                <tr key={d.key} className="border-t border-line">
                   <td className="px-3 py-1.5 text-ink">{d.label}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums text-ink">{formatValue(d.value)}</td>
                 </tr>
@@ -168,7 +168,7 @@ export function ColumnChart({ title, periodHeading, valueHeading, data, formatVa
           {active !== null && data[active] && (
             <div
               role="status"
-              className="pointer-events-none absolute top-0 z-10 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-md"
+              className="pointer-events-none absolute top-0 z-10 rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))] px-3 py-2 shadow-md"
               style={{
                 left: `${activePct}%`,
                 transform: `translateX(${activePct < 14 ? "0" : activePct > 86 ? "-100%" : "-50%"})`,
