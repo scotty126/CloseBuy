@@ -1,0 +1,4 @@
+# Free HTTPS certificate, issued and renewed automatically for API_DOMAIN.
+{$API_DOMAIN} {
+	reverse_proxy api:4000
+}

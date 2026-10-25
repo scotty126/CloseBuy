@@ -1,0 +1,46 @@
+# CloseBuy API + Redis + HTTPS proxy on one small VM (Oracle Always Free works).
+# Run from this folder:  docker compose up -d --build
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      REDIS_URL: redis://redis:6379
+    # Apply any pending migrations, then start. Safe to repeat on every restart.
+    working_dir: /app/apps/api
+    command: ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+    depends_on:
+      - redis
+    expose:
+      - "4000"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # BullMQ needs noeviction; appendonly keeps the order timers across restarts.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - api
+
+volumes:
+  redis-data:
+  caddy-data:
