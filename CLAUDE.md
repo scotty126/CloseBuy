@@ -1190,6 +1190,66 @@ depends on has existed since the very first migration regardless.
   addition to scope in unprompted this close to launch; worth asking
   about explicitly before building it, not assumed into this pass.
 
+## 2026-10-24 — "CloseBuy Redesign" canvas build (IN PROGRESS, local-only, nothing pushed)
+
+Source of truth: the Design artifact `https://claude.ai/artifact/NCtdb1JsLtkpHSK83qqvNg` (103 artboards,
+8 canvas pages). Direction **B (brand orange)** per its BrandBook; C ("market pop") is an unused
+alternative. Owner decisions: build the missing backend too, dark mode in all four apps, order =
+foundation → customer → staff apps.
+
+**Blockers found, not fixable from code:** the Railway API is down (`x-railway-fallback: true`, "application
+not found") and the saved `railway login` has expired — redeploy/migrate needs the owner to `railway login`
+first. Local screens were verified against a throwaway mock API (scratchpad, never committed).
+
+**Done**
+- Foundation: colour tokens are CSS variables (light + `.dark`) in `packages/ui/tailwind-preset.js`; Geist +
+  Geist Mono replace Inter in all four layouts; `ThemeToggle`/`ThemeScript` (`packages/ui/src/components/Theme.tsx`,
+  no-flash, stored in localStorage `closebuy.theme`); `bg-white`/`border-gray-*` etc. swept to
+  `bg-card`/`border-line`/…; text on orange is `text-night` (fixed Night, never flips); base style gives every
+  input/select/textarea the card colour. `formatNaira` drops `.00` on whole naira (`{exact:true}` keeps it).
+  Shared `AuthShell` (full-screen, split panel on desktop) wraps every login/register/forgot/reset/verify/oauth-complete
+  page in all four apps.
+- Backend (migration `20261024120000_sale_price_and_favorites`, **hand-written, NOT applied** — run
+  `railway ssh -- sh -c "cd /app/apps/api && npx prisma migrate deploy"` after deploying): `Product.compareAtPriceMinor`
+  (sale "was" price, display only — checkout still charges `priceMinor`; validated > price in the service),
+  `product_favorites`, `vendor_follows`. New routes: `GET /products/deals`, `/products/search`, `/products/:id`
+  (+ same-vendor "goes well with"), `GET/PUT/DELETE /customer/favorites[/:id]`, `/customer/follows[/:id]`,
+  `/vendors/:id/ratings` now also returns an exact star `distribution`; `GET /orders` rows carry vendor name/logo +
+  `itemCount`. 40 new tests, 349 API tests green.
+- Customer screens restyled to the design (light + dark verified at 390px): Home (offers hero from real deals,
+  3-up categories, deals carousel, shop rows), Search (product results + On sale / Under ₦5,000 / Open now,
+  recents), Product page `/products/[id]`, Shop page, Bag, Checkout (+ "Don't forget" add-ons), Orders
+  (Active/Past, reorder via shared `lib/useReorder`), Tracking, Account, `/saved`, Notifications, floating 5-tab nav.
+
+**Deliberately NOT built (needs an owner decision or has no backend)**
+- *Free delivery / threshold bar* and *promo codes*: delivery fee is 100% rider pay (`rider_payable` ledger credit), so
+  waiving it means the platform subsidises riders — a money/ledger decision, not a UI one. Promo needs a whole
+  discount-funding model. Hidden everywhere rather than faked.
+- *Size variants* on product pages: `Product` has no variants; cart/order/stock would all change.
+- *Live map with a rider dot* on tracking: contradicts brief §3.5 (point-in-time location only). Replaced by a
+  status hero + progress bar. *Message rider* (chat) doesn't exist; Call does.
+- *Seller reply to reviews*, *account switches* (notification prefs), *6-digit email verification keypad* (the API
+  sends a link, so verify-email stays link-based).
+
+**Also done later the same day (still local-only):**
+- Customer: Onboarding `/welcome` (first visit only, flag `closebuy.onboarded`), Delivery location `/location`
+  (saved in `closebuy.deliveryLocation`, prefills checkout's pin, shown in the Home pill), Terms/Privacy with a shared
+  `LegalHeader`, Delivered/Rate polish on Tracking, and the desktop layout (`DesktopNav` top bar from `lg`,
+  `PageFrame` = wide for Home/shop pages, a 2xl column for everything else; phone nav/header are `lg:hidden`).
+  The three old card components (ProductCard, QuickBuyCard, VendorCard) were deleted.
+- Staff apps: shared `Sidebar` rebuilt (icons, groups, theme toggle, **Log out — staff apps had no sign-out at all
+  before**, floating phone tab bar; `scrollableTabs` for admin's 10 sections); `RiderHeader` is now a top bar + 3-tab
+  bar; vendor `PageHeader` (title, mono sub-line, open/closed switch, bell) on every vendor page; vendor Order queue
+  (KPI tiles, tabs with counts, order-card grid), Products (sale-price field, low-stock chips), Earnings, Settings,
+  Notifications restyled; rider Jobs (duty card, offer card) restyled; admin gets the grouped sidebar and a class sweep
+  over every page (cards, headings, inputs). All four apps pass `next build`; lint + typecheck clean; 349 API tests.
+- Page files must not export anything but the page (Next rejects it) — shared constants live in `lib/`.
+
+**Not built (see above) and still open:** tips on the Rate screen (needs a payment flow), the "what stood out" tags,
+a seller-return code on rider failed-delivery, rider/admin deep restyle beyond tokens + chrome (their screens are
+the old layouts re-skinned, not the canvas's page-by-page compositions), and a real browser check of every
+staff screen against live data (only vendor queue, rider Jobs, admin Applications/Orders were rendered, on mock data).
+
 ## What's next
 
 **Every Admin story is now built (US-A-01 through US-A-08)** — reconciliation
