@@ -8,7 +8,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 const variantClasses: Record<NonNullable<ButtonProps["variant"]>, string> = {
   // Orange is reserved for action per the brand guide — this is the one
   // place every app should reach for by default.
-  primary: "bg-accent text-white shadow-sm shadow-accent/20 hover:brightness-95 hover:shadow-md hover:shadow-accent/25 focus-visible:ring-accent/40 active:brightness-90",
+  primary: "bg-accent text-night shadow-sm shadow-accent/20 hover:brightness-95 hover:shadow-md hover:shadow-accent/25 focus-visible:ring-accent/40 active:brightness-90",
   secondary: "bg-primary text-white shadow-sm shadow-primary/20 hover:brightness-110 hover:shadow-md hover:shadow-primary/25 focus-visible:ring-primary/40 active:brightness-95",
   danger: "bg-danger text-white shadow-sm shadow-danger/20 hover:brightness-95 hover:shadow-md hover:shadow-danger/25 focus-visible:ring-danger/40 active:brightness-90",
 };

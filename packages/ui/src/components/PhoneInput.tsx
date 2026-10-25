@@ -46,11 +46,11 @@ export function PhoneInput({ label, value, onChange, required, id, name, placeho
         </label>
       )}
       <div
-        className={`flex items-stretch overflow-hidden rounded-xl border bg-white transition-all duration-150 ease-out focus-within:ring-4 ${
-          error ? "border-danger focus-within:ring-danger/10" : "border-gray-200 hover:border-gray-300 focus-within:border-primary focus-within:ring-primary/10"
+        className={`flex items-stretch overflow-hidden rounded-xl border bg-card transition-all duration-150 ease-out focus-within:ring-4 ${
+          error ? "border-danger focus-within:ring-danger/10" : "border-line hover:border-line focus-within:border-primary focus-within:ring-primary/10"
         }`}
       >
-        <span className="flex select-none items-center border-r border-gray-200 bg-surface px-3 text-sm font-medium text-muted" aria-hidden="true">
+        <span className="flex select-none items-center border-r border-line bg-surface px-3 text-sm font-medium text-muted" aria-hidden="true">
           +234
         </span>
         <input
@@ -67,7 +67,7 @@ export function PhoneInput({ label, value, onChange, required, id, name, placeho
             const digits = toLocalDigits(e.target.value);
             onChange(digits ? `+234${digits}` : "");
           }}
-          className="min-w-0 flex-1 px-3 py-2.5 text-sm outline-none"
+          className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-ink outline-none placeholder:text-muted/60"
         />
       </div>
       {error && <span className="text-xs text-danger">{error}</span>}
