@@ -183,7 +183,11 @@ export interface OrderDto {
 }
 
 // GET /orders (US-C-09 history) — the raw Order row, no relations joined.
-export type OrderSummaryDto = Omit<OrderDto, "items" | "transitions" | "vendor" | "rider" | "dispute" | "ratings">;
+export type OrderSummaryDto = Omit<OrderDto, "items" | "transitions" | "vendor" | "rider" | "dispute" | "ratings"> & {
+  // Added so a history card can name the shop and size the order (optional: older API builds omit them).
+  vendor?: { businessName: string; logoUrl?: string | null };
+  itemCount?: number;
+};
 
 export interface CheckoutResponse {
   order: OrderDto;

@@ -4,6 +4,8 @@ import type {
   VendorDto,
   VendorRatingDto,
   ProductDto,
+  ProductListingDto,
+  ProductSearchQuery,
   VendorSearchQuery,
   VendorApplicationInput,
   VendorUpdateInput,
@@ -33,7 +35,24 @@ export function createCatalogApi(client: ApiClient) {
     getVendorProducts: (id: string) => client.request<{ products: ProductDto[] }>(`/vendors/${id}/products`),
 
     getVendorRatings: (id: string, limit = 20) =>
-      client.request<{ ratings: VendorRatingDto[] }>(`/vendors/${id}/ratings?limit=${limit}`),
+      client.request<{ ratings: VendorRatingDto[]; distribution?: Record<1 | 2 | 3 | 4 | 5, number> }>(
+        `/vendors/${id}/ratings?limit=${limit}`,
+      ),
+
+    /** Home's "Deals near you" — genuinely marked-down products, biggest discount first. */
+    listDeals: (limit = 10) => client.request<{ products: ProductListingDto[] }>(`/products/deals?limit=${limit}`),
+
+    searchProducts: (query: Partial<Omit<ProductSearchQuery, "limit">> & { limit?: number } = {}) => {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(query)) {
+        if (value !== undefined && value !== null && value !== "" && value !== false) params.set(key, String(value));
+      }
+      const qs = params.toString();
+      return client.request<{ products: ProductListingDto[] }>(`/products/search${qs ? `?${qs}` : ""}`);
+    },
+
+    getProduct: (id: string) =>
+      client.request<{ product: ProductListingDto; pairsWith: ProductListingDto[] }>(`/products/${id}`),
 
     getDeliveryFee: () => client.request<{ feeMinor: number }>("/delivery-fee"),
 

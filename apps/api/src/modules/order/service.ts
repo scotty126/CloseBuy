@@ -399,7 +399,14 @@ export function createOrderService(deps: OrderServiceDeps) {
     async listCustomerOrders(userId: string) {
       const customer = await prisma.customerProfile.findUnique({ where: { userId } });
       if (!customer) return [];
-      return prisma.order.findMany({ where: { customerId: customer.id }, orderBy: { createdAt: "desc" } });
+      const rows = await prisma.order.findMany({
+        where: { customerId: customer.id },
+        orderBy: { createdAt: "desc" },
+        // Just enough for a history card to say whose order it was and how big,
+        // without shipping every line item on a list endpoint.
+        include: { vendor: { select: { businessName: true, logoUrl: true } }, items: { select: { quantity: true } } },
+      });
+      return rows.map(({ items, ...order }) => ({ ...order, itemCount: items.reduce((n, i) => n + i.quantity, 0) }));
     },
 
     /**

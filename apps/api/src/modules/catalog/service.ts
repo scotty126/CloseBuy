@@ -5,6 +5,8 @@ import type {
   VendorSearchQuery,
   ProductCreateInput,
   ProductUpdateInput,
+  ProductSearchQuery,
+  ProductListingDto,
 } from "@closebuy/types";
 import { isWithinServiceArea } from "../../lib/geo.js";
 import { omitFields } from "../../lib/redact.js";
@@ -53,6 +55,50 @@ function withRatingSummary<T extends { id: string }>(vendor: T, summary: { avera
     ratingAverage: summary ? Math.round(summary.average * 10) / 10 : null,
     ratingCount: summary?.count ?? 0,
   };
+}
+
+export class InvalidSalePriceError extends Error {
+  constructor() {
+    super("The original price must be higher than the selling price.");
+  }
+}
+
+/** The "was" price has to actually be a markdown — anything else would render a fake discount. */
+function assertValidSalePrice(priceMinor: number, compareAtPriceMinor: number | null | undefined) {
+  if (compareAtPriceMinor != null && compareAtPriceMinor <= priceMinor) throw new InvalidSalePriceError();
+}
+
+const LISTING_INCLUDE = {
+  vendor: { select: { businessName: true, isOpen: true, supportsPickup: true, avgDeliveryMinutes: true } },
+} as const;
+
+function findListingRows(prisma: PrismaClient, where: Record<string, unknown>, take: number) {
+  return prisma.product.findMany({
+    // Only sellable products from approved vendors ever reach a public listing.
+    where: { isActive: true, vendor: { status: "approved" }, ...where },
+    include: LISTING_INCLUDE,
+    orderBy: { name: "asc" },
+    take,
+  });
+}
+
+type ProductWithVendor = Awaited<ReturnType<typeof findListingRows>>[number];
+
+export function toListing(p: ProductWithVendor): ProductListingDto {
+  const { vendor, ...product } = p;
+  return {
+    ...product,
+    vendorName: vendor.businessName,
+    vendorIsOpen: vendor.isOpen,
+    vendorSupportsPickup: vendor.supportsPickup,
+    avgDeliveryMinutes: vendor.avgDeliveryMinutes,
+  };
+}
+
+/** The deal's discount as a percentage, 0 when it isn't actually discounted. */
+export function discountPercent(p: { priceMinor: number; compareAtPriceMinor: number | null }) {
+  if (p.compareAtPriceMinor == null || p.compareAtPriceMinor <= p.priceMinor) return 0;
+  return Math.round(((p.compareAtPriceMinor - p.priceMinor) / p.compareAtPriceMinor) * 100);
 }
 
 export class VendorAlreadyExistsError extends Error {
@@ -146,6 +192,53 @@ export function createCatalogService(prisma: PrismaClient) {
     },
 
     /**
+     * Home's "Deals near you" — products whose vendor has marked them down,
+     * biggest discount first. Prisma can't compare two columns in a WHERE,
+     * so the price check happens after the fetch; the over-fetch (3x) keeps a
+     * mostly-undiscounted catalogue from starving the list.
+     */
+    async listDeals(limit: number): Promise<ProductListingDto[]> {
+      const rows = await findListingRows(prisma, { compareAtPriceMinor: { not: null }, stock: { gt: 0 } }, limit * 3);
+      return rows
+        .filter((p) => discountPercent(p) > 0)
+        .sort((a, b) => discountPercent(b) - discountPercent(a))
+        .slice(0, limit)
+        .map(toListing);
+    },
+
+    /**
+     * One product's own page. `pairsWith` is the "Goes well with" row: other
+     * in-stock products from the *same vendor* — a bag is single-vendor
+     * (brief §3.1), so suggesting another shop's item would be a dead end.
+     * Derived from the live catalogue, not curated, so it can't go stale.
+     */
+    async getProduct(productId: string): Promise<{ product: ProductListingDto; pairsWith: ProductListingDto[] }> {
+      const [row] = await findListingRows(prisma, { id: productId }, 1);
+      if (!row) throw new ProductNotFoundError();
+      const siblings = await findListingRows(prisma, { vendorId: row.vendorId, id: { not: productId }, stock: { gt: 0 } }, 3);
+      return { product: toListing(row), pairsWith: siblings.map(toListing) };
+    },
+
+    /** Product-level search — name or vendor name — with the Search screen's filters. */
+    async searchProducts(query: ProductSearchQuery): Promise<ProductListingDto[]> {
+      const where: Record<string, unknown> = {};
+      if (query.q) {
+        where.OR = [
+          { name: { contains: query.q, mode: "insensitive" } },
+          { vendor: { businessName: { contains: query.q, mode: "insensitive" } } },
+        ];
+      }
+      if (query.maxPriceMinor) where.priceMinor = { lte: query.maxPriceMinor };
+      if (query.onSale) where.compareAtPriceMinor = { not: null };
+      if (query.openNow) where.vendor = { status: "approved", isOpen: true };
+      const rows = await findListingRows(prisma, where, query.limit * (query.onSale ? 3 : 1));
+      return rows
+        .filter((p) => !query.onSale || discountPercent(p) > 0)
+        .slice(0, query.limit)
+        .map(toListing);
+    },
+
+    /**
      * US-C-10's other public half — the average/count already shown on
      * VendorDto is an aggregate; this is the individual reviews behind it.
      * No reviewer name in the response — CustomerProfile/User never
@@ -159,6 +252,20 @@ export function createCatalogService(prisma: PrismaClient) {
         orderBy: { createdAt: "desc" },
         take: limit,
       });
+    },
+
+    /** How many 1–5 star ratings a vendor has — exact (a groupBy over every rating), not sampled from the newest page of reviews. */
+    async getVendorRatingDistribution(vendorId: string): Promise<Record<1 | 2 | 3 | 4 | 5, number>> {
+      const grouped = await prisma.rating.groupBy({
+        by: ["score"],
+        where: { targetType: "vendor", targetId: vendorId },
+        _count: { score: true },
+      });
+      const out: Record<1 | 2 | 3 | 4 | 5, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      for (const g of grouped) {
+        if (g.score >= 1 && g.score <= 5) out[g.score as 1 | 2 | 3 | 4 | 5] = g._count.score;
+      }
+      return out;
     },
 
     /** US-V-01 — the applicant is already an authenticated `vendor`-role User (phone OTP); this creates the VendorProfile itself, in `pending`. */
@@ -224,6 +331,7 @@ export function createCatalogService(prisma: PrismaClient) {
     async createProduct(userId: string, input: ProductCreateInput) {
       const vendor = await prisma.vendorProfile.findUnique({ where: { userId } });
       if (!vendor) throw new VendorNotFoundError();
+      assertValidSalePrice(input.priceMinor, input.compareAtPriceMinor);
 
       return prisma.product.create({ data: { ...input, vendorId: vendor.id } });
     },
@@ -235,6 +343,13 @@ export function createCatalogService(prisma: PrismaClient) {
 
       const product = await prisma.product.findUnique({ where: { id: productId } });
       if (!product || product.vendorId !== vendor.id) throw new ProductNotFoundError();
+
+      // Validate the price pair as it will be *after* this PATCH, so changing
+      // only the price can't silently leave a stale, lower "was" price behind.
+      assertValidSalePrice(
+        input.priceMinor ?? product.priceMinor,
+        input.compareAtPriceMinor !== undefined ? input.compareAtPriceMinor : product.compareAtPriceMinor,
+      );
 
       return prisma.product.update({ where: { id: productId }, data: input });
     },

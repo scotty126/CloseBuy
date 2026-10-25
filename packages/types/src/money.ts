@@ -17,10 +17,19 @@ export function addMinor(...values: MinorUnits[]): MinorUnits {
   return minor(values.reduce((sum, v) => sum + v, 0));
 }
 
-/** Formats minor units as a Naira display string, e.g. minor(150000) -> "₦1,500.00" */
-export function formatNaira(value: MinorUnits): string {
+/**
+ * Formats minor units as a Naira display string. Whole-naira amounts drop the
+ * ".00" (minor(810000) -> "₦8,100"), matching the redesign; anything with kobo
+ * keeps both decimals (minor(150050) -> "₦1,500.50") so no value is ever
+ * rounded away. Pass { exact: true } where columns of money must line up
+ * (admin ledgers, reconciliation) — always two decimals.
+ */
+export function formatNaira(value: MinorUnits, opts: { exact?: boolean } = {}): string {
+  const whole = value % 100 === 0;
   return new Intl.NumberFormat("en-NG", {
     style: "currency",
     currency: "NGN",
+    minimumFractionDigits: whole && !opts.exact ? 0 : 2,
+    maximumFractionDigits: 2,
   }).format(value / 100);
 }

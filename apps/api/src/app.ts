@@ -13,6 +13,7 @@ import { staffAuthRoutes } from "./modules/auth/routes.js";
 import { customerAuthRoutes } from "./modules/auth/customer/routes.js";
 import { oauthRoutes } from "./modules/auth/oauth-routes.js";
 import { catalogRoutes } from "./modules/catalog/routes.js";
+import { favoritesRoutes } from "./modules/favorites/routes.js";
 import { geocodeRoutes } from "./modules/geocode/routes.js";
 import { orderRoutes } from "./modules/order/routes.js";
 import { dispatchRoutes } from "./modules/dispatch/routes.js";
@@ -98,6 +99,7 @@ export async function buildApp() {
   await app.register(customerAuthRoutes);
   await app.register(oauthRoutes);
   await app.register(catalogRoutes);
+  await app.register(favoritesRoutes);
   await app.register(geocodeRoutes);
   await app.register(orderRoutes);
   await app.register(dispatchRoutes);

@@ -5,6 +5,7 @@ import {
   vendorSearchQuerySchema,
   productCreateSchema,
   productUpdateSchema,
+  productSearchQuerySchema,
 } from "@closebuy/types";
 import { requireAuth } from "../../lib/auth-guard.js";
 import { ConfigKeys } from "../../lib/config.js";
@@ -14,6 +15,7 @@ import {
   OutsideServiceAreaError,
   VendorNotFoundError,
   ProductNotFoundError,
+  InvalidSalePriceError,
 } from "./service.js";
 
 /**
@@ -35,6 +37,29 @@ export async function catalogRoutes(app: FastifyInstance) {
   // just the same value made readable so the UI isn't lying by omission.
   app.get("/delivery-fee", async (_req, reply) => {
     return reply.send({ feeMinor: await ConfigKeys.flatDeliveryFeeMinor(app.prisma) });
+  });
+
+  app.get("/products/deals", async (req, reply) => {
+    const { limit } = req.query as { limit?: string };
+    const n = Math.min(Math.max(Number(limit) || 10, 1), 30);
+    return reply.send({ products: await catalog.listDeals(n) });
+  });
+
+  app.get("/products/search", async (req, reply) => {
+    const query = productSearchQuerySchema.parse(req.query);
+    return reply.send({ products: await catalog.searchProducts(query) });
+  });
+
+  app.get("/products/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    try {
+      return reply.send(await catalog.getProduct(id));
+    } catch (err) {
+      if (err instanceof ProductNotFoundError) {
+        return reply.code(404).send({ error: { code: "PRODUCT_NOT_FOUND", message: err.message } });
+      }
+      throw err;
+    }
   });
 
   app.get("/vendors", async (req, reply) => {
@@ -64,7 +89,8 @@ export async function catalogRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const { limit } = req.query as { limit?: string };
     const parsedLimit = limit ? Math.min(Math.max(Number(limit) || 20, 1), 50) : 20;
-    return reply.send({ ratings: await catalog.getVendorRatings(id, parsedLimit) });
+    const [ratings, distribution] = await Promise.all([catalog.getVendorRatings(id, parsedLimit), catalog.getVendorRatingDistribution(id)]);
+    return reply.send({ ratings, distribution });
   });
 
   app.post("/vendors", { preHandler: requireAuth(["vendor"]) }, async (req, reply) => {
@@ -124,6 +150,9 @@ export async function catalogRoutes(app: FastifyInstance) {
       const product = await catalog.createProduct(req.authUser!.sub, body);
       return reply.code(201).send({ product });
     } catch (err) {
+      if (err instanceof InvalidSalePriceError) {
+        return reply.code(422).send({ error: { code: "INVALID_SALE_PRICE", message: err.message } });
+      }
       if (err instanceof VendorNotFoundError) {
         return reply.code(404).send({ error: { code: "VENDOR_NOT_FOUND", message: err.message } });
       }
@@ -138,6 +167,9 @@ export async function catalogRoutes(app: FastifyInstance) {
       const product = await catalog.updateProduct(req.authUser!.sub, id, body);
       return reply.send({ product });
     } catch (err) {
+      if (err instanceof InvalidSalePriceError) {
+        return reply.code(422).send({ error: { code: "INVALID_SALE_PRICE", message: err.message } });
+      }
       if (err instanceof VendorNotFoundError || err instanceof ProductNotFoundError) {
         return reply.code(404).send({ error: { code: "NOT_FOUND", message: err.message } });
       }

@@ -58,6 +58,10 @@ export const productCreateSchema = z.object({
   name: z.string().min(2).max(120),
   description: z.string().max(1000).optional(),
   priceMinor: z.number().int().nonnegative(),
+  // The struck-through "was" price. Must exceed priceMinor — checked in the
+  // catalog service (this schema is .partial()-ed for updates, which rules
+  // out a cross-field refine here). null clears a sale.
+  compareAtPriceMinor: z.number().int().positive().nullable().optional(),
   images: z.array(z.string().url()).min(1).max(8),
   stock: z.number().int().nonnegative().default(0),
   isQuickBuy: z.boolean().optional(), // curated, not computed — see schema.prisma
@@ -68,6 +72,19 @@ export const productUpdateSchema = productCreateSchema.partial().extend({
   isActive: z.boolean().optional(), // deactivate, never hard-delete (US-V-03)
 });
 export type ProductUpdateInput = z.infer<typeof productUpdateSchema>;
+
+// GET /products/search — the design's "On sale" / "Under ₦5,000" /
+// "Open now" filters. Free delivery is deliberately absent: delivery is a
+// flat platform fee today, and who would bear a waived one (vendor,
+// platform, or the rider's pay) is a money decision, not a UI one.
+export const productSearchQuerySchema = z.object({
+  q: z.string().min(1).max(100).optional(),
+  onSale: z.preprocess((v) => v === "true" || v === true, z.boolean()).optional(),
+  maxPriceMinor: z.coerce.number().int().positive().optional(),
+  openNow: z.preprocess((v) => v === "true" || v === true, z.boolean()).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+});
+export type ProductSearchQuery = z.infer<typeof productSearchQuerySchema>;
 
 // ── Category (admin-managed, US-A-02) ──────────────────────────────────
 
@@ -107,10 +124,20 @@ export interface ProductDto {
   name: string;
   description: string | null;
   priceMinor: number;
+  compareAtPriceMinor: number | null;
   images: string[];
   stock: number;
   isActive: boolean;
   isQuickBuy: boolean;
+}
+
+// A product with enough of its vendor attached to render a card on its own
+// (Home "Deals near you", Search results, Favourites) without a second fetch.
+export interface ProductListingDto extends ProductDto {
+  vendorName: string;
+  vendorIsOpen: boolean;
+  vendorSupportsPickup: boolean;
+  avgDeliveryMinutes: number | null;
 }
 
 // GET /vendors and /vendors/:id share this shape — the search list just

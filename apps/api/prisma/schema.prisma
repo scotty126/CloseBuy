@@ -218,6 +218,8 @@ model CustomerProfile {
   orders    Order[]
   disputes  Dispute[]
   ratings   Rating[]
+  favorites ProductFavorite[]
+  followedVendors VendorFollow[]
 
   @@map("customer_profiles")
 }
@@ -265,6 +267,7 @@ model VendorProfile {
 
   products Product[]
   orders   Order[]
+  followers VendorFollow[]
 
   @@map("vendor_profiles")
 }
@@ -358,6 +361,10 @@ model Product {
   name        String
   description String?
   priceMinor  Int           // integer minor units — never float (US-V-03)
+  // The "was" price a discount is shown against. Display + deals/search only:
+  // checkout always charges priceMinor, so a vendor raising this can never
+  // change what a customer pays. Null = not on sale.
+  compareAtPriceMinor Int?
   images      String[]
   stock       Int           @default(0)
   isActive    Boolean       @default(true) // deactivate, never hard-delete (US-V-03)
@@ -369,8 +376,36 @@ model Product {
   isQuickBuy Boolean @default(false)
 
   orderItems OrderItem[]
+  favorites  ProductFavorite[]
 
   @@map("products")
+}
+
+// A customer's saved products (the heart on a product card). Signed-in
+// customers only — a guest has no server-side identity to hang it on.
+model ProductFavorite {
+  id         String          @id @default(uuid())
+  customerId String
+  customer   CustomerProfile @relation(fields: [customerId], references: [id])
+  productId  String
+  product    Product         @relation(fields: [productId], references: [id])
+  createdAt  DateTime        @default(now())
+
+  @@unique([customerId, productId])
+  @@map("product_favorites")
+}
+
+// A customer following a shop (the heart in a storefront's header).
+model VendorFollow {
+  id         String          @id @default(uuid())
+  customerId String
+  customer   CustomerProfile @relation(fields: [customerId], references: [id])
+  vendorId   String
+  vendor     VendorProfile   @relation(fields: [vendorId], references: [id])
+  createdAt  DateTime        @default(now())
+
+  @@unique([customerId, vendorId])
+  @@map("vendor_follows")
 }
 
 // ── Cart ─────────────────────────────────────────────────────────────────
