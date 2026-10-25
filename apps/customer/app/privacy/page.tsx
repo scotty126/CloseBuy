@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LegalHeader } from "@/components/LegalHeader";
 
 export const metadata = { title: "Privacy Policy — CloseBuy" };
 
@@ -12,13 +13,29 @@ export const metadata = { title: "Privacy Policy — CloseBuy" };
  * there's no self-service account deletion built, for instance, so this
  * says "email us" rather than pointing at a button that doesn't exist.
  */
+// Contents list — keep in step with the <Section title="N. …"> headings below.
+const TOC = [{"n":"01","id":"s1","title":"What we collect"},{"n":"02","id":"s2","title":"Why we use it"},{"n":"03","id":"s3","title":"Location, specifically"},{"n":"04","id":"s4","title":"Who we share it with"},{"n":"05","id":"s5","title":"How long we keep it"},{"n":"06","id":"s6","title":"Cookies and local storage"},{"n":"07","id":"s7","title":"Your rights"},{"n":"08","id":"s8","title":"Children"},{"n":"09","id":"s9","title":"Security"},{"n":"10","id":"s10","title":"Changes to this policy"},{"n":"11","id":"s11","title":"Contact"}];
+
 export default function PrivacyPage() {
   return (
-    <div className="flex flex-col gap-6 p-4 pb-10 text-sm leading-relaxed text-ink">
-      <div>
-        <h1 className="text-xl font-bold text-ink">Privacy Policy</h1>
-        <p className="mt-1 text-xs text-muted">Last updated 27 September 2026</p>
+    <div className="flex flex-col pb-10 text-sm leading-relaxed text-ink">
+      <LegalHeader active="privacy" />
+      <div className="flex flex-col gap-6 px-[18px] pt-5">
+      <div className="flex flex-col gap-1.5">
+        <span className="font-mono text-[11px] text-muted">
+          /privacy · <span className="uppercase">Last updated 27 September 2026</span>
+        </span>
+        <h1 className="text-[26px] font-semibold tracking-[-0.03em] text-ink">Privacy Policy</h1>
       </div>
+      <p className="rounded-xl bg-[#FBF1D6] px-3.5 py-3 text-[13px] leading-[1.55] text-[#0E1F19]">Plain-language summary: we collect only what an order needs, share it only with the services that make it work, and we don&apos;t sell it.</p>
+      <nav aria-label="On this page" className="flex flex-col overflow-hidden rounded-xl bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
+        {TOC.map((t) => (
+          <a key={t.id} href={`#${t.id}`} className="flex min-h-11 items-center gap-2.5 border-b border-line px-3.5 text-sm text-ink last:border-b-0">
+            <span className="font-mono text-[11px] text-accent">{t.n}</span>
+            {t.title}
+          </a>
+        ))}
+      </nav>
 
       <p>
         This Privacy Policy explains what personal information CloseBuy collects across its customer, vendor,
@@ -137,14 +154,19 @@ export default function PrivacyPage() {
       <p className="text-xs text-muted">
         See also our <Link href="/terms" className="text-primary underline">Terms of Service</Link>.
       </p>
+      </div>
     </div>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const m = title.match(/^(\d+)\.\s+(.*)$/);
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="font-semibold text-ink">{title}</h2>
+    <section id={m ? `s${m[1]}` : undefined} className="flex scroll-mt-16 flex-col gap-2">
+      <h2 className="text-[17px] font-semibold tracking-[-0.02em] text-ink">
+        {m && <span className="mr-2 font-mono text-xs text-accent">{m[1]!.padStart(2, "0")}</span>}
+        {m ? m[2] : title}
+      </h2>
       {children}
     </section>
   );

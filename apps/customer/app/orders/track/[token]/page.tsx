@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Star } from "lucide-react";
-import { Button, useAuthSession } from "@closebuy/ui";
+import { ArrowLeft, Check, Phone, Star, User } from "lucide-react";
+import { ThemeToggle, useAuthSession } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
 import { formatNaira, minor } from "@closebuy/types";
 import type { OrderDto, OrderStatus, RatingDto } from "@closebuy/types";
-import { orderApi, catalogApi } from "@/lib/api";
-import { useCart, type CartItem, type CartVendor } from "@/lib/cart";
+import { orderApi } from "@/lib/api";
+import { useReorder } from "@/lib/useReorder";
 
 const PICKUP_STEPS: OrderStatus[] = ["PAID", "PREPARING", "READY_FOR_PICKUP", "DELIVERED"];
 const DELIVERY_STEPS: OrderStatus[] = ["PAID", "PREPARING", "READY_FOR_PICKUP", "RIDER_ASSIGNED", "IN_TRANSIT", "DELIVERED"];
@@ -27,6 +27,52 @@ function stepLabel(status: OrderStatus, isPickup: boolean): string {
   };
   return labels[status] ?? status;
 }
+
+// The design's four-segment progress bar collapses the real status sequence:
+// placed → packed → (rider/ready) → delivered.
+function segmentOf(status: OrderStatus, isPickup: boolean): number {
+  switch (status) {
+    case "PAID":
+      return 0;
+    case "PREPARING":
+      return 1;
+    case "READY_FOR_PICKUP":
+      return isPickup ? 2 : 1;
+    case "RIDER_ASSIGNED":
+    case "IN_TRANSIT":
+      return 2;
+    default:
+      return 3; // DELIVERED / COMPLETED
+  }
+}
+
+function headline(status: OrderStatus, isPickup: boolean): { kicker: string; title: string } {
+  switch (status) {
+    case "PAID":
+      return { kicker: "Order placed", title: "Waiting for the shop" };
+    case "PREPARING":
+      return { kicker: "Shop is packing", title: "Getting your order ready" };
+    case "READY_FOR_PICKUP":
+      return isPickup
+        ? { kicker: "Ready for you", title: "Come and collect" }
+        : { kicker: "Packed", title: "Finding a rider" };
+    case "RIDER_ASSIGNED":
+      return { kicker: "Rider assigned", title: "Rider heading to the shop" };
+    case "IN_TRANSIT":
+      return { kicker: "Rider on the way", title: "Arriving soon" };
+    case "DELIVERED":
+    case "COMPLETED":
+      return { kicker: isPickup ? "Collected" : "Delivered", title: "Enjoy your order" };
+    default:
+      return { kicker: "Order", title: stepLabel(status, isPickup) };
+  }
+}
+
+const PAYMENT_LABEL: Record<string, string> = { cash_on_delivery: "Pay on delivery", card: "Card", transfer: "Bank transfer", online: "Paid online" };
+
+const cardClass = "rounded-[14px] bg-card p-3.5";
+const actionClass =
+  "flex h-11 items-center justify-center rounded-xl bg-card text-[13px] font-medium text-ink shadow-[inset_0_0_0_1px_rgb(var(--c-line))] transition-transform active:scale-[0.98] disabled:opacity-50";
 
 /**
  * US-C-10 — one of these per rateable target (vendor always, rider only
@@ -53,11 +99,11 @@ function RatingForm({
 
   if (isLocked) {
     return (
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
+      <div className={cardClass}>
         <p className="text-sm font-bold text-ink">{label}</p>
         <div className="mt-1 flex gap-0.5">
           {[1, 2, 3, 4, 5].map((n) => (
-            <Star key={n} size={16} className={n <= existing!.score ? "fill-accent text-accent" : "text-gray-300"} />
+            <Star key={n} size={16} className={n <= existing!.score ? "fill-accent text-accent" : "text-muted"} />
           ))}
         </div>
         {existing!.comment && <p className="mt-1 text-sm text-muted">{existing!.comment}</p>}
@@ -79,51 +125,54 @@ function RatingForm({
   }
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
+    <div className={cardClass}>
       <p className="text-sm font-bold text-ink">{label}</p>
       {error && <p className="mt-1 text-sm text-danger">{error}</p>}
       <div className="mt-2 flex gap-1">
         {[1, 2, 3, 4, 5].map((n) => (
-          <button key={n} type="button" onClick={() => setScore(n)} aria-label={`${n} star${n > 1 ? "s" : ""}`}>
-            <Star size={22} className={n <= score ? "fill-accent text-accent" : "text-gray-300"} />
+          <button key={n} type="button" onClick={() => setScore(n)} aria-label={`${n} star${n > 1 ? "s" : ""}`} className="flex h-12 w-11 items-center justify-center">
+            <Star size={34} strokeWidth={1.6} className={n <= score ? "fill-accent text-accent" : "text-muted"} />
           </button>
         ))}
       </div>
+      <p className="mt-1 text-[13px] text-muted">{["Tap a star to rate", "Not great — tell us what went wrong", "Could be better", "Good", "Really good", "Excellent!"][score]}</p>
       <textarea
         value={comment}
         onChange={(e) => setComment(e.target.value)}
         rows={2}
         placeholder="Optional comment"
         maxLength={500}
-        className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+        className="mt-2 w-full resize-none rounded-[10px] border-0 bg-surface px-3 py-2.5 text-[13px] text-ink shadow-[inset_0_0_0_1px_rgb(var(--c-line))] outline-none focus:shadow-[inset_0_0_0_2px_#FF5A19]"
       />
-      <Button className="mt-2" disabled={isSubmitting || score < 1} onClick={handleSubmit}>
+      <button
+        type="button"
+        className="mt-2 flex h-11 w-full items-center justify-center rounded-xl bg-accent text-sm font-semibold text-night disabled:opacity-50"
+        disabled={isSubmitting || score < 1}
+        onClick={handleSubmit}
+      >
         {isSubmitting ? "Saving…" : existing ? "Update rating" : "Submit rating"}
-      </Button>
+      </button>
     </div>
   );
 }
 
 /**
- * screens-navigation.md §1.7 — a status timeline, not a map (brief §3.5).
- * Works for a guest (the trackingToken is the whole point, US-C-06a) and
- * a signed-in customer alike; the only thing gated behind sign-in is the
- * cancel action, since that endpoint needs to know who's asking.
+ * screens-navigation.md §1.7 — a status screen, not a live map (brief §3.5:
+ * location is point-in-time, never continuous tracking, so there is no rider
+ * dot to draw). Works for a guest (the trackingToken is the whole point,
+ * US-C-06a) and a signed-in customer alike; the only thing gated behind
+ * sign-in is the cancel action, since that endpoint needs to know who's asking.
  */
 export default function OrderTrackingPage() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
   const { session } = useAuthSession();
-  const { cart, replaceCartItems } = useCart();
+  const reorder = useReorder();
 
   const [order, setOrder] = useState<OrderDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
-  const [isReordering, setIsReordering] = useState(false);
-  const [reorderError, setReorderError] = useState<string | null>(null);
-  const [reorderNotice, setReorderNotice] = useState<string | null>(null);
-  const [reorderConflict, setReorderConflict] = useState<{ vendor: CartVendor; items: CartItem[] } | null>(null);
 
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
@@ -165,77 +214,6 @@ export default function OrderTrackingPage() {
     }
   }
 
-  /**
-   * US-C-09 — "any past order can be reordered, subject to current stock
-   * and price": re-fetches the vendor's live catalogue (never trusts the
-   * order's own priceMinorSnapshot/nameSnapshot — those are a receipt of
-   * what happened then, not what's buyable now) and drops any item that's
-   * gone inactive or sold out, rather than failing the whole reorder.
-   */
-  async function buildReorderItems(): Promise<{ vendor: CartVendor; items: CartItem[]; skipped: number } | null> {
-    if (!order) return null;
-    const [{ vendor }, { products }] = await Promise.all([
-      catalogApi.getVendor(order.vendorId),
-      catalogApi.getVendorProducts(order.vendorId),
-    ]);
-
-    const items: CartItem[] = [];
-    for (const orderItem of order.items) {
-      const product = products.find((p) => p.id === orderItem.productId);
-      if (!product || product.stock <= 0) continue;
-      items.push({
-        productId: product.id,
-        name: product.name,
-        priceMinor: product.priceMinor,
-        stock: product.stock,
-        quantity: Math.min(orderItem.quantity, product.stock),
-      });
-    }
-
-    return {
-      vendor: { id: vendor.id, businessName: vendor.businessName, supportsPickup: vendor.supportsPickup },
-      items,
-      skipped: order.items.length - items.length,
-    };
-  }
-
-  async function handleReorder() {
-    setReorderError(null);
-    setReorderNotice(null);
-    setIsReordering(true);
-    try {
-      const result = await buildReorderItems();
-      if (!result) return;
-      if (result.items.length === 0) {
-        setReorderError("None of these items are available anymore.");
-        return;
-      }
-
-      if (cart.vendor && cart.vendor.id !== result.vendor.id) {
-        setReorderConflict({ vendor: result.vendor, items: result.items });
-        return;
-      }
-
-      replaceCartItems(result.vendor, result.items);
-      if (result.skipped > 0) {
-        setReorderNotice(`${result.skipped} item(s) are no longer available and were left out.`);
-      } else {
-        router.push("/cart");
-      }
-    } catch (err) {
-      setReorderError(err instanceof ApiClientError ? err.message : "Couldn't reorder this.");
-    } finally {
-      setIsReordering(false);
-    }
-  }
-
-  function confirmReorderReplace() {
-    if (!reorderConflict) return;
-    replaceCartItems(reorderConflict.vendor, reorderConflict.items);
-    setReorderConflict(null);
-    router.push("/cart");
-  }
-
   /** US-C-11 — same trackingToken-based route for a guest and a signed-in customer alike (US-C-06a). */
   async function handleSubmitDispute() {
     if (!order || disputeReason.trim().length < 10) return;
@@ -271,9 +249,9 @@ export default function OrderTrackingPage() {
   if (!order) {
     return (
       <div className="flex flex-col gap-3 p-4">
-        <div className="h-6 w-1/2 animate-pulse rounded bg-surface" />
-        <div className="h-32 w-full animate-pulse rounded-2xl bg-surface" />
-        <div className="h-20 w-full animate-pulse rounded-2xl bg-surface" />
+        <div className="h-24 w-full animate-pulse rounded-[14px] bg-raised" />
+        <div className="h-6 w-1/2 animate-pulse rounded bg-raised" />
+        <div className="h-32 w-full animate-pulse rounded-[14px] bg-raised" />
       </div>
     );
   }
@@ -295,20 +273,35 @@ export default function OrderTrackingPage() {
   // action past that (marking ready) is genuine progress and shown as-is.
   const scheduledNotYetDue = Boolean(order.scheduledFor) && new Date(order.scheduledFor!).getTime() > Date.now();
   const showingAsAccepted = scheduledNotYetDue && order.status === "PREPARING";
-  const currentIndex = steps.indexOf(showingAsAccepted ? "PAID" : order.status);
+  const shownStatus: OrderStatus = showingAsAccepted ? "PAID" : order.status;
+  const currentIndex = steps.indexOf(shownStatus);
+  const segment = segmentOf(shownStatus, isPickup);
+  const copy = headline(shownStatus, isPickup);
+  const itemCount = order.items.reduce((n, i) => n + i.quantity, 0);
 
   // US-C-11 — mirrors the server's own window check (order/service.ts's
   // disputeOrder): within 48h of the DELIVERED transition, and not
   // already disputed. The server re-checks both authoritatively regardless.
   const deliveredAt = order.transitions.find((t) => t.toStatus === "DELIVERED")?.createdAt;
   const canDispute = !order.dispute && Boolean(deliveredAt) && Date.now() - new Date(deliveredAt!).getTime() < 48 * 60 * 60 * 1000;
+  const canRate = order.status === "COMPLETED";
+
+  const segLabels = isPickup ? ["Placed", "Packed", "Ready", "Collected"] : ["Placed", "Packed", "On the way", "Delivered"];
 
   return (
-    <div className="flex flex-col gap-5 p-4 pb-8">
-      <div>
-        <p className="text-xs font-medium text-muted">Order</p>
-        <h1 className="text-xl font-bold text-ink">{order.vendor?.businessName ?? "Your order"}</h1>
-        <p className="text-xs text-muted">Placed {new Date(order.createdAt).toLocaleString()}</p>
+    <div className="flex flex-col gap-3.5 px-4 pb-10 pt-4">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => (window.history.length > 1 ? router.back() : router.push("/orders"))}
+          aria-label="Back"
+          className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-card text-ink"
+        >
+          <ArrowLeft size={18} strokeWidth={2.2} />
+        </button>
+        <span className="flex-1" />
+        <span className="flex h-9 items-center rounded-full bg-card px-3 text-xs font-bold text-ink">Order #{order.id.slice(0, 4).toUpperCase()}</span>
+        <ThemeToggle />
       </div>
 
       {isPendingPayment ? (
@@ -318,30 +311,213 @@ export default function OrderTrackingPage() {
         // within pending_payment_expiry_minutes (order/service.ts's
         // expirePendingPayment) and this page reflects that once it does,
         // rather than promising a retry this app doesn't build.
-        <div className="rounded-2xl bg-warning/10 p-4">
+        <div className="rounded-[14px] bg-warning/10 p-4">
           <p className="font-bold text-warning">Waiting for payment confirmation</p>
           <p className="mt-1 text-sm text-ink">
             If you completed payment, this updates automatically within a minute or two. If you closed the payment
             page without finishing, this order will be cancelled automatically and nothing will be charged.
           </p>
           <Link href={`/vendors/${order.vendorId}`} className="mt-3 inline-block text-sm font-semibold text-primary underline">
-            Start a new order with {order.vendor?.businessName ?? "this vendor"} instead
+            Start a new order with {order.vendor?.businessName ?? "this shop"} instead
           </Link>
         </div>
       ) : isException ? (
-        <div className="rounded-2xl bg-danger/10 p-4">
+        <div className="rounded-[14px] bg-danger/10 p-4">
           <p className="font-bold text-danger">{stepLabel(order.status, isPickup) || order.status}</p>
           {exceptionTransition?.reason && <p className="mt-1 text-sm text-ink">{exceptionTransition.reason}</p>}
         </div>
       ) : (
         <>
-          {showingAsAccepted && (
-            <div className="rounded-2xl bg-primary/5 p-4">
-              <p className="font-bold text-primary">Accepted — scheduled for {new Date(order.scheduledFor!).toLocaleString()}</p>
-              <p className="mt-1 text-sm text-ink">The vendor will start preparing closer to your scheduled time.</p>
+          {segment === 3 ? (
+            <div className="flex flex-col items-center gap-2.5 rounded-[18px] bg-primary px-5 pb-6 pt-5 text-center text-[#FFF7F1]">
+              <span className="flex h-[76px] w-[76px] items-center justify-center rounded-full bg-accent text-night">
+                <Check size={36} strokeWidth={2.6} aria-hidden="true" />
+              </span>
+              <h1 className="text-[26px] font-semibold tracking-[-0.02em]">{isPickup ? "Collected!" : "Delivered!"}</h1>
+              <span className="text-sm opacity-90">
+                {order.vendor?.businessName ?? "Your order"} · {itemCount} item{itemCount === 1 ? "" : "s"} · {formatNaira(minor(order.totalMinor))}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3.5 pt-1">
+              {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+              <img src="/logo-mark.png" alt="" className="object-contain h-[46px] w-11" />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[13px] font-bold text-primary dark:text-[#8FD1B5]">{copy.kicker}</span>
+                <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">{copy.title}</h1>
+              </div>
             </div>
           )}
-          <ol className="flex flex-col gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
+
+          {showingAsAccepted && (
+            <div className="rounded-[14px] bg-primary/10 p-3.5">
+              <p className="text-sm font-bold text-ink">Accepted — scheduled for {new Date(order.scheduledFor!).toLocaleString()}</p>
+              <p className="mt-0.5 text-sm text-muted">The shop will start preparing closer to your scheduled time.</p>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-1.5" role="img" aria-label={`Order progress: step ${segment + 1} of 4`}>
+              {segLabels.map((l, i) => (
+                <span key={l} className={`h-1.5 flex-1 rounded-[3px] ${i < segment ? "bg-primary" : i === segment ? "bg-accent" : "bg-raised"}`} />
+              ))}
+            </div>
+            <div className="grid grid-cols-4 text-[11px] text-muted">
+              {segLabels.map((l, i) => (
+                <span key={l} className={i === segment ? "font-bold text-ink" : ""}>
+                  {l}
+                </span>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {isPickup && order.collectionCode && order.status === "READY_FOR_PICKUP" && (
+        <div className="rounded-[14px] border-2 border-dashed border-accent bg-card p-4 text-center">
+          <p className="text-xs font-medium text-muted">Show this code at the counter</p>
+          <p className="font-mono text-3xl font-extrabold tracking-widest text-ink">{order.collectionCode}</p>
+        </div>
+      )}
+
+      {!isPickup && order.deliveryCode && ["READY_FOR_PICKUP", "RIDER_ASSIGNED", "IN_TRANSIT"].includes(order.status) && (
+        <div className="rounded-[14px] border-2 border-dashed border-accent bg-card p-4 text-center">
+          <p className="text-xs font-medium text-muted">Read this to your rider when they arrive</p>
+          <p className="font-mono text-3xl font-extrabold tracking-widest text-ink">{order.deliveryCode}</p>
+        </div>
+      )}
+
+      {!isPickup && order.rider && (
+        <div className="flex items-center gap-3 rounded-[14px] bg-card p-3">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-raised text-muted">
+            <User size={22} strokeWidth={1.8} />
+          </span>
+          <span className="flex flex-1 flex-col gap-0.5">
+            <span className="font-bold text-ink">{order.rider.fullName}</span>
+            <span className="text-xs text-muted">Your CloseBuy rider</span>
+          </span>
+          <a href={`tel:${order.rider.user.phone}`} aria-label="Call rider" className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-accent text-night">
+            <Phone size={18} strokeWidth={2} />
+          </a>
+        </div>
+      )}
+
+      {isPickup && order.vendor && (
+        <div className="flex items-center gap-3 rounded-[14px] bg-card p-3.5">
+          <span className="flex flex-1 flex-col gap-0.5">
+            <span className="text-xs text-muted">Pickup from</span>
+            <span className="font-bold text-ink">{order.vendor.pickupLandmark}</span>
+          </span>
+          <a href={`tel:${order.vendor.pickupPhone}`} aria-label="Call shop" className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-accent text-night">
+            <Phone size={18} strokeWidth={2} />
+          </a>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between rounded-[14px] bg-card p-3.5">
+        <span className="flex flex-col gap-0.5">
+          <span className="text-xs text-muted">{order.vendor?.businessName ?? "Your order"}</span>
+          <span className="text-sm font-bold text-ink">
+            {itemCount} item{itemCount === 1 ? "" : "s"} · {PAYMENT_LABEL[order.paymentMethod] ?? order.paymentMethod}
+          </span>
+        </span>
+        <span className="text-lg font-semibold text-ink">{formatNaira(minor(order.totalMinor))}</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        {canCancel && (
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={isCancelling}
+            className="flex h-11 items-center justify-center rounded-xl bg-card text-[13px] font-medium text-sale shadow-[inset_0_0_0_1px_#C2410C] disabled:opacity-60"
+          >
+            {isCancelling ? "Cancelling…" : "Cancel order"}
+          </button>
+        )}
+        <button type="button" onClick={() => reorder.reorder(order)} disabled={reorder.busy} className={actionClass}>
+          {reorder.busy ? "Reordering…" : "Reorder"}
+        </button>
+        {!order.dispute && canDispute && (
+          <button type="button" onClick={() => setShowDisputeForm((v) => !v)} className={actionClass}>
+            Report a problem
+          </button>
+        )}
+        {canRate && (
+          <a href="#rate" className={actionClass}>
+            Rate order ★
+          </a>
+        )}
+      </div>
+      {cancelError && <p className="text-xs text-danger">{cancelError}</p>}
+      {reorder.error && <p className="text-xs text-danger">{reorder.error}</p>}
+      {reorder.notice && (
+        <div className="flex flex-col gap-2 rounded-[14px] bg-card p-3.5">
+          <p className="text-xs text-muted">{reorder.notice}</p>
+          <button type="button" onClick={() => router.push("/cart")} className={actionClass}>
+            Go to bag
+          </button>
+        </div>
+      )}
+
+      {order.dispute ? (
+        <div className={cardClass}>
+          <p className="text-sm font-semibold text-ink">{order.dispute.status === "open" ? "Dispute under review" : "Dispute resolved"}</p>
+          <p className="mt-1 text-sm text-ink">{order.dispute.reason}</p>
+          {order.dispute.status === "resolved" && (
+            <p className="mt-1 text-xs text-muted">
+              Outcome: {order.dispute.resolution === "full_refund" && "Full refund issued"}
+              {order.dispute.resolution === "partial_refund" && "Partial refund issued"}
+              {order.dispute.resolution === "rejected" && "Not upheld — no refund"}
+            </p>
+          )}
+        </div>
+      ) : (
+        canDispute &&
+        showDisputeForm && (
+          <div className="flex flex-col gap-2.5 rounded-[14px] bg-card p-3.5 shadow-[inset_0_0_0_1px_#FF5A19]">
+            <p className="text-sm font-semibold text-ink">What went wrong?</p>
+            {disputeError && <p className="text-sm text-danger">{disputeError}</p>}
+            <textarea
+              value={disputeReason}
+              onChange={(e) => setDisputeReason(e.target.value)}
+              rows={3}
+              placeholder="e.g. Two items were missing when it arrived"
+              minLength={10}
+              maxLength={1000}
+              className="resize-none rounded-[10px] border-0 bg-surface px-3 py-2.5 text-[13px] text-ink shadow-[inset_0_0_0_1px_rgb(var(--c-line))] outline-none focus:shadow-[inset_0_0_0_2px_#FF5A19]"
+            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-ink">Photos (optional, one URL per line)</label>
+              <p className="text-xs text-muted">No photo upload yet — paste hosted image URLs directly.</p>
+              <textarea
+                value={disputeEvidenceText}
+                onChange={(e) => setDisputeEvidenceText(e.target.value)}
+                rows={2}
+                placeholder="https://…"
+                className="resize-none rounded-[10px] border-0 bg-surface px-3 py-2.5 text-[13px] text-ink shadow-[inset_0_0_0_1px_rgb(var(--c-line))] outline-none focus:shadow-[inset_0_0_0_2px_#FF5A19]"
+              />
+            </div>
+            <span className="font-mono text-[11px] uppercase text-muted">A dispute opens for our team to review</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleSubmitDispute}
+                disabled={isSubmittingDispute || disputeReason.trim().length < 10}
+                className="flex h-11 flex-1 items-center justify-center rounded-xl bg-accent text-sm font-semibold text-night disabled:opacity-50"
+              >
+                {isSubmittingDispute ? "Submitting…" : "Send report"}
+              </button>
+              <button type="button" onClick={() => setShowDisputeForm(false)} className={`${actionClass} px-4`}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )
+      )}
+
+      {!isPendingPayment && !isException && (
+        <ol className={`${cardClass} flex flex-col gap-4`} aria-label="Order updates">
           {steps.map((step, i) => {
             const transition = order.transitions.find((t) => t.toStatus === step);
             const done = currentIndex >= 0 && i <= currentIndex;
@@ -349,57 +525,20 @@ export default function OrderTrackingPage() {
             return (
               <li key={step} className="flex gap-3">
                 <div className="flex flex-col items-center">
-                  <span
-                    className={`h-3.5 w-3.5 shrink-0 rounded-full ${done ? (active ? "bg-accent" : "bg-primary") : "border-2 border-gray-300 bg-white"}`}
-                  />
-                  {i < steps.length - 1 && <span className={`w-0.5 flex-1 ${done ? "bg-primary" : "bg-gray-200"}`} />}
+                  <span className={`h-3.5 w-3.5 shrink-0 rounded-full ${done ? (active ? "bg-accent" : "bg-primary") : "border-2 border-line bg-card"}`} />
+                  {i < steps.length - 1 && <span className={`w-0.5 flex-1 ${done ? "bg-primary" : "bg-raised"}`} />}
                 </div>
                 <div className="pb-2">
                   <p className={`text-sm font-semibold ${done ? "text-ink" : "text-muted"}`}>{stepLabel(step, isPickup)}</p>
-                  {transition && <p className="text-xs text-muted">{new Date(transition.createdAt).toLocaleTimeString()}</p>}
+                  {transition && <p className="font-mono text-[11px] text-muted">{new Date(transition.createdAt).toLocaleTimeString()}</p>}
                 </div>
               </li>
             );
           })}
-          </ol>
-        </>
+        </ol>
       )}
 
-      {isPickup && order.collectionCode && order.status === "READY_FOR_PICKUP" && (
-        <div className="rounded-2xl border-2 border-dashed border-primary bg-primary/5 p-4 text-center">
-          <p className="text-xs font-medium text-muted">Show this code at the counter</p>
-          <p className="text-3xl font-extrabold tracking-widest text-primary">{order.collectionCode}</p>
-        </div>
-      )}
-
-      {!isPickup && order.deliveryCode && ["READY_FOR_PICKUP", "RIDER_ASSIGNED", "IN_TRANSIT"].includes(order.status) && (
-        <div className="rounded-2xl border-2 border-dashed border-primary bg-primary/5 p-4 text-center">
-          <p className="text-xs font-medium text-muted">Read this to your rider when they arrive</p>
-          <p className="text-3xl font-extrabold tracking-widest text-primary">{order.deliveryCode}</p>
-        </div>
-      )}
-
-      {!isPickup && order.rider && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
-          <p className="text-xs font-medium text-muted">Your rider</p>
-          <p className="font-bold text-ink">{order.rider.fullName}</p>
-          <a href={`tel:${order.rider.user.phone}`} className="text-sm font-semibold text-primary underline">
-            {order.rider.user.phone}
-          </a>
-        </div>
-      )}
-
-      {isPickup && order.vendor && (
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
-          <p className="text-xs font-medium text-muted">Pickup from</p>
-          <p className="font-bold text-ink">{order.vendor.pickupLandmark}</p>
-          <a href={`tel:${order.vendor.pickupPhone}`} className="text-sm font-semibold text-primary underline">
-            {order.vendor.pickupPhone}
-          </a>
-        </div>
-      )}
-
-      <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
+      <div className={cardClass}>
         <p className="mb-2 text-sm font-bold text-ink">Items</p>
         <div className="flex flex-col gap-1.5">
           {order.items.map((item) => (
@@ -411,125 +550,28 @@ export default function OrderTrackingPage() {
             </div>
           ))}
         </div>
-        <div className="mt-3 flex flex-col gap-1 border-t border-gray-100 pt-2 text-sm">
+        <div className="mt-3 flex flex-col gap-1 border-t border-line pt-2 text-sm">
           <div className="flex justify-between text-muted">
             <span>Subtotal</span>
             <span>{formatNaira(minor(order.subtotalMinor))}</span>
           </div>
           {order.deliveryFeeMinor > 0 && (
             <div className="flex justify-between text-muted">
-              <span>Delivery fee</span>
+              <span>Delivery</span>
               <span>{formatNaira(minor(order.deliveryFeeMinor))}</span>
             </div>
           )}
-          <div className="flex justify-between text-base font-bold text-ink">
+          <div className="flex justify-between text-base font-semibold text-ink">
             <span>Total</span>
-            <span className="text-accent">{formatNaira(minor(order.totalMinor))}</span>
+            <span>{formatNaira(minor(order.totalMinor))}</span>
           </div>
         </div>
       </div>
 
-      {canCancel && (
-        <div className="flex flex-col gap-1">
-          <Button variant="danger" onClick={handleCancel} disabled={isCancelling}>
-            {isCancelling ? "Cancelling…" : "Cancel order"}
-          </Button>
-          {cancelError && <p className="text-xs text-danger">{cancelError}</p>}
-        </div>
-      )}
-
-      {reorderConflict ? (
-        <div className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
-          <p className="text-sm text-ink">
-            Your cart has items from another vendor. Reordering replaces it with this order&apos;s items.
-          </p>
-          <div className="flex gap-2">
-            <Button onClick={confirmReorderReplace}>Replace cart</Button>
-            <Button variant="secondary" onClick={() => setReorderConflict(null)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-1">
-          <Button variant="secondary" onClick={handleReorder} disabled={isReordering}>
-            {isReordering ? "Reordering…" : "Reorder"}
-          </Button>
-          {reorderError && <p className="text-xs text-danger">{reorderError}</p>}
-          {reorderNotice && (
-            <div className="flex flex-col gap-1">
-              <p className="text-xs text-muted">{reorderNotice}</p>
-              <Button variant="secondary" onClick={() => router.push("/cart")}>
-                Go to cart
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {order.dispute ? (
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
-          <p className="text-sm font-semibold text-ink">
-            {order.dispute.status === "open" ? "Dispute under review" : "Dispute resolved"}
-          </p>
-          <p className="mt-1 text-sm text-ink">{order.dispute.reason}</p>
-          {order.dispute.status === "resolved" && (
-            <p className="mt-1 text-xs text-muted">
-              Outcome: {order.dispute.resolution === "full_refund" && "Full refund issued"}
-              {order.dispute.resolution === "partial_refund" && "Partial refund issued"}
-              {order.dispute.resolution === "rejected" && "Not upheld — no refund"}
-            </p>
-          )}
-        </div>
-      ) : canDispute && (
-        showDisputeForm ? (
-          <div className="flex flex-col gap-2 rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
-            <p className="text-sm font-medium text-ink">What went wrong?</p>
-            {disputeError && <p className="text-sm text-danger">{disputeError}</p>}
-            <textarea
-              value={disputeReason}
-              onChange={(e) => setDisputeReason(e.target.value)}
-              rows={3}
-              placeholder="e.g. Two items were missing when it arrived"
-              minLength={10}
-              maxLength={1000}
-              className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-            />
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-ink">Photos (optional, one URL per line)</label>
-              <p className="text-xs text-muted">No photo upload yet — paste hosted image URLs directly.</p>
-              <textarea
-                value={disputeEvidenceText}
-                onChange={(e) => setDisputeEvidenceText(e.target.value)}
-                rows={2}
-                placeholder="https://…"
-                className="rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button
-                variant="danger"
-                onClick={handleSubmitDispute}
-                disabled={isSubmittingDispute || disputeReason.trim().length < 10}
-              >
-                {isSubmittingDispute ? "Submitting…" : "Submit"}
-              </Button>
-              <Button variant="secondary" onClick={() => setShowDisputeForm(false)}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <Button variant="secondary" onClick={() => setShowDisputeForm(true)}>
-            Report a problem
-          </Button>
-        )
-      )}
-
-      {order.status === "COMPLETED" && (
-        <div className="flex flex-col gap-3">
+      {canRate && (
+        <div id="rate" className="flex scroll-mt-4 flex-col gap-3">
           <RatingForm
-            label={`Rate ${order.vendor?.businessName ?? "the vendor"}`}
+            label={`Rate ${order.vendor?.businessName ?? "the shop"}`}
             existing={order.ratings.find((r) => r.targetType === "vendor")}
             onSubmit={async (score, comment) => {
               await orderApi.rateOrder(token, { targetType: "vendor", score, comment: comment || undefined });
@@ -548,6 +590,8 @@ export default function OrderTrackingPage() {
           )}
         </div>
       )}
+
+      {reorder.dialog}
     </div>
   );
 }

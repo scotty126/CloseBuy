@@ -3,10 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button, Input, useAuthSession } from "@closebuy/ui";
+import { Button, Input, useAuthSession, AuthShell, AuthDivider } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
 import { customerAuthApi } from "@/lib/api";
 import { OAuthButtons } from "@/components/OAuthButtons";
+import { MonoArrow } from "@/components/MonoArrow";
 
 // US-C-01: email + password, or Google/Apple — never phone. This is an
 // opt-in destination someone navigates to, never a wall in front of
@@ -36,31 +37,25 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-6">
-      {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, not vendor-supplied */}
-      <img src="/logo-wordmark.png" alt="CloseBuy" className="h-10 w-auto" />
-      <h1 className="text-2xl font-bold text-ink">Sign in</h1>
-
-      <div className="flex w-full max-w-xs flex-col gap-4">
-        <OAuthButtons />
-
-        <div className="flex items-center gap-3 text-xs text-muted">
-          <div className="h-px flex-1 bg-gray-200" />
-          or
-          <div className="h-px flex-1 bg-gray-200" />
-        </div>
-
+    <AuthShell app="customer" route="login" title="Sign in" subtitle="Welcome back, neighbour.">
+      <div className="flex flex-col gap-4">
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <Input
             label="Email"
             name="email"
             type="email"
+            placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
           />
           <Input
             label="Password"
+            labelAside={
+              <Link href="/forgot-password" className="text-[13px] text-ink underline underline-offset-[3px]">
+                Forgot?
+              </Link>
+            }
             name="password"
             type="password"
             value={password}
@@ -68,17 +63,17 @@ export default function LoginPage() {
             error={error ?? undefined}
             required
           />
-          <Link href="/forgot-password" className="-mt-2 text-xs text-muted underline">
-            Forgot password?
-          </Link>
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Signing in…" : "Sign in"}
+            {isSubmitting ? "Signing in…" : "Sign in"} <MonoArrow />
           </Button>
         </form>
 
-        <p className="text-center text-sm text-muted">
-          New here?{" "}
-          <Link href="/register" className="font-medium text-primary underline">
+        <AuthDivider />
+        <OAuthButtons />
+
+        <p className="text-center text-[13px] text-muted">
+          New to CloseBuy?{" "}
+          <Link href="/register" className="font-medium text-ink underline underline-offset-[3px]">
             Create an account
           </Link>
         </p>
@@ -88,6 +83,6 @@ export default function LoginPage() {
           <Link href="/privacy" className="underline">Privacy Policy</Link>
         </p>
       </div>
-    </div>
+    </AuthShell>
   );
 }

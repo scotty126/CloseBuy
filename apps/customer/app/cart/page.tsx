@@ -3,205 +3,143 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button } from "@closebuy/ui";
-import { ShoppingBag } from "lucide-react";
+import { ArrowLeft, ShoppingBag } from "lucide-react";
 import { formatNaira, minor } from "@closebuy/types";
 import { useCart } from "@/lib/cart";
 import { catalogApi } from "@/lib/api";
-import { formatTime } from "@/lib/formatHours";
-
-const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
-
-/**
- * US-C-05a — "Schedule for later offers a date and a time slot within the
- * vendor's stated hours." Mirrors the server-side check in
- * order/service.ts's isWithinVendorHours — this is the "shown before
- * payment" half, same relationship US-C-04's cart sync has to checkout's
- * own re-validation; the server check is the real authority regardless.
- */
-function isWithinVendorHours(iso: string, openingHours: Record<string, [string, string]> | null | undefined): boolean {
-  if (!openingHours) return true; // nothing real to constrain against
-  const d = new Date(iso);
-  const range = openingHours[DAY_KEYS[d.getDay()]!];
-  if (!range) return false;
-  const minutesOfDay = d.getHours() * 60 + d.getMinutes();
-  const toMinutes = (t: string) => {
-    const [h, m] = t.split(":").map(Number);
-    return (h ?? 0) * 60 + (m ?? 0);
-  };
-  return minutesOfDay >= toMinutes(range[0]) && minutesOfDay <= toMinutes(range[1]);
-}
+import { MonoArrow } from "@/components/MonoArrow";
+import { tileFor } from "@/components/DealCard";
 
 /**
- * screens-navigation.md §1.5. Delivery fee isn't shown here — it's a
- * platform Config value (flat_delivery_fee_minor) with no public read
- * endpoint, computed server-side at checkout; showing a guessed number
- * here would be worse than not showing one.
+ * screens-navigation.md §1.5, to the canvas's measurements. Delivery-or-pickup
+ * and now-or-later are chosen at checkout (the canvas puts them in its Delivery
+ * card), so this screen is just the lines and the totals. The delivery fee is
+ * the platform's flat fee from the public /delivery-fee endpoint — the same
+ * Config value checkout charges.
  */
 export default function CartPage() {
   const router = useRouter();
-  const { cart, isLoaded, subtotalMinor, updateQuantity, removeItem, setFulfilmentType, setScheduledFor, clearCart } = useCart();
-  const [scheduleMode, setScheduleMode] = useState<"asap" | "later">(cart.scheduledFor ? "later" : "asap");
-  const [openingHours, setOpeningHours] = useState<Record<string, [string, string]> | null | undefined>(undefined);
+  const { cart, isLoaded, itemCount, subtotalMinor, updateQuantity, removeItem, clearCart } = useCart();
+  const [feeMinor, setFeeMinor] = useState<number | null>(null);
 
   useEffect(() => {
-    if (scheduleMode !== "later" || !cart.vendor) return;
-    catalogApi
-      .getVendor(cart.vendor.id)
-      .then((res) => setOpeningHours(res.vendor.openingHours))
-      .catch(() => {}); // best effort — falls back to not constraining client-side; checkout still enforces it server-side
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scheduleMode, cart.vendor?.id]);
+    catalogApi.getDeliveryFee().then((res) => setFeeMinor(res.feeMinor)).catch(() => {});
+  }, []);
 
   if (!isLoaded) return null;
 
+  const header = (
+    <header className="flex items-center gap-1.5 border-b border-line p-2">
+      <button type="button" onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))} aria-label="Back" className="flex h-11 w-11 items-center justify-center text-ink">
+        <ArrowLeft size={18} strokeWidth={2} />
+      </button>
+      <div className="flex flex-1 flex-col">
+        <h1 className="text-[17px] font-semibold tracking-[-0.02em] text-ink">Cart</h1>
+        <span className="font-mono text-[11px] uppercase text-muted">
+          {itemCount} item{itemCount === 1 ? "" : "s"} · {cart.vendor ? "1 shop" : "0 shops"}
+        </span>
+      </div>
+      {cart.items.length > 0 && (
+        <button type="button" onClick={clearCart} className="h-11 px-2.5 text-[13px] text-muted">
+          Clear
+        </button>
+      )}
+    </header>
+  );
+
   if (!cart.vendor || cart.items.length === 0) {
     return (
-      <div className="flex min-h-[70vh] flex-col items-center justify-center gap-3 p-4 text-center">
-        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-surface text-muted">
-          <ShoppingBag size={28} />
-        </span>
-        <p className="text-base font-bold text-ink">Your cart is empty</p>
-        <p className="text-sm text-muted">Add something from a vendor to see it here.</p>
-        <Link href="/" className="mt-1">
-          <Button>Browse vendors</Button>
-        </Link>
+      <div className="flex flex-col">
+        {header}
+        <div className="m-3.5 flex flex-col items-center gap-2 rounded-[14px] px-5 py-10 text-center shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
+          <img src="/logo-mark.png" alt="" className="h-[46px] w-auto opacity-50" />
+          <span className="font-semibold text-ink">Your cart is empty</span>
+          <Link href="/" className="inline-flex items-center gap-1.5 text-[13px] text-ink">
+            Browse shops near you <MonoArrow size={11} />
+          </Link>
+        </div>
       </div>
     );
   }
 
-  const minDateTime = new Date(Date.now() + 15 * 60 * 1000).toISOString().slice(0, 16); // at least 15 min out
+  const delivering = cart.fulfilmentType === "delivery";
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-ink">Your cart</h1>
-        <button type="button" onClick={clearCart} className="text-xs font-semibold text-muted underline">
-          Clear cart
+    <div className="flex min-h-screen flex-col">
+      {header}
+
+      <div className="flex flex-1 flex-col gap-3.5 px-3.5 pb-5 pt-3.5">
+        <section className="overflow-hidden rounded-[14px] bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
+          <Link href={`/vendors/${cart.vendor.id}`} className="flex items-center gap-2 border-b border-line px-3.5 py-2.5 text-[13px] font-medium text-ink">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E]" aria-hidden="true" />
+            {cart.vendor.businessName}
+            <span className="ml-auto inline-flex items-center gap-1 font-mono text-[11px] text-muted">
+              Add more <MonoArrow size={10} />
+            </span>
+          </Link>
+          {cart.items.map((item) => (
+            <div key={item.productId} className="flex items-center gap-3 border-b border-line px-3.5 py-2.5">
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-[#0E1F19] ${tileFor(item.productId)}`}>
+                <ShoppingBag size={20} strokeWidth={1.5} aria-hidden="true" />
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate text-[13px] font-medium text-ink">{item.name}</span>
+                <span className="font-mono text-xs text-ink">{formatNaira(minor(item.priceMinor * item.quantity))}</span>
+              </div>
+              <span className="flex h-9 items-center rounded-[9px] font-mono shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
+                <button
+                  type="button"
+                  onClick={() => (item.quantity <= 1 ? removeItem(item.productId) : updateQuantity(item.productId, item.quantity - 1))}
+                  aria-label={item.quantity <= 1 ? `Remove ${item.name}` : `One less ${item.name}`}
+                  className="flex h-11 w-[30px] items-center justify-center text-ink"
+                >
+                  −
+                </button>
+                <span key={item.quantity} className="min-w-3.5 animate-bump text-center text-[13px] font-semibold text-ink">
+                  {item.quantity}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                  disabled={item.quantity >= item.stock}
+                  aria-label={`One more ${item.name}`}
+                  className="flex h-11 w-[30px] items-center justify-center text-ink disabled:opacity-40"
+                >
+                  +
+                </button>
+              </span>
+            </div>
+          ))}
+        </section>
+
+        <section className="flex flex-col gap-2 rounded-[14px] bg-card p-3.5 text-[13px] shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
+          <Row label="Subtotal" value={formatNaira(minor(subtotalMinor))} />
+          <Row label="Delivery" value={delivering ? (feeMinor != null ? formatNaira(minor(feeMinor)) : "At checkout") : "None · pickup"} />
+        </section>
+      </div>
+
+      <div className="border-t border-line px-3.5 pb-3.5 pt-2.5">
+        <button
+          type="button"
+          onClick={() => router.push("/checkout")}
+          className="flex h-[50px] w-full items-center justify-between rounded-xl bg-accent px-[18px] text-sm font-semibold text-[#0E1F19] transition-transform active:scale-[0.99]"
+        >
+          <span>Go to checkout</span>
+          <span className="flex items-center gap-1.5 font-mono">
+            {formatNaira(minor(subtotalMinor))} <MonoArrow size={11} />
+          </span>
         </button>
       </div>
-
-      <p className="text-sm font-medium text-muted">From {cart.vendor.businessName}</p>
-
-      <div className="flex flex-col divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
-        {cart.items.map((item) => (
-          <div key={item.productId} className="flex items-center gap-3 p-3.5">
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold text-ink">{item.name}</p>
-              <p className="text-sm font-bold text-accent">{formatNaira(minor(item.priceMinor))}</p>
-            </div>
-            <div className="flex items-center gap-2 rounded-full bg-surface px-1 py-1">
-              <button
-                type="button"
-                onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                aria-label={`Remove one ${item.name}`}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-ink shadow-sm transition-transform active:scale-90"
-              >
-                −
-              </button>
-              <span key={item.quantity} className="w-4 animate-bump text-center text-sm font-bold text-ink">
-                {item.quantity}
-              </span>
-              <button
-                type="button"
-                onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                disabled={item.quantity >= item.stock}
-                aria-label={`Add one more ${item.name}`}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-white shadow-sm transition-transform active:scale-90 disabled:opacity-40 disabled:active:scale-100"
-              >
-                +
-              </button>
-            </div>
-            <button type="button" onClick={() => removeItem(item.productId)} className="text-xs font-semibold text-muted underline underline-offset-2 transition-colors hover:text-danger">
-              Remove
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {cart.vendor.supportsPickup && (
-        <div>
-          <p className="mb-1.5 text-sm font-bold text-ink">Fulfilment</p>
-          <div className="flex rounded-xl bg-surface p-1">
-            <button
-              type="button"
-              onClick={() => setFulfilmentType("delivery")}
-              className={toggleClass(cart.fulfilmentType === "delivery")}
-            >
-              Delivery
-            </button>
-            <button
-              type="button"
-              onClick={() => setFulfilmentType("pickup")}
-              className={toggleClass(cart.fulfilmentType === "pickup")}
-            >
-              Pickup
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div>
-        <p className="mb-1.5 text-sm font-bold text-ink">When</p>
-        <div className="flex rounded-xl bg-surface p-1">
-          <button
-            type="button"
-            onClick={() => {
-              setScheduleMode("asap");
-              setScheduledFor(null);
-            }}
-            className={toggleClass(scheduleMode === "asap")}
-          >
-            As soon as possible
-          </button>
-          <button type="button" onClick={() => setScheduleMode("later")} className={toggleClass(scheduleMode === "later")}>
-            Schedule
-          </button>
-        </div>
-        {scheduleMode === "later" && (
-          <>
-            <input
-              type="datetime-local"
-              min={minDateTime}
-              value={cart.scheduledFor ? cart.scheduledFor.slice(0, 16) : ""}
-              onChange={(e) => setScheduledFor(e.target.value ? new Date(e.target.value).toISOString() : null)}
-              className="mt-2 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-            />
-            {cart.scheduledFor && openingHours && !isWithinVendorHours(cart.scheduledFor, openingHours) && (
-              <p className="mt-1.5 text-xs font-medium text-danger">
-                {(() => {
-                  const range = openingHours[DAY_KEYS[new Date(cart.scheduledFor).getDay()]!];
-                  return range
-                    ? `${cart.vendor!.businessName} is only open ${formatTime(range[0])} – ${formatTime(range[1])} that day.`
-                    : `${cart.vendor!.businessName} doesn't open that day.`;
-                })()}
-              </p>
-            )}
-          </>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white p-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
-        <span className="text-sm font-medium text-muted">Subtotal</span>
-        <span className="text-base font-bold text-ink">{formatNaira(minor(subtotalMinor))}</span>
-      </div>
-      <p className="-mt-2 text-xs text-muted">
-        {cart.fulfilmentType === "delivery" ? "Delivery fee added at checkout." : "No delivery fee — you're picking up."}
-      </p>
-
-      <Button
-        onClick={() => router.push("/checkout")}
-        disabled={
-          scheduleMode === "later" &&
-          (!cart.scheduledFor || (openingHours != null && !isWithinVendorHours(cart.scheduledFor, openingHours)))
-        }
-      >
-        Proceed to checkout
-      </Button>
     </div>
   );
 }
 
-function toggleClass(active: boolean): string {
-  return `flex-1 rounded-lg py-2 text-sm font-semibold transition-all duration-150 ease-out ${active ? "bg-white text-ink shadow-sm" : "text-muted hover:text-ink"}`;
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="flex justify-between">
+      <span className="text-muted">{label}</span>
+      <span className="font-mono text-ink">{value}</span>
+    </span>
+  );
 }

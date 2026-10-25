@@ -63,13 +63,13 @@ export function ProductDetailSheet({
       onClick={handleClose}
     >
       <div
-        className={`flex h-[75vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-white transition-all duration-200 ease-out sm:h-auto sm:max-h-[85vh] sm:rounded-3xl ${
+        className={`flex h-[75vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-card transition-all duration-200 ease-out sm:h-auto sm:max-h-[85vh] sm:rounded-3xl ${
           shown ? "translate-y-0 opacity-100 sm:scale-100" : "translate-y-full opacity-0 sm:translate-y-4 sm:scale-95"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 justify-center pb-1 pt-2.5 sm:hidden">
-          <span className="h-1 w-10 rounded-full bg-gray-300" />
+          <span className="h-1 w-10 rounded-full bg-muted/40" />
         </div>
 
         <div className="flex flex-1 flex-col overflow-y-auto">
@@ -100,10 +100,10 @@ export function ProductDetailSheet({
             )}
             {product.description && <p className="text-sm leading-relaxed text-ink">{product.description}</p>}
 
-            <div className="mt-2 flex flex-col gap-2 border-t border-gray-100 pt-3">
+            <div className="mt-2 flex flex-col gap-2 border-t border-line pt-3">
               <p className="text-xs font-bold uppercase tracking-wide text-muted">Your order</p>
               <div className="flex items-center gap-3 rounded-2xl bg-surface p-2.5">
-                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-white">
+                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-card">
                   {product.images[0] ? (
                     // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URLs
                     <img src={product.images[0]} alt="" className="h-full w-full object-contain" />
@@ -115,14 +115,14 @@ export function ProductDetailSheet({
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-3 border-t border-gray-100 p-4">
+        <div className="flex shrink-0 items-center gap-3 border-t border-line p-4">
           {quantity > 0 && (
             <div className="flex items-center gap-3 rounded-full bg-surface px-2 py-1.5">
               <button
                 type="button"
                 onClick={onDecrement}
                 aria-label={`Remove one ${product.name}`}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-ink shadow-sm transition-transform active:scale-90"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-card text-ink shadow-sm transition-transform active:scale-90"
               >
                 −
               </button>
@@ -134,7 +134,7 @@ export function ProductDetailSheet({
                 onClick={onIncrement}
                 disabled={quantity >= product.stock}
                 aria-label={`Add one more ${product.name}`}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white shadow-sm transition-transform active:scale-90 disabled:opacity-40 disabled:active:scale-100"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-night shadow-sm transition-transform active:scale-90 disabled:opacity-40 disabled:active:scale-100"
               >
                 +
               </button>
@@ -144,7 +144,7 @@ export function ProductDetailSheet({
             type="button"
             onClick={quantity > 0 ? handleClose : onAdd}
             disabled={outOfStock}
-            className="flex-1 rounded-xl bg-accent py-3 text-sm font-bold text-white shadow-sm transition-transform active:scale-[0.98] disabled:opacity-40"
+            className="flex-1 rounded-xl bg-accent py-3 text-sm font-bold text-night shadow-sm transition-transform active:scale-[0.98] disabled:opacity-40"
           >
             {quantity > 0 ? "Done" : "Add to cart"}
           </button>

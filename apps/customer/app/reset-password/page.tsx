@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, Input } from "@closebuy/ui";
+import { Button, Input, AuthShell } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
 import { customerAuthApi } from "@/lib/api";
 
@@ -33,7 +33,7 @@ function ResetPasswordForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full max-w-xs flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <Input
         label="New password"
         name="newPassword"
@@ -53,11 +53,10 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-6">
-      <h1 className="text-2xl font-bold text-primary">Set a new password</h1>
+    <AuthShell app="customer" route="reset-password" title="Choose a new password" subtitle="Make it something you haven't used before. At least 8 characters.">
       <Suspense fallback={null}>
         <ResetPasswordForm />
       </Suspense>
-    </div>
+    </AuthShell>
   );
 }

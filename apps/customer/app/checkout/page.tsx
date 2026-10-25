@@ -2,16 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Input, PhoneInput, useAuthSession } from "@closebuy/ui";
+import { Button, Input, PhoneInput, ThemeToggle, useAuthSession } from "@closebuy/ui";
+import { ArrowLeft, MapPin, Plus, ShoppingBag, Store } from "lucide-react";
 import { ApiClientError } from "@closebuy/api-client";
 import { formatNaira, minor } from "@closebuy/types";
 import type { CheckoutInput } from "@closebuy/types";
-import type { GeocodeResultDto, AddressDto } from "@closebuy/types";
+import type { GeocodeResultDto, AddressDto, ProductDto } from "@closebuy/types";
 import { catalogApi, customerAuthApi, geocodeApi, orderApi } from "@/lib/api";
 import { useCart, type CartSyncChange } from "@/lib/cart";
 import { addGuestOrder } from "@/lib/guestOrders";
+import { getDeliveryLocation } from "@/lib/deliveryLocation";
 import { DeliveryLocationMap } from "@/components/DeliveryLocationMap";
 import { AddressSearch } from "@/components/AddressSearch";
+import { ScheduleFields } from "@/components/ScheduleFields";
+import { tileFor } from "@/components/DealCard";
 
 type PaymentChoice = "online" | "cash_on_delivery";
 
@@ -35,7 +39,12 @@ type PaymentChoice = "online" | "cash_on_delivery";
 export default function CheckoutPage() {
   const router = useRouter();
   const { session, isLoaded: sessionLoaded } = useAuthSession();
-  const { cart, isLoaded: cartLoaded, subtotalMinor, clearCart, syncWithLiveProducts } = useCart();
+  const { cart, isLoaded: cartLoaded, subtotalMinor, clearCart, syncWithLiveProducts, addItem, updateQuantity, removeItem, itemCount } = useCart();
+  // The full address form is the canvas's "Edit" — it opens by itself while there's no pin yet.
+  const [addrOpen, setAddrOpen] = useState(false);
+  // The vendor's live catalogue, kept for the "Don't forget" row (other in-stock items not already in the bag).
+  const [scheduleOk, setScheduleOk] = useState(true);
+  const [vendorProducts, setVendorProducts] = useState<ProductDto[]>([]);
 
   // Reused across a network-level retry (so a double-tap can't place two orders), but replaced once the
   // server has answered with an error: that order wasn't placed, and replaying the key would just hand back
@@ -101,7 +110,21 @@ export default function CheckoutPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // The spot chosen on /location (if any) is where the pin starts; everything below can still change it.
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    if (prefilledRef.current) return;
+    prefilledRef.current = true;
+    const saved = getDeliveryLocation();
+    if (!saved) return;
+    setLat(saved.lat);
+    setLng(saved.lng);
+    setAddressLabel(saved.label);
+    if (saved.landmark) setLandmark(saved.landmark);
+  }, []);
+
   const isDelivery = cart.fulfilmentType === "delivery";
+  const addOns = vendorProducts.filter((p) => p.stock > 0 && !cart.items.some((i) => i.productId === p.id)).slice(0, 6);
 
   // A failed submit must be *seen* — on a phone the message can sit below the fold of a long form.
   const errorRef = useRef<HTMLParagraphElement>(null);
@@ -135,7 +158,10 @@ export default function CheckoutPage() {
     syncedRef.current = true;
     catalogApi
       .getVendorProducts(cart.vendor.id)
-      .then((res) => setCatalogChanges(syncWithLiveProducts(res.products)))
+      .then((res) => {
+        setVendorProducts(res.products);
+        setCatalogChanges(syncWithLiveProducts(res.products));
+      })
       .catch(() => {}); // best-effort — the server-side check at submit is still the real safety net
   }, [cartLoaded, cart.vendor, cart.items.length, syncWithLiveProducts]);
 
@@ -297,8 +323,21 @@ export default function CheckoutPage() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5 p-4 pb-8">
-      <h1 className="text-xl font-bold text-ink">Checkout</h1>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-4 pb-8 pt-[18px]">
+      <header className="flex items-center gap-2.5">
+        <button
+          type="button"
+          onClick={() => (window.history.length > 1 ? router.back() : router.push("/cart"))}
+          aria-label="Back to bag"
+          className="flex h-11 w-11 items-center justify-center rounded-[14px] bg-card text-ink"
+        >
+          <ArrowLeft size={18} strokeWidth={2.2} />
+        </button>
+        <h1 className="flex-1 text-[22px] font-semibold tracking-[-0.02em] text-ink">
+          My bag <span className="text-muted">({itemCount})</span>
+        </h1>
+        <ThemeToggle />
+      </header>
 
       {catalogChanges && catalogChanges.length > 0 && (
         <section className="flex flex-col gap-1 rounded-lg bg-warning/10 p-3 text-sm text-ink" role="status">
@@ -317,9 +356,100 @@ export default function CheckoutPage() {
         </section>
       )}
 
+      <section className="rounded-[14px] bg-card px-3.5 py-1.5" aria-label="Your bag">
+        {cart.items.map((item) => (
+          <div key={item.productId} className="flex items-center gap-3 py-2.5">
+            <span className={`flex h-[54px] w-[54px] shrink-0 items-center justify-center rounded-xl text-[#10231C] ${tileFor(item.productId)}`}>
+              <ShoppingBag size={26} strokeWidth={1.5} aria-hidden="true" />
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="text-sm font-bold text-ink">{item.name}</span>
+              <span className="text-[15px] font-semibold text-ink">{formatNaira(minor(item.priceMinor * item.quantity))}</span>
+            </span>
+            <span className="flex h-11 items-center rounded-[14px] bg-raised">
+              <button
+                type="button"
+                onClick={() => (item.quantity <= 1 ? removeItem(item.productId) : updateQuantity(item.productId, item.quantity - 1))}
+                aria-label={item.quantity <= 1 ? `Remove ${item.name}` : `Remove one ${item.name}`}
+                className="flex h-11 w-8 items-center justify-center text-lg font-bold text-ink"
+              >
+                −
+              </button>
+              <span key={item.quantity} className="min-w-3 animate-bump text-center text-sm font-bold text-ink">
+                {item.quantity}
+              </span>
+              <button
+                type="button"
+                onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                disabled={item.quantity >= item.stock}
+                aria-label={`Add one ${item.name}`}
+                className="flex h-11 w-8 items-center justify-center text-lg font-bold text-ink disabled:opacity-40"
+              >
+                +
+              </button>
+            </span>
+          </div>
+        ))}
+      </section>
+
+      {addOns.length > 0 && (
+        <section className="flex flex-col gap-2.5">
+          <h2 className="text-[17px] font-semibold text-ink">Don&apos;t forget</h2>
+          <div className="-mx-4 flex gap-2.5 overflow-x-auto px-4 [scrollbar-width:none]">
+            {addOns.map((p) => (
+              <div key={p.id} className="flex w-40 shrink-0 items-center gap-2 rounded-2xl bg-card p-2">
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl text-[#10231C] ${tileFor(p.id)}`}>
+                  {p.images[0] ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URLs
+                    <img src={p.images[0]} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <ShoppingBag size={22} strokeWidth={1.5} aria-hidden="true" />
+                  )}
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-xs font-bold text-ink">{p.name}</span>
+                  <span className="text-xs text-muted">{formatNaira(minor(p.priceMinor))}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    addItem(
+                      { id: cart.vendor!.id, businessName: cart.vendor!.businessName, supportsPickup: cart.vendor!.supportsPickup },
+                      { productId: p.id, name: p.name, priceMinor: p.priceMinor, stock: p.stock },
+                    )
+                  }
+                  aria-label={`Add ${p.name}`}
+                  className="flex h-11 w-9 shrink-0 items-center justify-center rounded-xl bg-accent text-[#10231C]"
+                >
+                  <Plus size={16} strokeWidth={2.6} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {isDelivery ? (
-        <section className="flex flex-col gap-2">
-          <p className="text-base font-bold text-ink">Delivery location</p>
+        <section className="flex flex-col gap-3 rounded-[14px] bg-card p-3.5">
+          <h2 className="text-[17px] font-semibold text-ink">Delivery</h2>
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-raised text-primary">
+              <MapPin size={18} strokeWidth={2} aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1 text-sm text-ink">
+              {lat === null
+                ? "Set your delivery spot"
+                : [addressLabel ?? `${lat.toFixed(4)}, ${lng?.toFixed(4)}`, landmark.trim() || null].filter(Boolean).join(" · ")}
+            </span>
+            {lat !== null && (
+              <button type="button" onClick={() => setAddrOpen((v) => !v)} className="py-3 text-[13px] font-bold text-primary dark:text-[#8FD1B5]">
+                {addrOpen ? "Done" : "Edit"}
+              </button>
+            )}
+          </div>
+          <ScheduleFields onValidityChange={setScheduleOk} />
+          {(addrOpen || lat === null) && (
+          <div className="flex flex-col gap-2 border-t border-line pt-3">
 
           {savedAddresses && savedAddresses.length > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -329,7 +459,7 @@ export default function CheckoutPage() {
                   type="button"
                   onClick={() => selectSavedAddress(a)}
                   className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                    selectedAddressId === a.id ? "border-primary bg-primary/10 text-primary" : "border-gray-300 text-ink"
+                    selectedAddressId === a.id ? "border-primary bg-primary/10 text-primary" : "border-line text-ink"
                   }`}
                 >
                   {a.label}
@@ -341,9 +471,9 @@ export default function CheckoutPage() {
           <AddressSearch onSelect={handleAddressSelected} />
 
           <div className="flex items-center gap-2 text-xs text-muted">
-            <span className="h-px flex-1 bg-gray-200" />
+            <span className="h-px flex-1 bg-raised" />
             or
-            <span className="h-px flex-1 bg-gray-200" />
+            <span className="h-px flex-1 bg-raised" />
           </div>
           <Button type="button" variant="secondary" onClick={useCurrentLocation} disabled={locating}>
             {locating ? "Locating…" : lat !== null ? "Location set — tap to refresh" : "Use my current location"}
@@ -445,15 +575,26 @@ export default function CheckoutPage() {
               )}
             </div>
           )}
+          </div>
+          )}
         </section>
       ) : (
-        <section className="rounded-xl bg-surface p-3.5 text-sm text-ink">
-          Pickup from <span className="font-bold">{cart.vendor.businessName}</span>
+        <section className="flex flex-col gap-3 rounded-[14px] bg-card p-3.5">
+          <h2 className="text-[17px] font-semibold text-ink">Pickup</h2>
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-raised text-primary">
+              <Store size={18} strokeWidth={2} aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1 text-sm text-ink">
+              Collect from <span className="font-bold">{cart.vendor.businessName}</span>
+            </span>
+          </div>
+          <ScheduleFields onValidityChange={setScheduleOk} />
         </section>
       )}
 
-      <section className="flex flex-col gap-3">
-        <p className="text-base font-bold text-ink">Contact</p>
+      <section className="flex flex-col gap-3 rounded-[14px] bg-card p-3.5">
+        <h2 className="text-[17px] font-semibold text-ink">Contact</h2>
         <PhoneInput label="Phone number" value={contactPhone} onChange={setContactPhone} required />
         <PhoneInput label="Alternate number (optional)" value={alternateContactPhone} onChange={setAlternateContactPhone} />
         {session && (
@@ -472,36 +613,38 @@ export default function CheckoutPage() {
         )}
       </section>
 
-      <section className="flex flex-col gap-2">
-        <p className="text-base font-bold text-ink">Payment</p>
+      <section className="flex flex-col gap-2 rounded-[14px] bg-card p-3.5">
+        <h2 className="mb-1 text-[17px] font-semibold text-ink">Payment</h2>
         <PaymentOption
-          label="Pay online now (card or bank transfer)"
+          label="Pay now"
+          sub="Card or bank transfer, confirmed instantly"
           selected={paymentChoice === "online"}
           onSelect={() => setPaymentChoice("online")}
         />
         {isDelivery && (
           <PaymentOption
-            label="Cash on delivery"
+            label="Pay on delivery"
+            sub="Cash to the rider at your door"
             selected={paymentChoice === "cash_on_delivery"}
             onSelect={() => setPaymentChoice("cash_on_delivery")}
           />
         )}
       </section>
 
-      <section className="flex flex-col gap-1.5 rounded-2xl border border-gray-100 bg-white p-4 text-sm shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
+      <section className="flex flex-col gap-2 rounded-[14px] bg-card p-3.5 text-sm">
         <div className="flex justify-between">
-          <span className="font-medium text-muted">Subtotal</span>
-          <span className="font-medium text-ink">{formatNaira(minor(subtotalMinor))}</span>
+          <span className="text-muted">Subtotal</span>
+          <span className="text-ink">{formatNaira(minor(subtotalMinor))}</span>
         </div>
         {isDelivery && (
           <div className="flex justify-between">
-            <span className="font-medium text-muted">Delivery fee</span>
-            <span className="font-medium text-ink">{deliveryFeeMinor === null ? "…" : formatNaira(minor(deliveryFeeMinor))}</span>
+            <span className="text-muted">Delivery</span>
+            <span className="text-ink">{deliveryFeeMinor === null ? "…" : formatNaira(minor(deliveryFeeMinor))}</span>
           </div>
         )}
-        <div className="flex justify-between border-t border-gray-100 pt-1.5 text-base font-bold">
+        <div className="flex justify-between border-t border-line pt-2 text-base font-semibold">
           <span className="text-ink">Total</span>
-          <span className="text-accent">{formatNaira(minor(totalMinor))}</span>
+          <span className="text-ink">{formatNaira(minor(totalMinor))}</span>
         </div>
       </section>
 
@@ -517,29 +660,32 @@ export default function CheckoutPage() {
         </p>
       )}
 
-      <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "Placing order…" : `Place order · ${formatNaira(minor(totalMinor))}`}
-      </Button>
+      <button
+        type="submit"
+        disabled={isSubmitting || !scheduleOk}
+        className="flex h-[60px] items-center justify-between rounded-[14px] bg-accent px-[22px] text-night transition-transform active:scale-[0.99] disabled:opacity-60"
+      >
+        <span className="text-base font-bold">{isSubmitting ? "Placing order…" : "Place order"}</span>
+        <span className="text-[17px] font-semibold">{formatNaira(minor(totalMinor))}</span>
+      </button>
     </form>
   );
 }
 
-function PaymentOption({ label, selected, onSelect }: { label: string; selected: boolean; onSelect: () => void }) {
+function PaymentOption({ label, sub, selected, onSelect }: { label: string; sub: string; selected: boolean; onSelect: () => void }) {
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`flex items-center justify-between rounded-xl border-2 px-4 py-3.5 text-left text-sm font-semibold transition ${
-        selected ? "border-primary bg-primary/5 text-ink shadow-sm" : "border-gray-200 text-ink"
+      aria-pressed={selected}
+      className={`flex min-h-[58px] w-full items-center gap-3 rounded-[14px] px-3 py-2.5 text-left transition-colors ${
+        selected ? "bg-raised shadow-[inset_0_0_0_2px_#FF5A19]" : "shadow-[inset_0_0_0_1px_rgb(var(--c-raised))]"
       }`}
     >
-      {label}
-      <span
-        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
-          selected ? "border-primary bg-primary" : "border-gray-300"
-        }`}
-      >
-        {selected && <span className="h-2 w-2 rounded-full bg-white" />}
+      <span className={`h-5 w-5 shrink-0 rounded-full ${selected ? "border-[6px] border-accent" : "border-2 border-muted/60"}`} />
+      <span className="flex flex-1 flex-col gap-px">
+        <span className="text-sm font-bold text-ink">{label}</span>
+        <span className="text-xs text-muted">{sub}</span>
       </span>
     </button>
   );

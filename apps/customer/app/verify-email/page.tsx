@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { AuthShell } from "@closebuy/ui";
 import { customerAuthApi } from "@/lib/api";
 
 // Never blocks anything (US-C-01) — this page just confirms the click
@@ -23,16 +24,22 @@ function VerifyEmailInner() {
   }, [token]);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
-      {status === "checking" && <p className="text-sm text-muted">Verifying…</p>}
-      {status === "verified" && <p className="text-sm text-success">Email verified.</p>}
-      {status === "invalid" && (
-        <p className="text-sm text-muted">This link is invalid or expired — your account still works fine either way.</p>
-      )}
-      <Link href="/" className="text-sm font-medium text-primary underline">
+    <AuthShell
+      app="customer"
+      route="verify-email"
+      title={status === "verified" ? "Email verified" : status === "invalid" ? "Link not valid" : "Verifying your email…"}
+      subtitle={
+        status === "invalid"
+          ? "This link is invalid or expired — your account still works fine either way."
+          : status === "verified"
+            ? "You're all set."
+            : "Just a moment."
+      }
+    >
+      <Link href="/" className="flex h-[46px] items-center justify-center rounded-[11px] bg-accent text-sm font-semibold text-night">
         Back to CloseBuy
       </Link>
-    </div>
+    </AuthShell>
   );
 }
 

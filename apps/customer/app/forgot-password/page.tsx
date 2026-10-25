@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Button, Input } from "@closebuy/ui";
+import { Button, Input, AuthShell } from "@closebuy/ui";
 import { customerAuthApi } from "@/lib/api";
 
 export default function ForgotPasswordPage() {
@@ -25,22 +25,17 @@ export default function ForgotPasswordPage() {
 
   if (sent) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
-        <h1 className="text-xl font-bold text-primary">Check your email</h1>
-        <p className="max-w-xs text-sm text-muted">
-          If an account exists for {email}, a reset link is on its way.
-        </p>
-        <Link href="/login" className="text-sm font-medium text-primary underline">
-          Back to sign in
+      <AuthShell app="customer" route="forgot-password" title="Check your email" subtitle={`If an account exists for ${email}, a reset link is on its way.`}>
+        <Link href="/login" className="text-center text-sm text-muted">
+          ← Back to sign in
         </Link>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-6">
-      <h1 className="text-2xl font-bold text-primary">Reset your password</h1>
-      <form onSubmit={handleSubmit} className="flex w-full max-w-xs flex-col gap-4">
+    <AuthShell app="customer" route="forgot-password" title="Forgot your password?" subtitle="Enter your email and we'll send a reset link.">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Input
           label="Email"
           name="email"
@@ -53,9 +48,9 @@ export default function ForgotPasswordPage() {
           {isSubmitting ? "Sending…" : "Send reset link"}
         </Button>
         <Link href="/login" className="text-center text-xs text-muted underline">
-          Back to sign in
+          ← Back to sign in
         </Link>
       </form>
-    </div>
+    </AuthShell>
   );
 }

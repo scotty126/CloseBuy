@@ -1,41 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Button } from "@closebuy/ui";
+import { Button, ThemeToggle } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
-import { ArrowLeft, Star, Clock, MapPin, Calendar, ShoppingBag, BookOpen, MessageCircle } from "lucide-react";
-import type { VendorDto, ProductDto, VendorRatingDto } from "@closebuy/types";
+import { ArrowLeft, Clock, Heart, Store } from "lucide-react";
+import { formatNaira, minor } from "@closebuy/types";
+import type { CategoryDto, ProductDto, VendorDto, VendorRatingDto } from "@closebuy/types";
 import { catalogApi } from "@/lib/api";
 import { useCart } from "@/lib/cart";
+import { useFavorites } from "@/lib/favorites";
 import { summarizeHours } from "@/lib/formatHours";
-import { ProductCard } from "@/components/ProductCard";
+import { discountOff } from "@/components/DealCard";
+import { ShopProductCard } from "@/components/ShopProductCard";
 import { ProductDetailSheet } from "@/components/ProductDetailSheet";
-import { QuickBuyCard } from "@/components/QuickBuyCard";
 import { CartBar } from "@/components/CartBar";
 
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
 /**
- * screens-navigation.md §1.3/1.4, restyled toward the store-landing
- * reference the user shared (hero photo + an overlapping info sheet with
- * hours/days/pickup, Menu/Reviews tabs). No item-detail *packaging*
- * section though — Product has no modifiers in the data model, and a
- * container/packaging picker was explicitly scoped out (most CloseBuy
- * vendors are supermarkets/pharmacies, not restaurants — it doesn't
- * obviously fit the catalogue). The item sheet that exists
- * (ProductDetailSheet) is just the full image/description/price view.
+ * screens-navigation.md §1.3/1.4, in the redesign's shape: breadcrumb header
+ * with follow + theme, cover, mono status line, stat strip, sale strip,
+ * Menu/Reviews tabs, aisle chips and a 2-up product grid. The item sheet
+ * (ProductDetailSheet) is the full image/description/price view — Product has
+ * no modifiers, so there is no packaging/size step to put in it.
  */
 export default function VendorPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { cart, addItem, replaceCart, updateQuantity, setFulfilmentType } = useCart();
+  const { cart, addItem, replaceCart, updateQuantity } = useCart();
+  const { isFollowing, toggleFollow } = useFavorites();
 
   const [vendor, setVendor] = useState<VendorDto | null>(null);
   const [products, setProducts] = useState<ProductDto[] | null>(null);
+  const [categories, setCategories] = useState<CategoryDto[]>([]);
+  const [feeMinor, setFeeMinor] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [conflictProduct, setConflictProduct] = useState<ProductDto | null>(null);
   const [detailProduct, setDetailProduct] = useState<ProductDto | null>(null);
   const [tab, setTab] = useState<"menu" | "reviews">("menu");
+  const [aisle, setAisle] = useState<string | null>(null);
   const [ratings, setRatings] = useState<VendorRatingDto[] | null>(null);
+  const [distribution, setDistribution] = useState<Record<number, number> | null>(null);
   const [ratingsError, setRatingsError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,16 +50,28 @@ export default function VendorPage() {
         setVendor(v.vendor);
         setProducts(p.products);
       })
-      .catch((err) => setError(err instanceof ApiClientError ? err.message : "Couldn't load this vendor."));
+      .catch((err) => setError(err instanceof ApiClientError ? err.message : "Couldn't load this shop."));
+    catalogApi.listCategories().then((res) => setCategories(res.categories)).catch(() => {});
+    catalogApi.getDeliveryFee().then((res) => setFeeMinor(res.feeMinor)).catch(() => {});
   }, [id]);
 
   useEffect(() => {
     if (tab !== "reviews" || ratings !== null) return;
     catalogApi
       .getVendorRatings(id)
-      .then((res) => setRatings(res.ratings))
+      .then((res) => {
+        setRatings(res.ratings);
+        setDistribution(res.distribution ?? null);
+      })
       .catch((err) => setRatingsError(err instanceof ApiClientError ? err.message : "Couldn't load reviews."));
   }, [tab, ratings, id]);
+
+  const aisles = useMemo(() => {
+    if (!products) return [];
+    const counts = new Map<string, number>();
+    for (const p of products) counts.set(p.categoryId, (counts.get(p.categoryId) ?? 0) + 1);
+    return [...counts.entries()].map(([categoryId, n]) => ({ categoryId, n, name: categories.find((c) => c.id === categoryId)?.name ?? "Other" }));
+  }, [products, categories]);
 
   function quantityOf(productId: string) {
     return cart.items.find((i) => i.productId === productId)?.quantity ?? 0;
@@ -65,7 +83,7 @@ export default function VendorPage() {
       { id: vendor.id, businessName: vendor.businessName, supportsPickup: vendor.supportsPickup },
       { productId: product.id, name: product.name, priceMinor: product.priceMinor, stock: product.stock },
     );
-    if (!result.added) setConflictProduct(product); // US-C-04 — a different vendor's items are already in the cart
+    if (!result.added) setConflictProduct(product); // US-C-04 — a different shop's items are already in the bag
   }
 
   function confirmReplace() {
@@ -88,189 +106,195 @@ export default function VendorPage() {
   if (!vendor || products === null) {
     return (
       <div className="flex flex-col gap-3 p-4">
-        <div className="h-44 w-full animate-pulse rounded-2xl bg-surface" />
-        <div className="h-6 w-2/3 animate-pulse rounded bg-surface" />
-        <div className="h-4 w-1/3 animate-pulse rounded bg-surface" />
-        <div className="h-20 w-full animate-pulse rounded-2xl bg-surface" />
-        <div className="h-20 w-full animate-pulse rounded-2xl bg-surface" />
+        <div className="h-[150px] w-full animate-pulse rounded-[14px] bg-raised" />
+        <div className="h-6 w-2/3 animate-pulse rounded bg-raised" />
+        <div className="h-16 w-full animate-pulse rounded-xl bg-raised" />
+        <div className="grid grid-cols-2 gap-2.5">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-48 animate-pulse rounded-[14px] bg-raised" />
+          ))}
+        </div>
       </div>
     );
   }
 
-  const canToggleFulfilment = vendor.supportsPickup && (!cart.vendor || cart.vendor.id === vendor.id);
-  const quickBuyProducts = products.filter((p) => p.isQuickBuy && p.stock > 0);
   const hours = summarizeHours(vendor.openingHours);
+  const following = isFollowing(vendor.id);
+  const bestOff = products.reduce((m, p) => Math.max(m, p.stock > 0 ? discountOff(p) : 0), 0);
+  const visible = aisle ? products.filter((p) => p.categoryId === aisle) : products;
+  const total = ratings?.length ? distribution && Object.values(distribution).reduce((s, n) => s + n, 0) : 0;
 
   return (
-    <div className="flex flex-col pb-28">
-      <div className="relative flex h-52 w-full shrink-0 items-center justify-center bg-primary/10">
+    <div className="flex flex-col pb-40">
+      <header className="flex items-center gap-1.5 border-b border-line p-2">
+        <button type="button" onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))} aria-label="Back" className="flex h-11 w-11 items-center justify-center text-ink">
+          <ArrowLeft size={18} strokeWidth={2} />
+        </button>
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted">
+          shops / {slug(vendor.category.name)} / <span className="text-ink">{slug(vendor.businessName)}</span>
+        </span>
+        <ThemeToggle className="!bg-transparent !shadow-none" />
         <button
           type="button"
-          onClick={() => router.back()}
-          aria-label="Back"
-          className="absolute left-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-ink shadow-sm"
+          onClick={() => toggleFollow(vendor.id)}
+          aria-label={following ? "Unfollow shop" : "Follow shop"}
+          aria-pressed={following}
+          className="flex h-11 w-11 items-center justify-center transition-transform active:scale-90"
         >
-          <ArrowLeft size={18} />
+          <Heart size={17} strokeWidth={1.8} className={following ? "fill-accent text-accent" : "text-ink"} />
         </button>
-        {vendor.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URL
-          <img src={vendor.logoUrl} alt="" className="h-full w-full object-cover" />
-        ) : (
-          // No logo yet — the business name stands in for a cover image
-          // rather than leaving a blank box.
-          <p className="px-4 text-center text-xl font-extrabold text-primary">{vendor.businessName}</p>
-        )}
+      </header>
+
+      <div className="px-4 pt-3.5">
+        <div className="relative flex h-[150px] items-center justify-center overflow-hidden rounded-[14px] bg-raised shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
+          {!vendor.logoUrl && (
+            <svg width="100%" height="100%" aria-hidden="true" className="absolute inset-0 opacity-50">
+              <defs>
+                <pattern id="shop-grid" width="16" height="16" patternUnits="userSpaceOnUse">
+                  <path d="M16 0H0V16" fill="none" stroke="rgb(var(--c-line))" strokeWidth="1" />
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#shop-grid)" />
+            </svg>
+          )}
+          {vendor.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- external, vendor-supplied URL
+            <img src={vendor.logoUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="relative flex items-center gap-1.5 px-4 text-center font-mono text-[11px] text-muted">
+              <Store size={16} strokeWidth={1.8} aria-hidden="true" />
+              {vendor.businessName}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Overlaps the hero's bottom edge, matching the store-landing reference. */}
-      <div className="-mt-5 rounded-t-3xl bg-paper px-4 pb-4 pt-4 shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
-        <div className="flex flex-col gap-3">
-          <div>
-            <div className="flex items-start justify-between gap-2">
-              <h1 className="text-2xl font-bold text-ink">{vendor.businessName}</h1>
-              <span
-                className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${
-                  vendor.isOpen ? "bg-success text-white" : "bg-surface text-muted"
-                }`}
-              >
-                {vendor.isOpen ? "Open" : "Closed"}
-              </span>
-            </div>
-            <div className="mt-1 flex items-center gap-1 text-xs text-muted">
-              <MapPin size={13} className="shrink-0" />
-              <span className="truncate">{vendor.pickupLandmark}</span>
-            </div>
-            <div className="mt-1.5 flex items-center gap-3 text-xs font-medium text-muted">
-              <span className="flex items-center gap-1">
-                <Star size={14} className={vendor.ratingAverage != null ? "fill-accent text-accent" : "text-muted"} />
-                <span className={vendor.ratingAverage != null ? "text-ink" : ""}>
-                  {vendor.ratingAverage != null ? `${vendor.ratingAverage.toFixed(1)} (${vendor.ratingCount} reviews)` : "New"}
-                </span>
-              </span>
-              {vendor.avgDeliveryMinutes != null && (
-                <span className="flex items-center gap-1">
-                  <Clock size={14} />
-                  {vendor.avgDeliveryMinutes} min
-                </span>
-              )}
-            </div>
-            {vendor.description && <p className="mt-2.5 text-sm leading-snug text-ink">{vendor.description}</p>}
-          </div>
+      <div className="flex flex-col gap-2.5 px-4 pt-3.5">
+        <span className="flex items-center gap-1.5 font-mono text-[11px] uppercase text-muted">
+          <span className={`h-1.5 w-1.5 rounded-full ${vendor.isOpen ? "bg-success" : "bg-muted"}`} aria-hidden="true" />
+          {vendor.isOpen ? "Open" : "Closed"} · {vendor.category.name} · Riverpark
+        </span>
+        <h1 className="text-2xl font-semibold tracking-[-0.03em] text-ink">{vendor.businessName}</h1>
 
-          {hours && (
-            <div className="flex flex-col gap-2 rounded-xl border border-gray-200 p-3">
-              <div className="flex items-center gap-2.5 text-sm">
-                <Clock size={16} className="shrink-0 text-muted" />
-                <span className="text-muted">Hours</span>
-                <span className="ml-auto font-medium text-ink">{hours.today}</span>
-              </div>
-              <div className="flex items-center gap-2.5 border-t border-gray-100 pt-2 text-sm">
-                <Calendar size={16} className="shrink-0 text-muted" />
-                <span className="text-muted">Days</span>
-                <span className="ml-auto font-medium text-ink">{hours.days}</span>
-              </div>
-              <div className="flex items-center gap-2.5 border-t border-gray-100 pt-2 text-sm">
-                <ShoppingBag size={16} className="shrink-0 text-muted" />
-                <span className="text-muted">Pickup</span>
-                <span className="ml-auto font-medium text-ink">{vendor.supportsPickup ? "Delivery + Pickup" : "Delivery only"}</span>
-              </div>
-            </div>
-          )}
-
-          {canToggleFulfilment && (
-            <div className="flex rounded-xl bg-surface p-1">
-              <button type="button" onClick={() => setFulfilmentType("delivery")} className={toggleClass(cart.fulfilmentType === "delivery")}>
-                Delivery
-              </button>
-              <button type="button" onClick={() => setFulfilmentType("pickup")} className={toggleClass(cart.fulfilmentType === "pickup")}>
-                Pickup
-              </button>
-            </div>
-          )}
-
-          {!vendor.isOpen && (
-            <p className="rounded-xl bg-warning/10 p-3 text-sm font-medium text-warning">
-              This vendor is closed right now — you can browse, but ordering isn&apos;t available until they reopen.
-            </p>
-          )}
-
-          <div className="flex rounded-xl bg-surface p-1">
-            <button type="button" onClick={() => setTab("menu")} className={`${toggleClass(tab === "menu")} flex items-center justify-center gap-1.5`}>
-              <BookOpen size={15} /> Menu
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("reviews")}
-              className={`${toggleClass(tab === "reviews")} flex items-center justify-center gap-1.5`}
-            >
-              <MessageCircle size={15} /> Reviews
-            </button>
-          </div>
+        <div className="grid grid-cols-3 overflow-hidden rounded-xl bg-card shadow-[0_0_0_1px_rgb(var(--c-line))]">
+          <Stat label="Rating" value={vendor.ratingAverage != null ? `★ ${vendor.ratingAverage.toFixed(1)}` : "New"} />
+          <Stat label="ETA" value={vendor.avgDeliveryMinutes != null ? `${vendor.avgDeliveryMinutes} min` : "—"} bordered />
+          <Stat label="Fee" value={feeMinor != null ? formatNaira(minor(feeMinor)) : "—"} bordered />
         </div>
 
-        {tab === "menu" ? (
-          <div className="mt-3 flex flex-col gap-3">
-            {quickBuyProducts.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <p className="text-base font-bold text-ink">Quick Buy</p>
-                <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1">
-                  {quickBuyProducts.map((product) => (
-                    <QuickBuyCard key={product.id} product={product} onAdd={() => handleAdd(product)} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex flex-col gap-2">
-              <p className="text-base font-bold text-ink">Menu</p>
-              {products.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted">No products listed yet.</p>
-              ) : (
-                products.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    quantity={quantityOf(product.id)}
-                    onAdd={() => handleAdd(product)}
-                    onIncrement={() => updateQuantity(product.id, quantityOf(product.id) + 1)}
-                    onDecrement={() => updateQuantity(product.id, quantityOf(product.id) - 1)}
-                    onOpenDetail={() => setDetailProduct(product)}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="mt-3 flex flex-col gap-2">
-            {ratingsError ? (
-              <p className="py-8 text-center text-sm text-danger">{ratingsError}</p>
-            ) : ratings === null ? (
-              <div className="flex flex-col gap-2">
-                {[0, 1].map((i) => (
-                  <div key={i} className="h-16 animate-pulse rounded-2xl bg-surface" />
-                ))}
-              </div>
-            ) : ratings.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted">No reviews yet.</p>
-            ) : (
-              ratings.map((r) => (
-                <div key={r.id} className="rounded-2xl border border-gray-100 bg-white p-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_20px_-12px_rgba(0,0,0,0.1)]">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-ink">Customer</p>
-                    <div className="flex gap-0.5">
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <Star key={n} size={13} className={n <= r.score ? "fill-accent text-accent" : "text-gray-300"} />
-                      ))}
-                    </div>
-                  </div>
-                  {r.comment && <p className="mt-1 text-sm text-ink">{r.comment}</p>}
-                  <p className="mt-1 text-xs text-muted">{new Date(r.createdAt).toLocaleDateString()}</p>
-                </div>
-              ))
-            )}
+        {bestOff > 0 && (
+          <div className="flex items-center gap-2.5 rounded-xl bg-[#FDE7DB] p-2.5 text-[13px] text-ink dark:bg-[#2A1A12]">
+            <span className="rounded-md bg-accent px-1.5 py-0.5 font-mono text-[11px] text-[#0E1F19]">−{bestOff}%</span>
+            <span>On selected items right now</span>
           </div>
         )}
+
+        {hours && !vendor.isOpen && (
+          <p className="flex items-center gap-2 text-xs text-muted">
+            <Clock size={13} aria-hidden="true" />
+            Today {hours.today}
+          </p>
+        )}
+
+        {!vendor.isOpen && (
+          <p className="rounded-xl bg-warning/10 p-3 text-sm font-medium text-warning">
+            This shop is closed right now — you can browse, but ordering isn&apos;t available until they reopen.
+          </p>
+        )}
+
+        <div role="tablist" className="grid grid-cols-2 rounded-[11px] bg-card p-[3px] shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
+          {(["menu", "reviews"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              aria-selected={tab === t}
+              onClick={() => setTab(t)}
+              className={`h-[38px] rounded-lg text-[13px] transition-colors ${tab === t ? "bg-raised font-semibold" : "font-normal"} text-ink`}
+            >
+              {t === "menu" ? "Menu" : `Reviews${vendor.ratingAverage != null ? ` · ${vendor.ratingAverage.toFixed(1)}` : ""}`}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {tab === "menu" ? (
+        <>
+          {aisles.length > 1 && (
+            <div className="sticky top-0 z-[2] flex gap-1.5 overflow-x-auto bg-surface px-4 pb-2.5 pt-3.5 [scrollbar-width:none]">
+              <AisleChip label="All" n={products.length} on={aisle === null} onClick={() => setAisle(null)} />
+              {aisles.map((a) => (
+                <AisleChip key={a.categoryId} label={a.name} n={a.n} on={aisle === a.categoryId} onClick={() => setAisle(a.categoryId)} />
+              ))}
+            </div>
+          )}
+          {visible.length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm text-muted">No products listed yet.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2.5 px-4 pt-1 lg:grid-cols-4 lg:gap-3">
+              {visible.map((product) => (
+                <ShopProductCard
+                  key={product.id}
+                  product={product}
+                  quantity={quantityOf(product.id)}
+                  onAdd={() => handleAdd(product)}
+                  onIncrement={() => updateQuantity(product.id, quantityOf(product.id) + 1)}
+                  onDecrement={() => updateQuantity(product.id, quantityOf(product.id) - 1)}
+                  onOpenDetail={() => setDetailProduct(product)}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="flex flex-col gap-3 px-4 pt-3.5">
+          {ratingsError ? (
+            <p className="py-8 text-center text-sm text-danger">{ratingsError}</p>
+          ) : ratings === null ? (
+            <div className="flex flex-col gap-2">
+              {[0, 1].map((i) => (
+                <div key={i} className="h-16 animate-pulse rounded-[14px] bg-raised" />
+              ))}
+            </div>
+          ) : ratings.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted">No reviews yet.</p>
+          ) : (
+            <>
+              <div className="flex items-center gap-3.5 rounded-[14px] bg-card p-3.5 shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
+                <span className="flex flex-col items-center gap-0.5 border-r border-line pr-3.5">
+                  <span className="font-mono text-[28px] font-semibold text-ink">{vendor.ratingAverage?.toFixed(1) ?? "—"}</span>
+                  <span className="font-mono text-[10px] uppercase text-muted">{vendor.ratingCount} reviews</span>
+                </span>
+                {distribution && (
+                  <span className="flex flex-1 flex-col gap-1">
+                    {[5, 4, 3, 2, 1].map((n) => (
+                      <span key={n} className="grid grid-cols-[14px_1fr] items-center gap-2 font-mono text-[10px] text-muted">
+                        {n}
+                        <span className="h-[5px] overflow-hidden rounded-[3px] bg-raised">
+                          <span
+                            className="block h-[5px] rounded-[3px] bg-accent"
+                            style={{ width: `${total ? Math.round(((distribution[n] ?? 0) / total) * 100) : 0}%` }}
+                          />
+                        </span>
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </div>
+              {ratings.map((r) => (
+                <article key={r.id} className="flex flex-col gap-1.5 rounded-[14px] bg-card px-3.5 py-3 shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
+                  <span className="flex items-center gap-2">
+                    <span className="text-[13px] font-medium text-ink">Customer</span>
+                    <span className="font-mono text-[11px] text-accent">{"★".repeat(r.score)}</span>
+                    <span className="ml-auto font-mono text-[10px] text-muted">{new Date(r.createdAt).toLocaleDateString()}</span>
+                  </span>
+                  {r.comment && <span className="text-[13px] leading-normal text-ink">{r.comment}</span>}
+                </article>
+              ))}
+            </>
+          )}
+        </div>
+      )}
 
       {detailProduct && (
         <ProductDetailSheet
@@ -284,15 +308,14 @@ export default function VendorPage() {
       )}
 
       {conflictProduct && (
-        <div className="fixed inset-0 z-20 flex items-end justify-center bg-black/40 sm:items-center">
-          <div className="w-full max-w-lg rounded-t-2xl bg-white p-5 sm:rounded-2xl">
-            <p className="font-semibold text-ink">Start a new cart?</p>
+        <div className="fixed inset-0 z-40 flex animate-fade-in items-end justify-center bg-black/40 sm:items-center">
+          <div className="w-full max-w-lg rounded-t-2xl bg-card p-5 sm:rounded-2xl">
+            <p className="font-semibold text-ink">Start a new bag?</p>
             <p className="mt-1 text-sm text-muted">
-              Your cart has items from {cart.vendor?.businessName}. CloseBuy carts are one vendor at a time — adding
-              from {vendor.businessName} will clear it.
+              Your bag has items from {cart.vendor?.businessName}. CloseBuy bags are one shop at a time — adding from {vendor.businessName} will clear it.
             </p>
             <div className="mt-4 flex gap-2">
-              <Button onClick={confirmReplace}>Clear cart and add</Button>
+              <Button onClick={confirmReplace}>Clear bag and add</Button>
               <Button variant="secondary" onClick={() => setConflictProduct(null)}>
                 Cancel
               </Button>
@@ -306,6 +329,28 @@ export default function VendorPage() {
   );
 }
 
-function toggleClass(active: boolean): string {
-  return `flex-1 rounded-lg py-2 text-sm font-semibold transition-all duration-150 ease-out ${active ? "bg-white text-ink shadow-sm" : "text-muted hover:text-ink"}`;
+function Stat({ label, value, bordered }: { label: string; value: string; bordered?: boolean }) {
+  return (
+    <span className={`flex flex-col gap-0.5 px-3 py-2.5 ${bordered ? "border-l border-line" : ""}`}>
+      <span className="font-mono text-[10px] uppercase text-muted">{label}</span>
+      <span className="font-mono text-sm font-semibold text-ink">{value}</span>
+    </span>
+  );
 }
+
+function AisleChip({ label, n, on, onClick }: { label: string; n: number; on: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={`flex h-9 shrink-0 items-center gap-2 rounded-[9px] pl-3 pr-1.5 text-[13px] font-medium ${
+        on ? "bg-ink text-surface shadow-[inset_0_0_0_1px_rgb(var(--c-ink))]" : "bg-card text-ink shadow-[inset_0_0_0_1px_rgb(var(--c-line))]"
+      }`}
+    >
+      {label}
+      <span className={`rounded-md px-1.5 py-0.5 font-mono text-[11px] ${on ? "bg-accent text-[#0E1F19]" : "bg-raised text-muted"}`}>{n}</span>
+    </button>
+  );
+}
+

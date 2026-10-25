@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useAuthSession } from "@closebuy/ui";
+import { useAuthSession, AuthShell } from "@closebuy/ui";
 import { authApi } from "@/lib/api";
 
 // Landing point for the Google/Apple redirect (brief §3.1b) — the API
@@ -46,16 +46,21 @@ function OAuthCompleteInner() {
 
   if (error) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
-        <p className="text-sm text-danger">{error}</p>
-        <Link href="/login" className="text-sm font-medium text-primary underline">
+      <AuthShell app="customer" route="oauth-complete" title="Couldn't sign you in" subtitle={error}>
+        <Link href="/login" className="flex h-[46px] items-center justify-center rounded-[11px] bg-accent text-sm font-semibold text-night">
           Back to sign in
         </Link>
-      </div>
+      </AuthShell>
     );
   }
 
-  return <div className="flex min-h-screen items-center justify-center text-sm text-muted">Signing you in…</div>;
+  return (
+    <AuthShell app="customer" route="oauth-complete" title="Signing you in…" subtitle="Finishing Google sign-in. This only takes a moment.">
+      <div className="flex justify-center py-4" role="status" aria-label="Signing in">
+        <span className="h-9 w-9 animate-spin rounded-full border-4 border-line border-t-accent" />
+      </div>
+    </AuthShell>
+  );
 }
 
 export default function OAuthCompletePage() {

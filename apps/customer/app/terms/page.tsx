@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LegalHeader } from "@/components/LegalHeader";
 
 export const metadata = { title: "Terms of Service — CloseBuy" };
 
@@ -18,13 +19,29 @@ export const metadata = { title: "Terms of Service — CloseBuy" };
  * forever. **This is a first draft, not reviewed by a lawyer** — say so
  * plainly rather than implying otherwise; flagged again in CLAUDE.md.
  */
+// Contents list — keep in step with the <Section title="N. …"> headings below.
+const TOC = [{"n":"01","id":"s1","title":"Who CloseBuy is"},{"n":"02","id":"s2","title":"Accounts"},{"n":"03","id":"s3","title":"Placing an order"},{"n":"04","id":"s4","title":"Cancellations, refunds, and problems with an order"},{"n":"05","id":"s5","title":"If you're a vendor"},{"n":"06","id":"s6","title":"If you're a rider"},{"n":"07","id":"s7","title":"Ratings"},{"n":"08","id":"s8","title":"Conduct we don't allow"},{"n":"09","id":"s9","title":"What CloseBuy is (and isn't) responsible for"},{"n":"10","id":"s10","title":"Changes to these Terms"},{"n":"11","id":"s11","title":"Governing law"},{"n":"12","id":"s12","title":"Contact"}];
+
 export default function TermsPage() {
   return (
-    <div className="flex flex-col gap-6 p-4 pb-10 text-sm leading-relaxed text-ink">
-      <div>
-        <h1 className="text-xl font-bold text-ink">Terms of Service</h1>
-        <p className="mt-1 text-xs text-muted">Last updated 27 September 2026</p>
+    <div className="flex flex-col pb-10 text-sm leading-relaxed text-ink">
+      <LegalHeader active="terms" />
+      <div className="flex flex-col gap-6 px-[18px] pt-5">
+      <div className="flex flex-col gap-1.5">
+        <span className="font-mono text-[11px] text-muted">
+          /terms · <span className="uppercase">Last updated 27 September 2026</span>
+        </span>
+        <h1 className="text-[26px] font-semibold tracking-[-0.03em] text-ink">Terms of Service</h1>
       </div>
+      <p className="rounded-xl bg-[#FBF1D6] px-3.5 py-3 text-[13px] leading-[1.55] text-[#0E1F19]">Plain-language summary: CloseBuy connects you with independent local sellers and riders. Sellers are responsible for their goods; we handle ordering, payment and delivery coordination.</p>
+      <nav aria-label="On this page" className="flex flex-col overflow-hidden rounded-xl bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))]">
+        {TOC.map((t) => (
+          <a key={t.id} href={`#${t.id}`} className="flex min-h-11 items-center gap-2.5 border-b border-line px-3.5 text-sm text-ink last:border-b-0">
+            <span className="font-mono text-[11px] text-accent">{t.n}</span>
+            {t.title}
+          </a>
+        ))}
+      </nav>
 
       <p>
         These Terms govern your use of CloseBuy — the customer, vendor, and rider apps, and the CloseBuy website
@@ -168,14 +185,19 @@ export default function TermsPage() {
       <p className="text-xs text-muted">
         See also our <Link href="/privacy" className="text-primary underline">Privacy Policy</Link>.
       </p>
+      </div>
     </div>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const m = title.match(/^(\d+)\.\s+(.*)$/);
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="font-semibold text-ink">{title}</h2>
+    <section id={m ? `s${m[1]}` : undefined} className="flex scroll-mt-16 flex-col gap-2">
+      <h2 className="text-[17px] font-semibold tracking-[-0.02em] text-ink">
+        {m && <span className="mr-2 font-mono text-xs text-accent">{m[1]!.padStart(2, "0")}</span>}
+        {m ? m[2] : title}
+      </h2>
       {children}
     </section>
   );

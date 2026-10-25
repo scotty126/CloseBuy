@@ -33,7 +33,7 @@ export function DeliveryLocationMap({
   const center = lat !== null && lng !== null ? { lat, lng } : RIVERPARK_CENTER;
 
   return (
-    <div className="h-48 w-full overflow-hidden rounded-lg border border-gray-200">
+    <div className="h-48 w-full overflow-hidden rounded-lg border border-line">
       <APIProvider apiKey={apiKey}>
         <Map
           center={center}

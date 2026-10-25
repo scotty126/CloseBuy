@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button, Input, useAuthSession } from "@closebuy/ui";
+import { Button, Input, useAuthSession, AuthShell, AuthDivider } from "@closebuy/ui";
 import { ApiClientError } from "@closebuy/api-client";
 import { customerAuthApi } from "@/lib/api";
 import { OAuthButtons } from "@/components/OAuthButtons";
@@ -33,20 +33,8 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-6">
-      {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset, not vendor-supplied */}
-      <img src="/logo-wordmark.png" alt="CloseBuy" className="h-10 w-auto" />
-      <h1 className="text-2xl font-bold text-ink">Create an account</h1>
-
-      <div className="flex w-full max-w-xs flex-col gap-4">
-        <OAuthButtons />
-
-        <div className="flex items-center gap-3 text-xs text-muted">
-          <div className="h-px flex-1 bg-gray-200" />
-          or
-          <div className="h-px flex-1 bg-gray-200" />
-        </div>
-
+    <AuthShell app="customer" route="register" title="Create your account" subtitle="It takes a minute. Then shop your street.">
+      <div className="flex flex-col gap-4">
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <Input
             label="Email"
@@ -71,6 +59,9 @@ export default function RegisterPage() {
           </Button>
         </form>
 
+        <AuthDivider />
+        <OAuthButtons />
+
         <p className="text-center text-sm text-muted">
           Already have an account?{" "}
           <Link href="/login" className="font-medium text-primary underline">
@@ -84,6 +75,6 @@ export default function RegisterPage() {
           <Link href="/privacy" className="underline">Privacy Policy</Link>.
         </p>
       </div>
-    </div>
+    </AuthShell>
   );
 }

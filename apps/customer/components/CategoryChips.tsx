@@ -4,10 +4,8 @@ import type { CategoryDto } from "@closebuy/types";
 
 // Purely decorative, name-keyed lookup — Category is admin-configurable
 // (US-A-02, brief §3.3) with no icon field of its own, so a new category
-// just falls back to the generic Store icon rather than breaking. Matches
-// DoorDash's home category rail (screens-navigation.md's reference kit):
-// circular icon + label, not text pill chips.
-const CATEGORY_ICONS: Record<string, LucideIcon> = {
+// just falls back to the generic Store icon rather than breaking.
+export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   "Food & Groceries": ShoppingBasket,
   Fashion: Shirt,
   Beauty: Sparkles,
@@ -17,6 +15,11 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Restaurants: UtensilsCrossed,
 };
 
+/**
+ * The canvas's category grid: 3 across, each a 44px-high row chip (icon, then
+ * label). The selected one is a tinted well with a 1px orange ring and an orange
+ * icon; the rest are plain cards with a hairline.
+ */
 export function CategoryChips({
   categories,
   active,
@@ -27,7 +30,7 @@ export function CategoryChips({
   onSelect: (categoryId: string | undefined) => void;
 }) {
   return (
-    <div className="flex gap-4 overflow-x-auto pb-1">
+    <div className="grid grid-cols-3 gap-2 lg:grid-cols-6 lg:gap-2.5">
       <Chip label="All" Icon={LayoutGrid} isActive={active === undefined} onClick={() => onSelect(undefined)} />
       {categories.map((category) => (
         <Chip
@@ -42,33 +45,18 @@ export function CategoryChips({
   );
 }
 
-function Chip({
-  label,
-  Icon,
-  isActive,
-  onClick,
-}: {
-  label: string;
-  Icon: LucideIcon;
-  isActive: boolean;
-  onClick: () => void;
-}) {
+function Chip({ label, Icon, isActive, onClick }: { label: string; Icon: LucideIcon; isActive: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-[4.5rem] shrink-0 flex-col items-center gap-1.5 transition-transform duration-150 active:scale-95"
+      aria-pressed={isActive}
+      className={`flex h-11 min-w-0 items-center gap-2 rounded-[10px] px-2.5 text-[13px] font-medium text-ink transition-[box-shadow,background] duration-150 ${
+        isActive ? "bg-raised shadow-[inset_0_0_0_1px_#FF5A19]" : "bg-card shadow-[inset_0_0_0_1px_rgb(var(--c-line))]"
+      }`}
     >
-      <span
-        className={`flex h-16 w-16 items-center justify-center rounded-full transition-all duration-200 ${
-          isActive ? "bg-primary text-white shadow-md shadow-primary/25" : "bg-surface text-ink hover:bg-gray-200"
-        }`}
-      >
-        <Icon size={26} strokeWidth={isActive ? 2.25 : 2} />
-      </span>
-      <span className={`w-full truncate text-center text-xs font-semibold transition-colors duration-200 ${isActive ? "text-primary" : "text-muted"}`}>
-        {label}
-      </span>
+      <Icon size={18} strokeWidth={1.7} className={`shrink-0 ${isActive ? "text-accent" : "text-ink"}`} aria-hidden="true" />
+      <span className={`min-w-0 text-left ${label.includes(" ") ? "line-clamp-2 leading-[1.15]" : "truncate"}`}>{label}</span>
     </button>
   );
 }
