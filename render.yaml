@@ -1,0 +1,59 @@
+# Render Blueprint: the CloseBuy API (Docker) plus its Redis, both on the free plan.
+# New -> Blueprint -> pick this repo. Secrets marked sync:false are asked for in the dashboard.
+services:
+  - type: web
+    name: closebuy-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # Apply pending migrations, then start. Safe to repeat on every deploy/restart.
+    dockerCommand: sh -c "cd /app/apps/api && npx prisma migrate deploy && node dist/server.js"
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: closebuy-redis
+          property: connectionString
+      - key: DATABASE_URL        # Neon pooled connection string
+        sync: false
+      - key: DIRECT_URL          # Neon unpooled connection string
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: PASSWORD_PEPPER     # must equal the old value or existing password logins break
+        sync: false
+      - key: API_PUBLIC_URL      # e.g. https://closebuy-api.onrender.com
+        sync: false
+      - key: CUSTOMER_APP_URL
+        sync: false
+      - key: VENDOR_APP_URL
+        sync: false
+      - key: RIDER_APP_URL
+        sync: false
+      - key: ADMIN_APP_URL
+        sync: false
+      - key: CORS_ORIGINS        # the four app URLs, comma-separated
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: DEV_AUTO_SIGNIN_PHONES
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: TERMII_API_KEY
+        sync: false
+
+  - type: keyvalue
+    name: closebuy-redis
+    plan: free
+    maxmemoryPolicy: noeviction   # BullMQ requires this
+    ipAllowList: []               # internal-only: reachable by the API, not the internet
