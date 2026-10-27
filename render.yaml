@@ -8,7 +8,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     # Apply pending migrations, then start. Safe to repeat on every deploy/restart.
-    dockerCommand: sh -c "cd /app/apps/api && npx prisma migrate deploy && node dist/server.js"
+    dockerCommand: sh /app/deploy/start.sh
     healthCheckPath: /health
     autoDeploy: true
     envVars:
