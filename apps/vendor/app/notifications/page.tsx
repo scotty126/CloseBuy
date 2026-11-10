@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ApiClientError } from "@closebuy/api-client";
+import { PushToggle } from "@closebuy/ui";
 import type { NotificationDto, NotificationType, OwnVendorProfileDto } from "@closebuy/types";
 import { notificationsApi } from "@/lib/api";
 import { VendorGate } from "@/components/VendorGate";
@@ -51,6 +52,8 @@ function Notifications({ vendor, refetch }: { vendor: OwnVendorProfileDto; refet
   return (
     <div className="flex max-w-2xl flex-col gap-1">
       <PageHeader title="Notifications" subtitle={`${notifications?.filter((n) => !n.readAt).length ?? 0} unread`} vendor={vendor} onVendorChanged={refetch} />
+
+      <PushToggle api={notificationsApi} title="New order alerts" description="Get a notification the moment an order comes in, even with the app closed." className="my-2" />
 
       {error && <p className="text-sm text-danger">{error}</p>}
 

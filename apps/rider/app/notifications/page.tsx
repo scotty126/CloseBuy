@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ApiClientError } from "@closebuy/api-client";
+import { PushToggle } from "@closebuy/ui";
 import type { NotificationDto, NotificationType } from "@closebuy/types";
 import { notificationsApi } from "@/lib/api";
 import { RiderGate } from "@/components/RiderGate";
@@ -44,6 +45,8 @@ function Notifications() {
   return (
     <div className="flex flex-col gap-4 p-4">
       <h1 className="text-[22px] font-semibold tracking-[-0.02em] text-ink">Notifications</h1>
+
+      <PushToggle api={notificationsApi} title="Job alerts" description="Get a notification when a delivery job is waiting, even with the app closed." />
 
       {error && <p className="text-sm text-danger">{error}</p>}
 

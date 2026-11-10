@@ -2,10 +2,12 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { createNotificationService, NotificationNotFoundError } from "./service.js";
 import type { PushClient, PushSendResult } from "./push.js";
+import type { NotificationEmailer } from "./email.js";
 
 function createFakePrisma() {
   const notifications = new Map<string, any>();
   const subscriptions = new Map<string, any>();
+  const users = new Map<string, any>();
   let nextId = 1;
   const id = () => `id_${nextId++}`;
 
@@ -38,7 +40,10 @@ function createFakePrisma() {
       deleteMany: async ({ where }: any) => {
         let count = 0;
         for (const s of [...subscriptions.values()]) {
-          if (where.id.in.includes(s.id)) {
+          const matches = where.id
+            ? where.id.in.includes(s.id)
+            : s.userId === where.userId && s.endpoint === where.endpoint;
+          if (matches) {
             subscriptions.delete(s.endpoint);
             count++;
           }
@@ -46,7 +51,10 @@ function createFakePrisma() {
         return { count };
       },
     },
-    __state: { notifications, subscriptions },
+    user: {
+      findUnique: async ({ where }: any) => users.get(where.id) ?? null,
+    },
+    __state: { notifications, subscriptions, users },
   };
 
   return db as unknown as PrismaClient & { __state: typeof db.__state };
@@ -127,6 +135,95 @@ describe("notification service", () => {
 
     expect(prisma.__state.subscriptions.has("https://push.example/dead")).toBe(false);
     expect(prisma.__state.subscriptions.has("https://push.example/alive")).toBe(true);
+  });
+
+  it("push carries a human title, body and a landing path — not just the raw type", async () => {
+    const push = createFakePush();
+    const service = createNotificationService({ prisma, push });
+    await service.subscribe(USER_ID, { endpoint: "https://push.example/a", keys: { p256dh: "k", auth: "a" } });
+
+    await service.notify(USER_ID, "order_paid", { orderId: "order_1" });
+
+    expect(push.send).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: "https://push.example/a" }),
+      expect.objectContaining({ type: "order_paid", title: "New order", url: "/notifications" }),
+    );
+  });
+
+  it("unsubscribe removes only the caller's own device", async () => {
+    const push = createFakePush();
+    const service = createNotificationService({ prisma, push });
+    await service.subscribe(USER_ID, { endpoint: "https://push.example/mine", keys: { p256dh: "k", auth: "a" } });
+    await service.subscribe("user_2", { endpoint: "https://push.example/theirs", keys: { p256dh: "k", auth: "a" } });
+
+    await service.unsubscribe(USER_ID, "https://push.example/theirs"); // not mine — must be a no-op
+    expect(prisma.__state.subscriptions.size).toBe(2);
+
+    await service.unsubscribe(USER_ID, "https://push.example/mine");
+    expect(prisma.__state.subscriptions.has("https://push.example/mine")).toBe(false);
+    expect(prisma.__state.subscriptions.has("https://push.example/theirs")).toBe(true);
+  });
+
+  describe("email", () => {
+    function createFakeEmailer(configured = true): NotificationEmailer {
+      return { isConfigured: configured, send: vi.fn(async () => true) };
+    }
+    const noPush: PushClient = { isConfigured: false, send: vi.fn() };
+
+    it("emails an email-worthy type to a user who has an address", async () => {
+      prisma.__state.users.set(USER_ID, { id: USER_ID, email: "ada@example.com" });
+      const email = createFakeEmailer();
+      const service = createNotificationService({ prisma, push: noPush, email });
+
+      await service.notify(USER_ID, "order_delivered", { orderId: "order_1" });
+
+      expect(email.send).toHaveBeenCalledWith("ada@example.com", expect.objectContaining({ title: "Delivered" }));
+    });
+
+    it("does not email the in-between delivery steps (rider assigned, in transit, ready)", async () => {
+      prisma.__state.users.set(USER_ID, { id: USER_ID, email: "ada@example.com" });
+      const email = createFakeEmailer();
+      const service = createNotificationService({ prisma, push: noPush, email });
+
+      for (const type of ["order_rider_assigned", "order_in_transit", "order_ready_for_pickup"] as const) {
+        await service.notify(USER_ID, type, {});
+      }
+
+      expect(email.send).not.toHaveBeenCalled();
+    });
+
+    it("skips quietly for a phone-only account with no email", async () => {
+      prisma.__state.users.set(USER_ID, { id: USER_ID, email: null });
+      const email = createFakeEmailer();
+      const service = createNotificationService({ prisma, push: noPush, email });
+
+      await service.notify(USER_ID, "order_paid", {});
+
+      expect(email.send).not.toHaveBeenCalled();
+      expect(await service.list(USER_ID)).toHaveLength(1); // the in-app row is unaffected
+    });
+
+    it("does nothing when email isn't configured", async () => {
+      prisma.__state.users.set(USER_ID, { id: USER_ID, email: "ada@example.com" });
+      const email = createFakeEmailer(false);
+      const service = createNotificationService({ prisma, push: noPush, email });
+
+      await service.notify(USER_ID, "order_delivered", {});
+
+      expect(email.send).not.toHaveBeenCalled();
+    });
+
+    it("an email failure never throws and never stops the push", async () => {
+      prisma.__state.users.set(USER_ID, { id: USER_ID, email: "ada@example.com" });
+      const email: NotificationEmailer = { isConfigured: true, send: vi.fn().mockRejectedValue(new Error("resend down")) };
+      const push = createFakePush();
+      const service = createNotificationService({ prisma, push, email });
+      await service.subscribe(USER_ID, { endpoint: "https://push.example/a", keys: { p256dh: "k", auth: "a" } });
+
+      await expect(service.notify(USER_ID, "order_delivered", {})).resolves.toBeUndefined();
+
+      expect(push.send).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("markRead only marks a notification belonging to that user, and throws otherwise", async () => {

@@ -44,6 +44,10 @@ const envSchema = z.object({
   // loudly and specifically only when its own path is actually used
   // (verification/reset email, or that one OAuth provider's button).
   RESEND_API_KEY: z.string().optional(),
+  // The From header on every email (verification, reset, order updates).
+  // Resend only delivers from a domain you have verified in its dashboard —
+  // until then a send is refused (and logged), never silently lost.
+  EMAIL_FROM: z.string().default("CloseBuy <no-reply@closebuy.com.ng>"),
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
   APPLE_OAUTH_CLIENT_ID: z.string().optional(),
@@ -104,7 +108,7 @@ const envSchema = z.object({
   // web-push requires a contact URI on every request (RFC 8292) — a
   // mailto: is fine, it's never actually emailed. Defaulted rather than
   // required since it's meaningless without the two keys above anyway.
-  VAPID_SUBJECT: z.string().default("mailto:support@closebuy.app"),
+  VAPID_SUBJECT: z.string().default("mailto:closebuy.ng@gmail.com"),
 });
 
 export type Env = z.infer<typeof envSchema>;

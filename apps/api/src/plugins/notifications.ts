@@ -1,6 +1,7 @@
 import fp from "fastify-plugin";
 import type { FastifyInstance } from "fastify";
 import { createPushClient } from "../modules/notifications/push.js";
+import { createNotificationEmailer } from "../modules/notifications/email.js";
 import { createNotificationService, type NotificationService } from "../modules/notifications/service.js";
 
 declare module "fastify" {
@@ -19,5 +20,6 @@ declare module "fastify" {
  */
 export const notificationsPlugin = fp(async (app: FastifyInstance) => {
   const push = createPushClient(app.env.VAPID_PUBLIC_KEY, app.env.VAPID_PRIVATE_KEY, app.env.VAPID_SUBJECT);
-  app.decorate("notifications", createNotificationService({ prisma: app.prisma, push }));
+  const email = createNotificationEmailer(app.env.RESEND_API_KEY, app.env.EMAIL_FROM);
+  app.decorate("notifications", createNotificationService({ prisma: app.prisma, push, email }));
 });

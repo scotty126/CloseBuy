@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { pushSubscribeSchema } from "@closebuy/types";
+import { pushSubscribeSchema, pushUnsubscribeSchema } from "@closebuy/types";
 import { requireAuth } from "../../lib/auth-guard.js";
 import { NotificationNotFoundError } from "./service.js";
 
@@ -15,6 +15,20 @@ export async function notificationRoutes(app: FastifyInstance) {
   app.post("/notifications/subscribe", { preHandler: requireAuth() }, async (req, reply) => {
     const body = pushSubscribeSchema.parse(req.body);
     await app.notifications.subscribe(req.authUser!.sub, body);
+    return reply.code(204).send();
+  });
+
+  // The VAPID *public* key is public by design (the browser needs it to
+  // subscribe) — served from the API rather than baked into each frontend
+  // at build time, so turning push on is just setting an env var here.
+  // `null` means push isn't configured, and the apps hide the toggle.
+  app.get("/notifications/vapid-key", async (_req, reply) => {
+    return reply.send({ publicKey: app.env.VAPID_PRIVATE_KEY ? (app.env.VAPID_PUBLIC_KEY ?? null) : null });
+  });
+
+  app.post("/notifications/unsubscribe", { preHandler: requireAuth() }, async (req, reply) => {
+    const { endpoint } = pushUnsubscribeSchema.parse(req.body);
+    await app.notifications.unsubscribe(req.authUser!.sub, endpoint);
     return reply.code(204).send();
   });
 

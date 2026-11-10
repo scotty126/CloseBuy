@@ -13,6 +13,9 @@ export const pushSubscribeSchema = z.object({
 });
 export type PushSubscribeInput = z.infer<typeof pushSubscribeSchema>;
 
+export const pushUnsubscribeSchema = z.object({ endpoint: z.string().url() });
+export type PushUnsubscribeInput = z.infer<typeof pushUnsubscribeSchema>;
+
 // ── Response shape ──────────────────────────────────────────────────────
 // Hand-written wire contract, not re-exported from Prisma — see admin.ts
 // for why (Date becomes string once it round-trips through JSON).

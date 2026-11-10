@@ -49,7 +49,7 @@ function serializeAddress(address: {
  * it too (same discovery/PKCE plumbing, just role-aware now).
  */
 export async function customerAuthRoutes(app: FastifyInstance) {
-  const email = createEmailClient(app.env.RESEND_API_KEY);
+  const email = createEmailClient(app.env.RESEND_API_KEY, app.env.EMAIL_FROM);
   const appBaseUrl = app.env.CUSTOMER_APP_URL;
 
   const addresses = createCustomerAddressService({ prisma: app.prisma });

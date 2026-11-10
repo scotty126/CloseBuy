@@ -10,7 +10,7 @@ export interface EmailClient {
   sendPasswordResetEmail(to: string, resetUrl: string): Promise<void>;
 }
 
-export function createEmailClient(apiKey: string | undefined): EmailClient {
+export function createEmailClient(apiKey: string | undefined, from = "CloseBuy <no-reply@closebuy.com.ng>"): EmailClient {
   if (!apiKey) {
     // Boots fine without a key (env.ts) — fails loudly and specifically
     // right here, the moment an email actually needs sending, rather than
@@ -32,7 +32,7 @@ export function createEmailClient(apiKey: string | undefined): EmailClient {
   return {
     async sendVerificationEmail(to, verifyUrl) {
       await resend.emails.send({
-        from: "CloseBuy <no-reply@closebuy.app>",
+        from,
         to,
         subject: "Verify your CloseBuy email",
         html: `<p>Confirm your email to secure your account (this doesn't block anything — you can keep shopping either way):</p><p><a href="${verifyUrl}">${verifyUrl}</a></p>`,
@@ -41,7 +41,7 @@ export function createEmailClient(apiKey: string | undefined): EmailClient {
 
     async sendPasswordResetEmail(to, resetUrl) {
       await resend.emails.send({
-        from: "CloseBuy <no-reply@closebuy.app>",
+        from,
         to,
         subject: "Reset your CloseBuy password",
         html: `<p>Reset your password — this link is single-use and expires soon:</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>Didn't request this? Ignore this email.</p>`,

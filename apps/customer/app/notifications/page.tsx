@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ApiClientError } from "@closebuy/api-client";
 import { ArrowLeft, Bell, Check, CreditCard, ShieldCheck, Tag, Truck } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useAuthSession } from "@closebuy/ui";
+import { PushToggle, useAuthSession } from "@closebuy/ui";
 import type { NotificationDto, NotificationType } from "@closebuy/types";
 import { notificationsApi } from "@/lib/api";
 
@@ -161,6 +161,7 @@ export default function NotificationsPage() {
           </div>
 
           <div className="flex flex-col gap-3.5 px-3.5 pb-6 pt-2">
+            <PushToggle api={notificationsApi} title="Order alerts" description="Get a notification when your order is accepted, on the way or delivered." />
             {error && <p className="text-sm text-danger">{error}</p>}
             {notifications === null ? (
               <div className="flex flex-col gap-3">

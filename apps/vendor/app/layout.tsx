@@ -9,6 +9,9 @@ const montserrat = Montserrat({ subsets: ["latin", "latin-ext"], weight: "800", 
 const geistMono = Geist_Mono({ subsets: ["latin", "latin-ext"], variable: "--font-geist-mono", display: "swap" });
 
 export const metadata: Metadata = {
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "CloseBuy Vendor", statusBarStyle: "default" },
+  icons: { apple: "/icon-192.png" },
   title: "CloseBuy Vendor",
   description: "Manage your CloseBuy storefront.",
 };
